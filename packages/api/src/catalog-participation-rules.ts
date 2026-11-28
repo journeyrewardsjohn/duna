@@ -13,10 +13,7 @@ import {
   type ParticipationCreditTier,
   type ParticipationRules,
 } from "@duna/core";
-import {
-  deriveParticipationState,
-  type ParticipationState,
-} from "@duna/core";
+import { deriveParticipationState, type ParticipationState } from "@duna/core";
 import { stableHash } from "./canonical";
 
 function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
@@ -58,11 +55,14 @@ export function normalizeParticipationConfiguration(input: {
   const capacity = positiveInteger(input.configuration.capacity, 1);
   // Version 2 validation: plain-language messages, prices that never rise
   // as the group grows, no attendance pricing on a new save (decisions 2, 3).
-  const result = validateParticipationRuleV2(input.configuration.participation, {
-    capacity,
-    allowCredits: input.allowCredits,
-    creditCost: input.creditCost,
-  });
+  const result = validateParticipationRuleV2(
+    input.configuration.participation,
+    {
+      capacity,
+      allowCredits: input.allowCredits,
+      creditCost: input.creditCost,
+    },
+  );
   if (!result.rule) throw new Error(result.issues.join(" "));
   const schedule = record(input.configuration.sessionSchedule);
   if (
@@ -74,8 +74,11 @@ export function normalizeParticipationConfiguration(input: {
       "Player minimums and group-size pricing need preset session dates. Choose one-off or recurring sessions.",
     );
   }
-  const { effectiveFrom: _ignored, maxParticipants: _capacity, ...rule } =
-    result.rule;
+  const {
+    effectiveFrom: _ignored,
+    maxParticipants: _capacity,
+    ...rule
+  } = result.rule;
   void _ignored;
   void _capacity;
   const rest: Record<string, unknown> = {
@@ -220,10 +223,7 @@ export function occurrenceParticipationState(input: {
     | "participationSettledAt"
   > &
     Partial<
-      Pick<
-        typeof catalogSessionOccurrences.$inferSelect,
-        "endsAt" | "status"
-      >
+      Pick<typeof catalogSessionOccurrences.$inferSelect, "endsAt" | "status">
     >;
   /** Confirmed places (paid, or an unexpired pay-in-person reservation). */
   readonly bookedCount: number;

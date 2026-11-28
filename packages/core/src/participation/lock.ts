@@ -79,7 +79,8 @@ export function calendarDaysBetween(
   const a = zonedDate(from, timeZone);
   const b = zonedDate(to, timeZone);
   return Math.round(
-    (Date.UTC(b.year, b.month - 1, b.day) - Date.UTC(a.year, a.month - 1, a.day)) /
+    (Date.UTC(b.year, b.month - 1, b.day) -
+      Date.UTC(a.year, a.month - 1, a.day)) /
       86_400_000,
   );
 }
@@ -126,9 +127,10 @@ export function formatParticipationTime(input: {
   }).format(input.at);
   const day =
     days >= 0 && days <= 6
-      ? new Intl.DateTimeFormat(locale, { timeZone: zone, weekday: "short" }).format(
-          input.at,
-        )
+      ? new Intl.DateTimeFormat(locale, {
+          timeZone: zone,
+          weekday: "short",
+        }).format(input.at)
       : new Intl.DateTimeFormat(locale, {
           timeZone: zone,
           month: "short",

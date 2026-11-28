@@ -103,49 +103,80 @@ replays the projection with the reviewed state. Both actions are audited.
 
 ## Session participation, family booking, and schedules
 
+Group rules (PART, [`docs/product/participation.md`](product/participation.md)).
 Scheduled catalog services (`type: "service"` with one-off or recurring
-`sessionSchedule`) can carry `configuration.participation`. The capacity stays
-in `configuration.capacity`; it is the maximum and is never stored twice.
+`sessionSchedule`) run under a group rule: their own
+`configuration.participation`, or the club default
+(`organization_participation_defaults`) when they have none. The capacity
+stays in `configuration.capacity`. The rule is version 2 (read any stored rule
+with `readParticipationRuleV2` from `@duna/core`; the 289 keys are still read):
 
-| Field                      | Meaning                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| `minParticipants`          | Players needed for the session to run (default 1)                               |
-| `minimumPolicy`            | `cancel` (cancel and refund) or `run` when the minimum is not met (default)     |
-| `cutoffMinutesBeforeStart` | When the minimum is checked and the headcount locks (default 1440, max 10080)   |
-| `settlementBasis`          | `cutoff` (booked headcount at the cutoff) or `attendance` (recorded attendance) |
-| `creditTiers`              | Optional `{ minParticipants, maxParticipants, creditsPerPlayer }` rows          |
+| Field                    | Meaning                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `version`                | `2`                                                                                                                |
+| `unit`                   | `player` or `team`                                                                                                 |
+| `minParticipants`        | Smallest group that runs (1 means no minimum)                                                                      |
+| `minimumPolicy`          | `cancel` (cancel and return everything) or `run` when the minimum is not met (default `run`)                       |
+| `lockMinutesBeforeStart` | When the group is decided; also the free-cancellation deadline. Absent: club default, refund window, 1440          |
+| `waitlist`               | Whether a full session queues people                                                                               |
+| `tiers`                  | Optional `{ minParticipants, maxParticipants, creditsPerPlayer?, amountMinorPerPlayer? }`, never rising per player |
 
-Tiers must start at the minimum, be contiguous and non-overlapping, and end at
-the capacity; the last tier may omit `maxParticipants`. The catalog credit price
-must equal the highest tier. Offers without `participation` behave exactly as
-capacity-only offers always have.
+Saving validates with `validateParticipationRuleV2`: plain-language reasons
+(minimum above capacity, decision after the start, gaps, overlaps, a rising
+price) block; revenue cliffs come back as warnings. Attendance pricing is
+refused on new saves. The save also writes the 289 keys
+(`cutoffMinutesBeforeStart`, `creditTiers`, `settlementBasis`) for the current
+HQ form until PART-6 replaces it.
 
-| Procedure                                 | Purpose                                                                                     |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `public.organizationStorefront`           | Each service adds `participation`; each occurrence adds headcount and `participation` state |
-| `player.startCatalogCheckout`             | Optional `participantPersonId` and `creditSource` book for a verified dependent             |
-| `player.bookCatalogSessions`              | Book up to 20 session occurrences with credits; atomic by default, per-session results      |
-| `player.catalogSessionBookings`           | The caller's schedule, including sessions booked for verified dependents                    |
-| `player.cancelCatalogSessionBooking`      | Cancel inside the refund window with credits returned; late cancels need acknowledgement    |
-| `operator.catalogSessionOccurrences`      | Rosters with headcount, minimum decision, and settlement state                              |
-| `operator.settleCatalogSessionOccurrence` | Decide the minimum early, or record attendance and settle an attendance-priced session      |
+The rule a session uses is the **snapshot** in `participation_decisions`, taken
+at its first booking; editing the offering changes only unbooked sessions.
+
+| Procedure                                  | Scope                                                 | Purpose                                                                                                               |
+| ------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `operator.participation.defaults`          | `sessions:read`                                       | The club default, what it applies to, how many offerings inherit it                                                   |
+| `operator.participation.setDefaults`       | `sessions:write`                                      | Save the club default (idempotency key); returns `issues` (nothing saved) or the rule                                 |
+| `operator.participation.previewRuleChange` | `sessions:read`                                       | Issues, cliff warnings, `loosens` / `tightens` / `neutral`, unbooked count, booked sessions affected                  |
+| `operator.participation.applyRuleToBooked` | `sessions:write`                                      | Apply the offering's saved rule to booked sessions, loosening only (`confirmed: true`)                                |
+| `operator.participation.atRisk`            | `sessions:read` (+ `payments:read` for money)         | Sessions in the next 7 days that need players and have bookings, with money at stake                                  |
+| `operator.participation.extendLock`        | `sessions:write`                                      | Move the decision (and free cancellation) later; booked players are told (`confirmed: true`)                          |
+| `operator.participation.runAnyway`         | `sessions:write`                                      | Pre-decide: the session runs whatever the group size (`confirmed: true`)                                              |
+| `operator.participation.cancelSession`     | `payments:write`                                      | Cancel with full refunds; `confirmed: true` from the strong tier; `note` is never stored (Send review)                |
+| `operator.participation.requestCancel`     | `sessions:read`, assigned coach                       | A coach asks a director to cancel                                                                                     |
+| `operator.participation.cancelRequests`    | `sessions:read`                                       | Open requests to cancel                                                                                               |
+| `operator.participation.recordAttendance`  | `sessions:read` + assigned coach, or `sessions:write` | Mark attended / absent; offline `deviceMarkedAt`; later mark wins; never changes a price                              |
+| `player.participation.quote`               | signed in                                             | The display model for a session: tokens, numbers, rendered English, ladder, reserve, most chargeable, `alreadyBooked` |
+| `public.organizationStorefront`            | public                                                | Each service adds `participation`; each occurrence adds headcount and `participation` state                           |
+| `player.startCatalogCheckout`              | signed in                                             | Optional `participantPersonId` and `creditSource`; `CONFLICT` with code `ALREADY_BOOKED` for a second booking         |
+| `player.bookCatalogSessions`               | signed in                                             | Book up to 20 session occurrences with credits; atomic by default, per-session results                                |
+| `player.catalogSessionBookings`            | signed in                                             | The schedule; `participation` adds `displayState`, `lockAt`, `freeCancelUntil`; `lateCancelCharge`                    |
+| `player.cancelCatalogSessionBooking`       | signed in                                             | Free before the decision; after it, needs acknowledgement and returns `chargedCredits` (the final price)              |
+| `operator.catalogSessionOccurrences`       | `sessions:read`                                       | Rosters with the snapshot rule, `displayState`, attendance; `atStake*` with `payments:read`                           |
+| `operator.settleCatalogSessionOccurrence`  | `payments:write`                                      | Decide early, or settle a 289 attendance-priced session                                                               |
+
+Every operator mutation takes an `idempotencyKey`; a retry with the same key
+replays the first answer. Every procedure returns fixtures from
+`@duna/core/demo/participation` in demo mode.
 
 Invariants an integration must preserve:
 
-- A credit booking reserves the highest tier that could still apply. When the
-  headcount is final, each booking settles to its tier and the difference
-  returns to the wallet that paid, once, through the credit ledger. A player is
-  never charged more than they reserved.
-- `/api/cron/catalog-participation` applies cutoffs. Every step is idempotent;
-  do not settle or refund outside `evaluateCatalogSessionParticipation`.
-- A session that opens inside its own cutoff window (created, first published,
-  or given new rules shortly before it starts) is decided halfway between
-  opening and the start, never the moment it appears. A session that has
-  already started is never cancelled automatically.
+- One engine decides: `evaluateCatalogSessionParticipation` (booking,
+  cancellation, the schedule, operators). Do not settle or refund elsewhere.
+  `/api/cron/catalog-participation` runs `processDueParticipation` every 5
+  minutes; each step claims its work with a conditional update, so overlapping
+  runs are safe.
+- A credit booking reserves the highest price; at the decision each booking
+  settles to the final group's price and the difference returns once. Nobody
+  is charged more than they reserved.
+- After the decision, headcount never cancels a session; a session that has
+  started is never cancelled automatically.
+- The decision is mirrored onto `catalog_session_occurrences`
+  (`participation_outcome`, `participation_decided_at`, `status`): Duna Pay's
+  delivery reads those columns. A club cancellation sets `status = cancelled`.
+- One active booking per participant per session (partial unique index); a
+  group booking is one booking with a quantity.
 - Only an adult with a verified, reviewed guardianship that carries spending
   approval may book for a dependent. The booking belongs to the dependent; the
-  order belongs to whoever's wallet paid.
-- A dependent can see a session their guardian booked but cannot cancel it.
+  order belongs to whoever's wallet paid. A dependent can see but not cancel it.
 
 ## Duna Pay (`operator.pay`, owner B2)
 

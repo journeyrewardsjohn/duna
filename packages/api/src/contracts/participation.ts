@@ -6,10 +6,7 @@
  * docs/plan/participation.md, shapes in docs/plan/schema-requests/PART.md.
  * State lists come from the schema tuples, so CHECK and contract agree.
  */
-import {
-  PARTICIPATION_COPY_KEYS,
-  PARTICIPATION_STATES,
-} from "@duna/core";
+import { PARTICIPATION_COPY_KEYS, PARTICIPATION_STATES } from "@duna/core";
 import {
   participationDefaultKinds,
   participationSubjectTypes,

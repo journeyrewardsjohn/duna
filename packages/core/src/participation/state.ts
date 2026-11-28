@@ -215,7 +215,13 @@ export function participationTransition(
         path: [state],
         effects:
           state === "needs-players"
-            ? [{ type: "notice", kind: "booked-needs-players", audience: "booker" }]
+            ? [
+                {
+                  type: "notice",
+                  kind: "booked-needs-players",
+                  audience: "booker",
+                },
+              ]
             : [],
       };
     }
@@ -238,7 +244,8 @@ export function participationTransition(
       };
     }
     case "run-anyway": {
-      if (decided) return reject(machine, "The group has already been decided.");
+      if (decided)
+        return reject(machine, "The group has already been decided.");
       return {
         machine: { ...machine, forcedRun: true },
         path: [machine.state],
@@ -246,15 +253,19 @@ export function participationTransition(
       };
     }
     case "extend-lock": {
-      if (decided) return reject(machine, "The group has already been decided.");
+      if (decided)
+        return reject(machine, "The group has already been decided.");
       return {
         machine,
         path: [machine.state],
-        effects: [{ type: "notice", kind: "lock-extended", audience: "bookers" }],
+        effects: [
+          { type: "notice", kind: "lock-extended", audience: "bookers" },
+        ],
       };
     }
     case "lock": {
-      if (decided) return reject(machine, "The group has already been decided.");
+      if (decided)
+        return reject(machine, "The group has already been decided.");
       const met = machine.booked >= rule.minParticipants;
       const runs =
         met ||
@@ -287,7 +298,11 @@ export function participationTransition(
     case "club-cancel": {
       if (ended) return reject(machine, "The session has ended.");
       return {
-        machine: { ...machine, outcome: "cancelled-by-club", state: "cancelled-club" },
+        machine: {
+          ...machine,
+          outcome: "cancelled-by-club",
+          state: "cancelled-club",
+        },
         path: ["cancelled-club"],
         effects: [
           { type: "return-everything" },
@@ -358,7 +373,9 @@ export function deriveParticipationState(
     : openState(facts.booked, rule);
 }
 
-export function participationStateIsTerminal(state: ParticipationState): boolean {
+export function participationStateIsTerminal(
+  state: ParticipationState,
+): boolean {
   return TERMINAL.includes(state);
 }
 

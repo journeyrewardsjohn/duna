@@ -128,7 +128,8 @@ const english: Readonly<
   "line.confirmed": (p) => `Decided ${s(p.lock)}`,
   "line.absent": () => "You were marked absent",
   "staff.at-risk": (p) => `At risk · needs ${count(p.n)} by ${s(p.lock)}`,
-  "staff.on-track": (p) => `On track · ${count(p.booked)} of ${count(p.capacity)}`,
+  "staff.on-track": (p) =>
+    `On track · ${count(p.booked)} of ${count(p.capacity)}`,
   "staff.full": (p) => `Full · ${count(p.waiting)} waiting`,
   "staff.confirmed": (p) => `Confirmed · ${count(p.booked)}`,
   "staff.running-small": (p) =>
@@ -156,8 +157,7 @@ const english: Readonly<
   "price.receipt": (p) =>
     `${s(p.title)} · paid ${credits(p.paid)} · ${count(p.returned)} returned (group of ${count(p.group)})`,
   "cancel.free": (p) => `Free cancellation until ${s(p.lock)}`,
-  "cancel.free-everything": (p) =>
-    `Cancel and get ${credits(p.credits)} back?`,
+  "cancel.free-everything": (p) => `Cancel and get ${credits(p.credits)} back?`,
   "cancel.late": (p) =>
     `Cancelling now costs ${credits(p.final)}. You get them back if someone takes your place.`,
   "cancel.late-nothing": () => "Cancelling now returns nothing.",

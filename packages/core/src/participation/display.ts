@@ -188,11 +188,17 @@ export function participationDisplay(
       status = participationToken("status.needs", { n: needed });
       line =
         rule?.minimumPolicy === "cancel"
-          ? participationToken("line.needs-cancel", { lock: lockLabel, n: needed })
+          ? participationToken("line.needs-cancel", {
+              lock: lockLabel,
+              n: needed,
+            })
           : hasTiers
             ? participationToken("line.needs-run-tiers", { n: needed })
             : participationToken("line.needs-run");
-      staff = participationToken("staff.at-risk", { n: needed, lock: lockLabel });
+      staff = participationToken("staff.at-risk", {
+        n: needed,
+        lock: lockLabel,
+      });
       break;
     case "minimum-reached":
       status = participationToken("status.reached");
@@ -210,12 +216,18 @@ export function participationDisplay(
       staff = participationToken("staff.full", { waiting });
       break;
     case "confirmed":
-      status = participationToken("status.confirmed", { n: groupSize ?? booked, unit });
+      status = participationToken("status.confirmed", {
+        n: groupSize ?? booked,
+        unit,
+      });
       staff = participationToken("staff.confirmed", { booked });
       break;
     case "running-small":
       status = participationToken("status.confirmed-small");
-      staff = participationToken("staff.running-small", { booked, min: minimum });
+      staff = participationToken("staff.running-small", {
+        booked,
+        min: minimum,
+      });
       break;
     case "cancelled-low":
       status = participationToken("status.cancelled-low");
@@ -234,18 +246,24 @@ export function participationDisplay(
       break;
     case "done":
       status = participationToken("status.done");
-      line = input.viewer?.absent ? participationToken("line.absent") : undefined;
+      line = input.viewer?.absent
+        ? participationToken("line.absent")
+        : undefined;
       staff = participationToken("staff.mark-attendance");
       break;
     case "settled":
       status = participationToken("status.done");
-      line = input.viewer?.absent ? participationToken("line.absent") : undefined;
+      line = input.viewer?.absent
+        ? participationToken("line.absent")
+        : undefined;
       staff = participationToken("staff.done");
       break;
   }
   // "Show 1 place being booked rather than Full while a hold is open" (§8).
   if (
-    (state === "needs-players" || state === "minimum-reached" || state === "open") &&
+    (state === "needs-players" ||
+      state === "minimum-reached" ||
+      state === "open") &&
     held > 0 &&
     spotsLeft === 0
   ) {
@@ -285,12 +303,20 @@ export function participationDisplay(
               max: tier.maxParticipants,
               credits: tier.creditsPerPlayer,
               unit,
-              last: index === all.length - 1 && tier.maxParticipants >= capacity ? 1 : 0,
+              last:
+                index === all.length - 1 && tier.maxParticipants >= capacity
+                  ? 1
+                  : 0,
             }),
           })),
         line: decided
-          ? participationToken("price.decided", { final: (finalPerPlayer ?? reserve) * quantity })
-          : participationToken("price.now", { max: reserve * quantity, lock: lockLabel }),
+          ? participationToken("price.decided", {
+              final: (finalPerPlayer ?? reserve) * quantity,
+            })
+          : participationToken("price.now", {
+              max: reserve * quantity,
+              lock: lockLabel,
+            }),
         currentRow: participationToken("price.ladder-now", { n: sizeNow }),
       };
     }
@@ -298,7 +324,8 @@ export function participationDisplay(
 
   // Cancelling (decision 1: the lock is the free-cancellation deadline).
   const started = input.now >= input.startsAt;
-  const cancelledState = state === "cancelled-low" || state === "cancelled-club";
+  const cancelledState =
+    state === "cancelled-low" || state === "cancelled-club";
   const freeDeadline = rule ? input.lockAt : input.freeCancelUntil;
   const free = freeDeadline ? input.now < freeDeadline : !started;
   const reserved = input.viewer?.reservedCredits ?? 0;
@@ -320,7 +347,8 @@ export function participationDisplay(
       })
     : undefined;
   const cancellation: ParticipationDisplay["cancellation"] = {
-    allowed: !started && !cancelledState && state !== "done" && state !== "settled",
+    allowed:
+      !started && !cancelledState && state !== "done" && state !== "settled",
     free: free && !started,
     ...(freeUntil ? { freeUntil } : {}),
     ...(lateCharge !== undefined ? { lateCharge } : {}),
@@ -387,7 +415,9 @@ export function renderParticipationDisplay(display: ParticipationDisplay): {
     ...(display.price?.line
       ? { price: renderParticipationCopy(display.price.line) }
       : {}),
-    ladder: display.price?.ladder.map((row) => renderParticipationCopy(row.label)) ?? [],
+    ladder:
+      display.price?.ladder.map((row) => renderParticipationCopy(row.label)) ??
+      [],
     ...(display.cancellation.line
       ? { cancellation: renderParticipationCopy(display.cancellation.line) }
       : {}),

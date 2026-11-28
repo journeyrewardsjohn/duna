@@ -836,7 +836,7 @@ export async function startCatalogCheckout(input: {
   // Offers without a group rule (their own or the club default) skip this
   // block entirely and keep their capacity-only behavior. The rule is the
   // session's snapshot, taken at its first booking (participation.md §4.3).
-  let participationDecision: ParticipationDecisionRow | undefined =
+  const participationDecision: ParticipationDecisionRow | undefined =
     occurrence && row.item.type === "service"
       ? await ensureCatalogDecision({
           occurrence,
@@ -883,10 +883,7 @@ export async function startCatalogCheckout(input: {
         eq(catalogSessionOccurrences.status, "scheduled"),
       ),
     });
-    if (!occurrence) {
-      participationRules = undefined;
-      participationDecision = undefined;
-    }
+    if (!occurrence) participationRules = undefined;
   }
   if (input.catalogSessionOccurrenceId && !occurrence) {
     const unavailable =
@@ -1298,201 +1295,204 @@ export async function startCatalogCheckout(input: {
           policy: subscriptionPolicy,
         })
       : undefined;
-  const insertCheckout = () => database.batch([
-    row.item.type === "good" && row.item.subtype === "digital-content"
-      ? database
-          .update(organizationParticipants)
-          .set({ updatedAt: input.now })
-          .where(sql`false`)
-      : database
-          .insert(organizationParticipants)
-          .values(
-            [...new Set([participantPersonId, payerPersonId])].map(
-              (personId) => ({
-                organizationId: row.organization.id,
-                personId,
-                relationship: "player" as const,
-                status: "active" as const,
-                addedByPersonId: input.actor.personId,
-              }),
-            ),
-          )
-          .onConflictDoNothing(),
-    database.insert(orders).values({
-      id: orderId,
-      organizationId: row.organization.id,
-      buyerPersonId: payerPersonId,
-      status: "pending",
-      currency: orderCurrency,
-      subtotalMinor: priced.subtotalMinor,
-      feeTotalMinor: serviceFeeMinor,
-      totalMinor: priced.totalMinor,
-      idempotencyKey: input.idempotencyKey,
-      checkoutIpAddress: input.ipAddress,
-      checkoutUserAgent: input.userAgent,
-      checkoutSurface: input.paymentSurface ?? "hosted",
-      expiresAt:
-        input.paymentMethod === "card" || input.paymentMethod === "cash"
-          ? reservationExpiresAt
-          : undefined,
-    }),
-    database.insert(orderItems).values({
-      id: orderItemId,
-      orderId,
-      kind: `catalog-${row.item.type}`,
-      referenceId: row.variant.id,
-      description: row.item.title,
-      quantity: input.quantity,
-      unitAmountMinor: checkoutUnitAmountMinor,
-      totalAmountMinor: amountMinor,
-    }),
-    database.insert(catalogFulfillments).values({
-      id: fulfillmentId,
-      organizationId: row.organization.id,
-      orderId,
-      orderItemId,
-      catalogItemId: row.item.id,
-      catalogItemVersionId,
-      catalogVariantId: row.variant.id,
-      catalogSessionOccurrenceId: occurrence?.id,
-      personId: participantPersonId,
-      kind: fulfillmentKind(row.item),
-      status: tracksInventory ? "held" : "pending",
-      details: {
-        paymentMethod: input.paymentMethod,
-        creditsApplied,
-        quantity: input.quantity,
-        // Present only when someone books for a dependent.
-        bookedByPersonId: bookingForDependent
-          ? input.actor.personId
-          : undefined,
-        creditSource: bookingForDependent
-          ? (input.creditSource ?? "self")
-          : undefined,
-        applicationFeeMinor,
-        consumerServiceFeeMinor: serviceFeeMinor,
-        operatorProcessingFeeMinor: operatorFee?.amountMinor ?? 0,
-        organizationCommissionMinor:
-          organizationCommissionFee?.amountMinor ?? 0,
-        organizationCommissionRateBps: commissionPolicy.rateBps,
-        organizationCommissionSource: commissionPolicy.source,
-        dunaPlusSavingsMinor: priced.dunaPlusSavingsMinor,
-        membershipIncluded: Boolean(membershipInclusion),
-        membershipId: membershipInclusion?.membershipId,
-        membershipPlanCatalogItemId: membershipInclusion?.planCatalogItemId,
-        participation:
-          occurrence && participationRules
-            ? bookingParticipationSnapshot({
-                rules: participationRules,
-                creditsPerPlayer: membershipInclusion
-                  ? undefined
-                  : participationCreditsPerPlayer,
-                settledHeadcount: pricedAtSettledHeadcount,
-              })
+  const insertCheckout = () =>
+    database.batch([
+      row.item.type === "good" && row.item.subtype === "digital-content"
+        ? database
+            .update(organizationParticipants)
+            .set({ updatedAt: input.now })
+            .where(sql`false`)
+        : database
+            .insert(organizationParticipants)
+            .values(
+              [...new Set([participantPersonId, payerPersonId])].map(
+                (personId) => ({
+                  organizationId: row.organization.id,
+                  personId,
+                  relationship: "player" as const,
+                  status: "active" as const,
+                  addedByPersonId: input.actor.personId,
+                }),
+              ),
+            )
+            .onConflictDoNothing(),
+      database.insert(orders).values({
+        id: orderId,
+        organizationId: row.organization.id,
+        buyerPersonId: payerPersonId,
+        status: "pending",
+        currency: orderCurrency,
+        subtotalMinor: priced.subtotalMinor,
+        feeTotalMinor: serviceFeeMinor,
+        totalMinor: priced.totalMinor,
+        idempotencyKey: input.idempotencyKey,
+        checkoutIpAddress: input.ipAddress,
+        checkoutUserAgent: input.userAgent,
+        checkoutSurface: input.paymentSurface ?? "hosted",
+        expiresAt:
+          input.paymentMethod === "card" || input.paymentMethod === "cash"
+            ? reservationExpiresAt
             : undefined,
-        sessionOccurrenceId: occurrence?.id,
-        // Claimed under a row lock right after this insert (last place).
-        placeClaimPending: occurrence ? true : undefined,
-        sessionStartsAt: occurrence?.startsAt.toISOString(),
-        sessionEndsAt: occurrence?.endsAt.toISOString(),
-        sessionTimezone: occurrence?.timezone,
-        coachPersonIds: occurrence?.coachPersonIds,
-        deliveryMode: row.item.configuration.deliveryMode,
-        purchaserOrganizationId: input.actor.organizationId,
-        virtualDelivery: row.item.configuration.virtualDelivery,
-        recordingConsentAccepted: recordingConsentRequired,
-        recordingConsentAcceptedAt: recordingConsentRequired
-          ? input.now.toISOString()
-          : undefined,
-        paymentOption: installmentsRequested ? "installments" : "upfront",
-        installmentCount: installmentsRequested ? installmentCount : undefined,
-        installmentAmountMinor: installmentsRequested
-          ? installmentAmountMinor
-          : undefined,
-        upfrontPriceMinor: installmentsRequested
-          ? baseUnitAmountMinor
-          : undefined,
-        priceIncreasePercent: installmentsRequested
-          ? priceIncreasePercent
-          : undefined,
-      },
-    }),
-    database.insert(orderTaxContexts).values({
-      orderId,
-      organizationId: row.organization.id,
-      source:
-        row.item.type === "good" && row.item.subtype === "digital-content"
-          ? "online"
-          : row.item.type === "good"
-            ? "shipping"
-            : venue
-              ? "venue"
-              : row.item.configuration.deliveryMode === "online"
-                ? "online"
-                : "organization",
-      venueId: venue?.id,
-      addressSnapshot: {
-        line1: taxLocation.addressLine1 ?? undefined,
-        line2: taxLocation.addressLine2 ?? undefined,
-        city: taxLocation.locality ?? undefined,
-        region: taxLocation.administrativeArea ?? undefined,
-        postalCode: taxLocation.postalCode ?? undefined,
-        country: taxLocation.countryCode,
-      },
-      itemTaxCodes: [
-        {
-          orderItemId,
-          stripeTaxCode: resolveCatalogTaxCode({
-            type: row.item.type,
-            subtype: row.item.subtype,
-            taxable: row.item.taxable,
-            explicitTaxCode: row.item.stripeTaxCode ?? undefined,
-          }),
+      }),
+      database.insert(orderItems).values({
+        id: orderItemId,
+        orderId,
+        kind: `catalog-${row.item.type}`,
+        referenceId: row.variant.id,
+        description: row.item.title,
+        quantity: input.quantity,
+        unitAmountMinor: checkoutUnitAmountMinor,
+        totalAmountMinor: amountMinor,
+      }),
+      database.insert(catalogFulfillments).values({
+        id: fulfillmentId,
+        organizationId: row.organization.id,
+        orderId,
+        orderItemId,
+        catalogItemId: row.item.id,
+        catalogItemVersionId,
+        catalogVariantId: row.variant.id,
+        catalogSessionOccurrenceId: occurrence?.id,
+        personId: participantPersonId,
+        kind: fulfillmentKind(row.item),
+        status: tracksInventory ? "held" : "pending",
+        details: {
+          paymentMethod: input.paymentMethod,
+          creditsApplied,
+          quantity: input.quantity,
+          // Present only when someone books for a dependent.
+          bookedByPersonId: bookingForDependent
+            ? input.actor.personId
+            : undefined,
+          creditSource: bookingForDependent
+            ? (input.creditSource ?? "self")
+            : undefined,
+          applicationFeeMinor,
+          consumerServiceFeeMinor: serviceFeeMinor,
+          operatorProcessingFeeMinor: operatorFee?.amountMinor ?? 0,
+          organizationCommissionMinor:
+            organizationCommissionFee?.amountMinor ?? 0,
+          organizationCommissionRateBps: commissionPolicy.rateBps,
+          organizationCommissionSource: commissionPolicy.source,
+          dunaPlusSavingsMinor: priced.dunaPlusSavingsMinor,
+          membershipIncluded: Boolean(membershipInclusion),
+          membershipId: membershipInclusion?.membershipId,
+          membershipPlanCatalogItemId: membershipInclusion?.planCatalogItemId,
+          participation:
+            occurrence && participationRules
+              ? bookingParticipationSnapshot({
+                  rules: participationRules,
+                  creditsPerPlayer: membershipInclusion
+                    ? undefined
+                    : participationCreditsPerPlayer,
+                  settledHeadcount: pricedAtSettledHeadcount,
+                })
+              : undefined,
+          sessionOccurrenceId: occurrence?.id,
+          // Claimed under a row lock right after this insert (last place).
+          placeClaimPending: occurrence ? true : undefined,
+          sessionStartsAt: occurrence?.startsAt.toISOString(),
+          sessionEndsAt: occurrence?.endsAt.toISOString(),
+          sessionTimezone: occurrence?.timezone,
+          coachPersonIds: occurrence?.coachPersonIds,
+          deliveryMode: row.item.configuration.deliveryMode,
+          purchaserOrganizationId: input.actor.organizationId,
+          virtualDelivery: row.item.configuration.virtualDelivery,
+          recordingConsentAccepted: recordingConsentRequired,
+          recordingConsentAcceptedAt: recordingConsentRequired
+            ? input.now.toISOString()
+            : undefined,
+          paymentOption: installmentsRequested ? "installments" : "upfront",
+          installmentCount: installmentsRequested
+            ? installmentCount
+            : undefined,
+          installmentAmountMinor: installmentsRequested
+            ? installmentAmountMinor
+            : undefined,
+          upfrontPriceMinor: installmentsRequested
+            ? baseUnitAmountMinor
+            : undefined,
+          priceIncreasePercent: installmentsRequested
+            ? priceIncreasePercent
+            : undefined,
         },
-      ],
-      policyVersion: MARKETPLACE_TAX_POLICY_VERSION,
-      currency: orderCurrency,
-    }),
-    ...(subscriptionPolicy && membershipDisclosure
-      ? [
-          database.insert(membershipPolicyAcceptances).values({
-            acceptanceKey: stableHash({
+      }),
+      database.insert(orderTaxContexts).values({
+        orderId,
+        organizationId: row.organization.id,
+        source:
+          row.item.type === "good" && row.item.subtype === "digital-content"
+            ? "online"
+            : row.item.type === "good"
+              ? "shipping"
+              : venue
+                ? "venue"
+                : row.item.configuration.deliveryMode === "online"
+                  ? "online"
+                  : "organization",
+        venueId: venue?.id,
+        addressSnapshot: {
+          line1: taxLocation.addressLine1 ?? undefined,
+          line2: taxLocation.addressLine2 ?? undefined,
+          city: taxLocation.locality ?? undefined,
+          region: taxLocation.administrativeArea ?? undefined,
+          postalCode: taxLocation.postalCode ?? undefined,
+          country: taxLocation.countryCode,
+        },
+        itemTaxCodes: [
+          {
+            orderItemId,
+            stripeTaxCode: resolveCatalogTaxCode({
+              type: row.item.type,
+              subtype: row.item.subtype,
+              taxable: row.item.taxable,
+              explicitTaxCode: row.item.stripeTaxCode ?? undefined,
+            }),
+          },
+        ],
+        policyVersion: MARKETPLACE_TAX_POLICY_VERSION,
+        currency: orderCurrency,
+      }),
+      ...(subscriptionPolicy && membershipDisclosure
+        ? [
+            database.insert(membershipPolicyAcceptances).values({
+              acceptanceKey: stableHash({
+                orderId,
+                personId: input.actor.personId,
+                policyVersion: subscriptionPolicy.version,
+                disclosure: membershipDisclosure,
+              }),
               orderId,
+              organizationId: row.organization.id,
+              catalogItemId: row.item.id,
               personId: input.actor.personId,
               policyVersion: subscriptionPolicy.version,
-              disclosure: membershipDisclosure,
+              policySnapshot: subscriptionPolicy,
+              disclosureText: membershipDisclosure,
+              disclosureTextHash: stableHash(membershipDisclosure),
+              affirmativeConsent: true,
+              ipAddress: input.ipAddress,
+              acceptedAt: input.now,
             }),
+          ]
+        : []),
+      ...[
+        ...priced.fees,
+        ...(operatorFee ? [operatorFee] : []),
+        ...(organizationCommissionFee ? [organizationCommissionFee] : []),
+      ]
+        .filter((fee) => fee.amountMinor > 0)
+        .map((fee) =>
+          database.insert(appliedFees).values({
             orderId,
-            organizationId: row.organization.id,
-            catalogItemId: row.item.id,
-            personId: input.actor.personId,
-            policyVersion: subscriptionPolicy.version,
-            policySnapshot: subscriptionPolicy,
-            disclosureText: membershipDisclosure,
-            disclosureTextHash: stableHash(membershipDisclosure),
-            affirmativeConsent: true,
-            ipAddress: input.ipAddress,
-            acceptedAt: input.now,
+            ruleId: fee.id,
+            payer: fee.payer,
+            amountMinor: fee.amountMinor,
+            currency: fee.currency,
+            ruleInputs: fee.ruleInputs,
           }),
-        ]
-      : []),
-    ...[
-      ...priced.fees,
-      ...(operatorFee ? [operatorFee] : []),
-      ...(organizationCommissionFee ? [organizationCommissionFee] : []),
-    ]
-      .filter((fee) => fee.amountMinor > 0)
-      .map((fee) =>
-        database.insert(appliedFees).values({
-          orderId,
-          ruleId: fee.id,
-          payer: fee.payer,
-          amountMinor: fee.amountMinor,
-          currency: fee.currency,
-          ruleInputs: fee.ruleInputs,
-        }),
-      ),
-  ]);
+        ),
+    ]);
   try {
     await insertCheckout();
   } catch (error) {

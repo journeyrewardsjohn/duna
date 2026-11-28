@@ -92,9 +92,13 @@ export interface ClubParticipationDefault {
 export async function loadClubParticipationDefault(
   organizationId: string,
 ): Promise<ClubParticipationDefault> {
-  const row = await getDatabase().query.organizationParticipationDefaults.findFirst(
-    { where: eq(organizationParticipationDefaults.organizationId, organizationId) },
-  );
+  const row =
+    await getDatabase().query.organizationParticipationDefaults.findFirst({
+      where: eq(
+        organizationParticipationDefaults.organizationId,
+        organizationId,
+      ),
+    });
   return row
     ? { rules: row.rules, appliesTo: row.appliesTo, updatedAt: row.updatedAt }
     : { appliesTo: ["service"] };
@@ -104,19 +108,23 @@ export async function loadClubParticipationDefault(
 export async function clubRefundWindowMinutes(
   organizationId: string,
 ): Promise<number | undefined> {
-  const policy = await getDatabase().query.organizationRefundPolicies.findFirst({
-    where: and(
-      eq(organizationRefundPolicies.organizationId, organizationId),
-      eq(organizationRefundPolicies.isDefault, true),
-      eq(organizationRefundPolicies.active, true),
-    ),
-  });
+  const policy = await getDatabase().query.organizationRefundPolicies.findFirst(
+    {
+      where: and(
+        eq(organizationRefundPolicies.organizationId, organizationId),
+        eq(organizationRefundPolicies.isDefault, true),
+        eq(organizationRefundPolicies.active, true),
+      ),
+    },
+  );
   if (!policy || policy.mode === "non-refundable") return undefined;
   return policy.refundBeforeMinutes ?? undefined;
 }
 
 /** A scheduled service with preset dates can carry a group rule. */
-export function catalogItemTakesGroupRules(item: Pick<Item, "type" | "configuration">): boolean {
+export function catalogItemTakesGroupRules(
+  item: Pick<Item, "type" | "configuration">,
+): boolean {
   const schedule = record(item.configuration.sessionSchedule);
   return (
     item.type === "service" &&
@@ -279,7 +287,8 @@ export async function occurrencePlaces(
       quantity: positive(fulfillment.details.quantity, 1),
       paymentMethod,
       confirmed: paid || cashReservation,
-      reservedCredits: Number.isSafeInteger(credits) && credits > 0 ? credits : 0,
+      reservedCredits:
+        Number.isSafeInteger(credits) && credits > 0 ? credits : 0,
       bookerPersonId:
         typeof fulfillment.details.bookedByPersonId === "string"
           ? fulfillment.details.bookedByPersonId
@@ -317,7 +326,8 @@ export async function ensureCatalogDecision(input: {
     !existing.outcome &&
     !existing.lockOverrideAt &&
     !existing.forcedOutcome &&
-    (await occurrencePlaces(input.occurrence.id, input.now)).bookings.length === 0;
+    (await occurrencePlaces(input.occurrence.id, input.now)).bookings.length ===
+      0;
   if (existing && !refreshable) {
     return syncFromOccurrence(existing, input.occurrence);
   }
@@ -405,7 +415,9 @@ async function syncFromOccurrence(
         isNull(participationDecisions.outcome),
       ),
     );
-  return (await loadDecision(decision.subjectId, decision.subjectType)) ?? decision;
+  return (
+    (await loadDecision(decision.subjectId, decision.subjectType)) ?? decision
+  );
 }
 
 export interface ParticipationNoticeIntent {
@@ -448,7 +460,10 @@ export async function queueParticipationNotices(
 export function bookerNotices(input: {
   readonly organizationId: string;
   readonly occurrenceId: string;
-  readonly bookings: readonly Pick<OccurrencePlaceBooking, "fulfillment" | "bookerPersonId">[];
+  readonly bookings: readonly Pick<
+    OccurrencePlaceBooking,
+    "fulfillment" | "bookerPersonId"
+  >[];
   readonly kind: ParticipationNoticeKind;
   readonly at: Date;
 }): ParticipationNoticeIntent[] {

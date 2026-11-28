@@ -31,9 +31,6 @@ import {
 import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
-  catalogItemParticipationRules,
-  occurrenceParticipationState,
-  participationOpenedAt,
   positiveInteger,
   readBookingSnapshot,
   type BookingParticipationSnapshot,
@@ -924,7 +921,9 @@ export async function evaluateCatalogSessionParticipation(input: {
         participationDecidedAt: decision.decidedAt,
         decidedHeadcount: decision.decidedGroupSize,
         status:
-          decision.outcome === "cancel-under-minimum" ? "cancelled" : "scheduled",
+          decision.outcome === "cancel-under-minimum"
+            ? "cancelled"
+            : "scheduled",
         updatedAt: input.now,
       })
       .where(
@@ -973,9 +972,9 @@ export async function evaluateCatalogSessionParticipation(input: {
         createdAt: input.now,
       });
       const { bookings: active } = {
-        bookings: (await loadOccurrenceBookings(occurrence.id, input.now)).filter(
-          (booking) => booking.confirmed,
-        ),
+        bookings: (
+          await loadOccurrenceBookings(occurrence.id, input.now)
+        ).filter((booking) => booking.confirmed),
       };
       const hasMinimum = rules.minParticipants > 1;
       const notices = hasMinimum
@@ -990,7 +989,9 @@ export async function evaluateCatalogSessionParticipation(input: {
                   : booking.order.buyerPersonId,
             })),
             kind:
-              outcome === "cancel-under-minimum" ? "cancelled-low" : "confirmed",
+              outcome === "cancel-under-minimum"
+                ? "cancelled-low"
+                : "confirmed",
             at: input.now,
           })
         : [];

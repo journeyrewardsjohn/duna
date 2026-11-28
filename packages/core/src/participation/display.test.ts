@@ -32,7 +32,9 @@ const lockAt = participationLockAt({ startsAt, lockMinutesBeforeStart: 1440 });
 const now = new Date("2026-12-08T17:00:00.000Z");
 const zone = "America/Los_Angeles";
 
-function view(overrides: Partial<Parameters<typeof participationDisplay>[0]> = {}) {
+function view(
+  overrides: Partial<Parameters<typeof participationDisplay>[0]> = {},
+) {
   return renderParticipationDisplay(
     participationDisplay({
       rule: clinic,
@@ -55,11 +57,14 @@ describe("the words every surface shows", () => {
       status: "Needs 2 more",
       line: "Confirms Thu 6:00 PM if 2 more join",
       staff: "At risk · needs 2 by Thu 6:00 PM",
-      price: "3 credits now. If more join by Thu 6:00 PM, the difference comes back.",
+      price:
+        "3 credits now. If more join by Thu 6:00 PM, the difference comes back.",
       ladder: ["1 to 7 players · 3 credits each", "8 or more · 2 credits each"],
       cancellation: "Free cancellation until Thu 6:00 PM",
     });
-    expect(view({ booked: 3 }).line).toBe("Confirms Thu 6:00 PM if 1 more joins");
+    expect(view({ booked: 3 }).line).toBe(
+      "Confirms Thu 6:00 PM if 1 more joins",
+    );
   });
 
   it("runs either way when the rule says run", () => {
@@ -91,17 +96,35 @@ describe("the words every surface shows", () => {
   it("after the lock", () => {
     const after = new Date("2026-12-11T03:00:00.000Z");
     expect(
-      view({ booked: 9, outcome: "minimum-met", decidedGroupSize: 9, now: after }),
+      view({
+        booked: 9,
+        outcome: "minimum-met",
+        decidedGroupSize: 9,
+        now: after,
+      }),
     ).toMatchObject({
       status: "Confirmed · 9 players",
       staff: "Confirmed · 9",
       price: "Group confirmed · you pay 2 credits",
     });
     expect(
-      view({ booked: 2, outcome: "run-under-minimum", decidedGroupSize: 2, now: after }),
-    ).toMatchObject({ status: "Confirmed · small group", staff: "Running with 2 of 4" });
+      view({
+        booked: 2,
+        outcome: "run-under-minimum",
+        decidedGroupSize: 2,
+        now: after,
+      }),
+    ).toMatchObject({
+      status: "Confirmed · small group",
+      staff: "Running with 2 of 4",
+    });
     expect(
-      view({ booked: 2, outcome: "cancel-under-minimum", decidedGroupSize: 2, now: after }),
+      view({
+        booked: 2,
+        outcome: "cancel-under-minimum",
+        decidedGroupSize: 2,
+        now: after,
+      }),
     ).toMatchObject({
       status: "Cancelled · not enough players",
       staff: "Cancelled · 2 of 4 booked",
@@ -112,7 +135,10 @@ describe("the words every surface shows", () => {
         clubName: "Beach Elite",
         cancelledByName: "Jordan",
       }),
-    ).toMatchObject({ status: "Cancelled by Beach Elite", staff: "Cancelled by Jordan" });
+    ).toMatchObject({
+      status: "Cancelled by Beach Elite",
+      staff: "Cancelled by Jordan",
+    });
   });
 
   it("late cancellation costs the final price (decision 4)", () => {
@@ -129,7 +155,11 @@ describe("the words every surface shows", () => {
       timeZone: zone,
       viewer: { booked: true, quantity: 1, reservedCredits: 3 },
     });
-    expect(display.cancellation).toMatchObject({ allowed: true, free: false, lateCharge: 2 });
+    expect(display.cancellation).toMatchObject({
+      allowed: true,
+      free: false,
+      lateCharge: 2,
+    });
     expect(renderParticipationCopy(display.cancellation.line!)).toBe(
       "Cancelling now costs 2 credits. You get them back if someone takes your place.",
     );
@@ -144,25 +174,40 @@ describe("the words every surface shows", () => {
         now: after,
         viewer: { booked: true, quantity: 1, absent: true },
       }),
-    ).toMatchObject({ status: "Done", line: "You were marked absent", staff: "Mark attendance" });
+    ).toMatchObject({
+      status: "Done",
+      line: "You were marked absent",
+      staff: "Mark attendance",
+    });
     expect(
-      view({ booked: 5, outcome: "minimum-met", now: after, attendanceClosed: true }).staff,
+      view({
+        booked: 5,
+        outcome: "minimum-met",
+        now: after,
+        attendanceClosed: true,
+      }).staff,
     ).toBe("Done");
   });
 
   it("a session without a rule shows only places", () => {
-    expect(view({ rule: undefined, booked: 9 })).toMatchObject({ status: "3 spots left" });
+    expect(view({ rule: undefined, booked: 9 })).toMatchObject({
+      status: "3 spots left",
+    });
   });
 
   it("gives screen readers one sentence", () => {
-    expect(view({ booked: 4, rule: { ...clinic, minParticipants: 6 } }).a11y).toBe(
+    expect(
+      view({ booked: 4, rule: { ...clinic, minParticipants: 6 } }).a11y,
+    ).toBe(
       "Thursday clinic. Needs 2 more. Confirms Thu 6:00 PM if 2 more join. 4 of 12 places booked.",
     );
   });
 
   it("has English for every key", () => {
     for (const key of PARTICIPATION_COPY_KEYS) {
-      expect(renderParticipationCopy({ key, params: { n: 2, title: "Clinic" } })).not.toBe("");
+      expect(
+        renderParticipationCopy({ key, params: { n: 2, title: "Clinic" } }),
+      ).not.toBe("");
     }
   });
 });
@@ -191,15 +236,22 @@ describe("time zones and the lock", () => {
       }).labelWithViewer,
     ).toBe("Thu 6:00 PM PST (9:00 PM your time)");
     expect(
-      formatParticipationTime({ at: lockAt, now, timeZone: zone, viewerTimeZone: zone })
-        .labelWithViewer,
+      formatParticipationTime({
+        at: lockAt,
+        now,
+        timeZone: zone,
+        viewerTimeZone: zone,
+      }).labelWithViewer,
     ).toBeUndefined();
   });
 
   it("24 hours before is 24 real hours across the autumn change", () => {
     // Sunday 1 November 2026 09:00 PST; clocks fell back at 02:00 that day.
     const start = new Date("2026-11-01T17:00:00.000Z");
-    const lock = participationLockAt({ startsAt: start, lockMinutesBeforeStart: 1440 });
+    const lock = participationLockAt({
+      startsAt: start,
+      lockMinutesBeforeStart: 1440,
+    });
     expect(start.getTime() - lock.getTime()).toBe(24 * 3_600_000);
     expect(
       formatParticipationTime({
@@ -213,7 +265,10 @@ describe("time zones and the lock", () => {
   it("and across the spring change", () => {
     // Sunday 14 March 2027 09:00 PDT; clocks sprang forward at 02:00.
     const start = new Date("2027-03-14T16:00:00.000Z");
-    const lock = participationLockAt({ startsAt: start, lockMinutesBeforeStart: 1440 });
+    const lock = participationLockAt({
+      startsAt: start,
+      lockMinutesBeforeStart: 1440,
+    });
     expect(
       formatParticipationTime({
         at: lock,
@@ -244,17 +299,35 @@ describe("time zones and the lock", () => {
   it("moves the lock for a session opened inside its window, and honours an extension", () => {
     const opened = new Date(startsAt.getTime() - 6 * 3_600_000);
     expect(
-      participationLockAt({ startsAt, lockMinutesBeforeStart: 1440, openedAt: opened }).getTime(),
+      participationLockAt({
+        startsAt,
+        lockMinutesBeforeStart: 1440,
+        openedAt: opened,
+      }).getTime(),
     ).toBe(startsAt.getTime() - 3 * 3_600_000);
     const later = new Date(lockAt.getTime() + 3_600_000);
     expect(
-      participationLockAt({ startsAt, lockMinutesBeforeStart: 1440, overrideAt: later }),
+      participationLockAt({
+        startsAt,
+        lockMinutesBeforeStart: 1440,
+        overrideAt: later,
+      }),
     ).toEqual(later);
     expect(
-      validateLockExtension({ currentLockAt: lockAt, requestedLockAt: startsAt, startsAt, now }),
+      validateLockExtension({
+        currentLockAt: lockAt,
+        requestedLockAt: startsAt,
+        startsAt,
+        now,
+      }),
     ).toBe("We need to decide before the session starts.");
     expect(
-      validateLockExtension({ currentLockAt: lockAt, requestedLockAt: later, startsAt, now }),
+      validateLockExtension({
+        currentLockAt: lockAt,
+        requestedLockAt: later,
+        startsAt,
+        now,
+      }),
     ).toBeUndefined();
   });
 });

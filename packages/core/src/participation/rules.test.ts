@@ -30,14 +30,19 @@ const ladder289 = [
 describe("validation messages (exact words from the spec)", () => {
   it("refuses a minimum above capacity", () => {
     expect(
-      validateParticipationRuleV2({ minParticipants: 5 }, { capacity: 4 }).issues,
-    ).toEqual(["The minimum (5) can't be more than the 4 players a session holds."]);
+      validateParticipationRuleV2({ minParticipants: 5 }, { capacity: 4 })
+        .issues,
+    ).toEqual([
+      "The minimum (5) can't be more than the 4 players a session holds.",
+    ]);
     expect(
       validateParticipationRuleV2(
         { minParticipants: 3, unit: "team" },
         { capacity: 2 },
       ).issues,
-    ).toEqual(["The minimum (3) can't be more than the 2 teams a session holds."]);
+    ).toEqual([
+      "The minimum (3) can't be more than the 2 teams a session holds.",
+    ]);
   });
 
   it("refuses a lock after the start", () => {
@@ -75,7 +80,9 @@ describe("validation messages (exact words from the spec)", () => {
         },
         { capacity: 8 },
       ).issues,
-    ).toEqual(["Prices must cover every group size from 2 to 8. 5 is missing."]);
+    ).toEqual([
+      "Prices must cover every group size from 2 to 8. 5 is missing.",
+    ]);
   });
 
   it("names an overlap", () => {
@@ -116,7 +123,9 @@ describe("validation messages (exact words from the spec)", () => {
         { minParticipants: 3, tiers: ladder289 },
         { forClubDefault: true },
       ).issues,
-    ).toEqual(["Prices by group size are set on each offering, not the club default."]);
+    ).toEqual([
+      "Prices by group size are set on each offering, not the club default.",
+    ]);
   });
 
   it("keeps the 289 rule that the credit price is the highest rung", () => {
@@ -148,8 +157,16 @@ describe("validation messages (exact words from the spec)", () => {
         {
           unit: "player",
           tiers: [
-            { minParticipants: 1, maxParticipants: 3, amountMinorPerPlayer: 2500 },
-            { minParticipants: 4, maxParticipants: 6, amountMinorPerPlayer: 1500 },
+            {
+              minParticipants: 1,
+              maxParticipants: 3,
+              amountMinorPerPlayer: 2500,
+            },
+            {
+              minParticipants: 4,
+              maxParticipants: 6,
+              amountMinorPerPlayer: 1500,
+            },
           ],
         },
         6,
@@ -196,7 +213,9 @@ describe("the cliff fix", () => {
       ).tiers,
     });
     expect(fixed.map((tier) => tier.creditsPerPlayer)).toEqual([3, 2, 2]);
-    expect(participationRevenueCliffs({ unit: "player", tiers: fixed }, 8)).toEqual([]);
+    expect(
+      participationRevenueCliffs({ unit: "player", tiers: fixed }, 8),
+    ).toEqual([]);
   });
 
   it("never introduces a rising price", () => {
@@ -239,9 +258,9 @@ describe("property: validated ladders never raise a player's price", () => {
           if (!result.rule) continue;
           accepted += 1;
           for (let size = 2; size <= 8; size += 1) {
-            expect(perPlayerPrice(result.rule.tiers, size)!).toBeLessThanOrEqual(
-              perPlayerPrice(result.rule.tiers, size - 1)!,
-            );
+            expect(
+              perPlayerPrice(result.rule.tiers, size)!,
+            ).toBeLessThanOrEqual(perPlayerPrice(result.rule.tiers, size - 1)!);
           }
         }
       }
@@ -307,7 +326,13 @@ describe("club default and per-offering override", () => {
 
   it("lets an explicit 'No minimum' override the default", () => {
     const resolved = resolveParticipationRules({
-      own: { version: 2, minParticipants: 1, minimumPolicy: "run", waitlist: false, tiers: [] },
+      own: {
+        version: 2,
+        minParticipants: 1,
+        minimumPolicy: "run",
+        waitlist: false,
+        tiers: [],
+      },
       clubDefault,
       kind: "service",
       capacity: 8,
@@ -340,8 +365,10 @@ describe("club default and per-offering override", () => {
   it("falls back to the refund window, then 24 hours (decision 1)", () => {
     const rule = readParticipationRuleV2({ minParticipants: 2 })!;
     expect(
-      resolveParticipationRuleV2(rule, { capacity: 4, refundWindowMinutes: 360 })
-        .lockMinutesBeforeStart,
+      resolveParticipationRuleV2(rule, {
+        capacity: 4,
+        refundWindowMinutes: 360,
+      }).lockMinutesBeforeStart,
     ).toBe(360);
     expect(
       resolveParticipationRuleV2(rule, { capacity: 4 }).lockMinutesBeforeStart,
@@ -369,7 +396,10 @@ describe("reading stored rules", () => {
   it("never applies part of a malformed ladder", () => {
     expect(
       readParticipationRuleV2({
-        tiers: [{ minParticipants: 1, creditsPerPlayer: 2 }, { minParticipants: 0 }],
+        tiers: [
+          { minParticipants: 1, creditsPerPlayer: 2 },
+          { minParticipants: 0 },
+        ],
       })?.tiers,
     ).toEqual([]);
   });
@@ -384,7 +414,9 @@ describe("reading stored rules", () => {
       waitlist: true,
       tiers: [],
     };
-    expect(readParticipationRuleV2(serializeParticipationRule(rule))).toEqual(rule);
+    expect(readParticipationRuleV2(serializeParticipationRule(rule))).toEqual(
+      rule,
+    );
   });
 
   it("the v1 reader maps v2 rows (the adapter)", () => {
@@ -396,7 +428,9 @@ describe("reading stored rules", () => {
           minimumPolicy: "cancel",
           lockMinutesBeforeStart: 600,
           waitlist: true,
-          tiers: [{ minParticipants: 1, maxParticipants: 8, creditsPerPlayer: 2 }],
+          tiers: [
+            { minParticipants: 1, maxParticipants: 8, creditsPerPlayer: 2 },
+          ],
         },
         8,
       ),
@@ -406,7 +440,9 @@ describe("reading stored rules", () => {
       minimumPolicy: "cancel",
       cutoffMinutesBeforeStart: 600,
       settlementBasis: "cutoff",
-      creditTiers: [{ minParticipants: 1, maxParticipants: 8, creditsPerPlayer: 2 }],
+      creditTiers: [
+        { minParticipants: 1, maxParticipants: 8, creditsPerPlayer: 2 },
+      ],
     });
   });
 });
@@ -420,14 +456,29 @@ describe("money helpers", () => {
   it("reserves the most and charges a late canceller the final price (decision 4)", () => {
     expect(participationReservePerPlayer(tiers)).toBe(3);
     expect(
-      lateCancellationCharge({ tiers, finalGroupSize: 5, quantity: 2, reserved: 6 }),
+      lateCancellationCharge({
+        tiers,
+        finalGroupSize: 5,
+        quantity: 2,
+        reserved: 6,
+      }),
     ).toBe(4);
     // Never above the reserve, even for a group that ran small.
     expect(
-      lateCancellationCharge({ tiers, finalGroupSize: 1, quantity: 1, reserved: 2 }),
+      lateCancellationCharge({
+        tiers,
+        finalGroupSize: 1,
+        quantity: 1,
+        reserved: 2,
+      }),
     ).toBe(2);
     expect(
-      lateCancellationCharge({ tiers: [], finalGroupSize: 4, quantity: 1, reserved: 3 }),
+      lateCancellationCharge({
+        tiers: [],
+        finalGroupSize: 4,
+        quantity: 1,
+        reserved: 3,
+      }),
     ).toBe(3);
   });
 
@@ -459,15 +510,23 @@ describe("classifying a rule change (§8)", () => {
   );
   const changed = (patch: Record<string, unknown>) =>
     resolveParticipationRuleV2(
-      readParticipationRuleV2({ ...serializeParticipationRule(base), ...patch })!,
+      readParticipationRuleV2({
+        ...serializeParticipationRule(base),
+        ...patch,
+      })!,
       { capacity: (patch.capacity as number | undefined) ?? 10 },
     );
 
   it("loosens: lower minimum, run, later lock, cheaper prices, more places", () => {
-    expect(classifyRuleChange(base, changed({ minParticipants: 3 })).overall).toBe("loosens");
-    expect(classifyRuleChange(base, changed({ minimumPolicy: "run" })).overall).toBe("loosens");
     expect(
-      classifyRuleChange(base, changed({ lockMinutesBeforeStart: 600 })).overall,
+      classifyRuleChange(base, changed({ minParticipants: 3 })).overall,
+    ).toBe("loosens");
+    expect(
+      classifyRuleChange(base, changed({ minimumPolicy: "run" })).overall,
+    ).toBe("loosens");
+    expect(
+      classifyRuleChange(base, changed({ lockMinutesBeforeStart: 600 }))
+        .overall,
     ).toBe("loosens");
     expect(
       classifyRuleChange(
@@ -480,18 +539,20 @@ describe("classifying a rule change (§8)", () => {
         }),
       ).overall,
     ).toBe("loosens");
-    expect(classifyRuleChange(base, changed({ capacity: 12 })).fields.capacity).toBe(
-      "loosens",
-    );
+    expect(
+      classifyRuleChange(base, changed({ capacity: 12 })).fields.capacity,
+    ).toBe("loosens");
   });
 
   it("tightens when any field tightens", () => {
-    expect(classifyRuleChange(base, changed({ minParticipants: 5 })).overall).toBe(
-      "tightens",
-    );
     expect(
-      classifyRuleChange(base, changed({ minParticipants: 3, lockMinutesBeforeStart: 2880 }))
-        .overall,
+      classifyRuleChange(base, changed({ minParticipants: 5 })).overall,
+    ).toBe("tightens");
+    expect(
+      classifyRuleChange(
+        base,
+        changed({ minParticipants: 3, lockMinutesBeforeStart: 2880 }),
+      ).overall,
     ).toBe("tightens");
     expect(classifyRuleChange(base, changed({})).overall).toBe("neutral");
   });

@@ -124,18 +124,25 @@ export async function claimOccurrencePlace(input: {
       FOR UPDATE
     `);
     const capacity = Number(
-      (locked as unknown as { rows: { capacity: number }[] }).rows[0]?.capacity ?? 0,
+      (locked as unknown as { rows: { capacity: number }[] }).rows[0]
+        ?.capacity ?? 0,
     );
     const mine = await transaction.query.catalogFulfillments.findFirst({
       where: eq(catalogFulfillments.id, input.fulfillmentId),
     });
     if (!mine) return false;
     const others = await transaction
-      .select({ details: catalogFulfillments.details, id: catalogFulfillments.id })
+      .select({
+        details: catalogFulfillments.details,
+        id: catalogFulfillments.id,
+      })
       .from(catalogFulfillments)
       .where(
         and(
-          eq(catalogFulfillments.catalogSessionOccurrenceId, input.occurrenceId),
+          eq(
+            catalogFulfillments.catalogSessionOccurrenceId,
+            input.occurrenceId,
+          ),
           inArray(catalogFulfillments.status, [...ACTIVE_BOOKING_STATUSES]),
         ),
       );
@@ -145,7 +152,10 @@ export async function claimOccurrencePlace(input: {
       )
       .reduce((total, row) => {
         const quantity = Number(row.details.quantity ?? 1);
-        return total + (Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 1);
+        return (
+          total +
+          (Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 1)
+        );
       }, 0);
     const quantity = Number(mine.details.quantity ?? 1);
     if (taken + quantity > capacity) return false;
@@ -244,7 +254,10 @@ export async function settleRefilledPlaces(input: {
 }): Promise<number> {
   const database = getDatabase();
   const lateCancels = await database
-    .select({ adjustment: participationAdjustments, fulfillment: catalogFulfillments })
+    .select({
+      adjustment: participationAdjustments,
+      fulfillment: catalogFulfillments,
+    })
     .from(participationAdjustments)
     .innerJoin(
       catalogFulfillments,
@@ -256,7 +269,10 @@ export async function settleRefilledPlaces(input: {
         eq(participationAdjustments.kind, "late-cancel-final-price"),
       ),
     )
-    .orderBy(asc(participationAdjustments.createdAt), asc(participationAdjustments.id));
+    .orderBy(
+      asc(participationAdjustments.createdAt),
+      asc(participationAdjustments.id),
+    );
   if (lateCancels.length === 0) return 0;
   const refilled = await database
     .select({ fulfillmentId: participationAdjustments.catalogFulfillmentId })
@@ -279,7 +295,8 @@ export async function settleRefilledPlaces(input: {
   const places = await occurrencePlaces(input.occurrenceId, input.now);
   const newPlaces = places.bookings
     .filter(
-      (booking) => booking.confirmed && booking.fulfillment.createdAt >= firstCancelAt,
+      (booking) =>
+        booking.confirmed && booking.fulfillment.createdAt >= firstCancelAt,
     )
     .reduce((total, booking) => total + booking.quantity, 0);
   let used = lateCancels
@@ -294,7 +311,10 @@ export async function settleRefilledPlaces(input: {
     const order = await database.query.orders.findFirst({
       where: eq(orders.id, adjustment.orderId),
     });
-    if (!order || (order.status !== "paid" && order.status !== "partially-refunded")) {
+    if (
+      !order ||
+      (order.status !== "paid" && order.status !== "partially-refunded")
+    ) {
       continue;
     }
     const credits = Number(fulfillment.details.creditsApplied ?? 0) > 0;
@@ -332,7 +352,8 @@ export async function settleRefilledPlaces(input: {
         entityType: "catalog-fulfillment",
         entityId: fulfillment.id,
         afterHash: stableHash({ orderId: order.id, refundId: refund.id }),
-        reason: "A late cancellation's place was taken; the final price was returned.",
+        reason:
+          "A late cancellation's place was taken; the final price was returned.",
         traceId: `participation-refill:${fulfillment.id}`,
         createdAt: input.now,
       });
@@ -345,7 +366,8 @@ export async function settleRefilledPlaces(input: {
               ? fulfillment.details.bookedByPersonId
               : order.buyerPersonId,
           bookingId: fulfillment.id,
-          kind: refund.status === "failed" ? "refund-attention" : "place-refilled",
+          kind:
+            refund.status === "failed" ? "refund-attention" : "place-refilled",
           scheduledFor: input.now,
         },
       ]);

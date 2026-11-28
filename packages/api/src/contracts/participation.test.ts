@@ -17,7 +17,8 @@ import { expectCoverage } from "./w3-test-support";
 
 describe("participation contract and demo fixtures (PART-3)", () => {
   it("every fixture parses against its contract", () => {
-    for (const quote of participationDemo.quotes) participationQuoteSchema.parse(quote);
+    for (const quote of participationDemo.quotes)
+      participationQuoteSchema.parse(quote);
     participationDefaultsSchema.parse(participationDemo.defaults);
     participationAtRiskSchema.parse(participationDemo.atRisk);
     participationPreviewRuleChangeSchema.parse(participationDemo.preview);
@@ -34,19 +35,24 @@ describe("participation contract and demo fixtures (PART-3)", () => {
     expectCoverage([...PARTICIPATION_STATES, "open"], seen);
     expectCoverage(
       ["credits-restored", "refund-submitted", "released", "review-required"],
-      participationDemo.cancelSession.cancellations.map((entry) => entry.refundStatus),
+      participationDemo.cancelSession.cancellations.map(
+        (entry) => entry.refundStatus,
+      ),
     );
   });
 
   it("speaks the worked examples' words", () => {
-    const byTitle = new Map(participationDemo.quotes.map((quote) => [quote.title, quote]));
+    const byTitle = new Map(
+      participationDemo.quotes.map((quote) => [quote.title, quote]),
+    );
     expect(byTitle.get("Saturday semi-private")?.copy).toMatchObject({
       status: "Needs 1 more",
       line: "Confirms Fri 9:00 AM if 1 more joins",
     });
     expect(byTitle.get("Thursday clinic")?.copy).toMatchObject({
       status: "Minimum reached",
-      price: "3 credits now. If more join by Wed 6:00 PM, the difference comes back.",
+      price:
+        "3 credits now. If more join by Wed 6:00 PM, the difference comes back.",
     });
     expect(byTitle.get("Saturday open play")?.copy.status).toBe(
       "Cancelled · not enough players",
@@ -63,7 +69,9 @@ describe("participation routers in demo mode", () => {
 
   // The owner holds payments:write (cancel with refunds); a manager does not.
   const caller = () =>
-    createCaller(createApiContext({ actor: createDemoActor(["player", "owner"]) }));
+    createCaller(
+      createApiContext({ actor: createDemoActor(["player", "owner"]) }),
+    );
   const key = () => crypto.randomUUID();
   const subject = {
     subjectType: "catalog-session-occurrence" as const,
@@ -72,7 +80,9 @@ describe("participation routers in demo mode", () => {
 
   it("serves every procedure", async () => {
     const api = caller();
-    expect((await api.operator.participation.defaults()).rules?.minParticipants).toBe(3);
+    expect(
+      (await api.operator.participation.defaults()).rules?.minParticipants,
+    ).toBe(3);
     expect(
       (
         await api.operator.participation.setDefaults({
@@ -101,7 +111,11 @@ describe("participation routers in demo mode", () => {
       }),
     ).toEqual(participationDemo.extendLock);
     expect(
-      await api.operator.participation.runAnyway({ ...subject, confirmed: true, idempotencyKey: key() }),
+      await api.operator.participation.runAnyway({
+        ...subject,
+        confirmed: true,
+        idempotencyKey: key(),
+      }),
     ).toEqual(participationDemo.runAnyway);
     expect(
       (
@@ -114,7 +128,11 @@ describe("participation routers in demo mode", () => {
       ).cancellations,
     ).toHaveLength(4);
     expect(
-      await api.operator.participation.requestCancel({ ...subject, reason: "coach", idempotencyKey: key() }),
+      await api.operator.participation.requestCancel({
+        ...subject,
+        reason: "coach",
+        idempotencyKey: key(),
+      }),
     ).toEqual(participationDemo.cancelRequest);
     expect(await api.operator.participation.cancelRequests()).toHaveLength(1);
     expect(
@@ -134,7 +152,9 @@ describe("participation routers in demo mode", () => {
   });
 
   it("keeps cancel-with-refunds behind payments:write", async () => {
-    const manager = createCaller(createApiContext({ actor: createDemoActor() }));
+    const manager = createCaller(
+      createApiContext({ actor: createDemoActor() }),
+    );
     await expect(
       manager.operator.participation.cancelSession({
         ...subject,

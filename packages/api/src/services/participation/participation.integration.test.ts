@@ -24,7 +24,10 @@ import {
   testActor,
   walletState,
 } from "../../catalog-booking.test-support";
-import { CatalogCheckoutError, startCatalogCheckout } from "../../catalog-checkout";
+import {
+  CatalogCheckoutError,
+  startCatalogCheckout,
+} from "../../catalog-checkout";
 import {
   evaluateCatalogSessionParticipation,
   loadOperatorCatalogSessionOccurrences,
@@ -132,7 +135,11 @@ beforeEach(async () => {
 
 describe("book to the minimum, the lock confirms", () => {
   beforeEach(() =>
-    configureParticipation(pg, { minParticipants: 3, minimumPolicy: "cancel" }, 2),
+    configureParticipation(
+      pg,
+      { minParticipants: 3, minimumPolicy: "cancel" },
+      2,
+    ),
   );
 
   it("snapshots at the first booking and confirms at the lock", async () => {
@@ -154,9 +161,9 @@ describe("book to the minimum, the lock confirms", () => {
       outcome: "minimum-met",
       decided_group_size: 3,
     });
-    expect((await notices("confirmed")).map((row) => row.recipient_person_id).sort()).toEqual(
-      players.slice(0, 3).sort(),
-    );
+    expect(
+      (await notices("confirmed")).map((row) => row.recipient_person_id).sort(),
+    ).toEqual(players.slice(0, 3).sort());
   });
 
   it("cancels under the minimum at the lock and returns every credit", async () => {
@@ -164,7 +171,10 @@ describe("book to the minimum, the lock confirms", () => {
     await book(players[1]!);
     expect(await wallet(players[0]!)).toBe(8);
     const result = await evaluate(afterLock);
-    expect(result).toMatchObject({ status: "cancelled", outcome: "cancel-under-minimum" });
+    expect(result).toMatchObject({
+      status: "cancelled",
+      outcome: "cancel-under-minimum",
+    });
     expect(result.cancellations.map((entry) => entry.refundStatus)).toEqual([
       "credits-restored",
       "credits-restored",
@@ -242,11 +252,19 @@ describe("book to the minimum, the lock confirms", () => {
 
 describe("a rule edit never touches a booked session (§4.3)", () => {
   it("keeps the snapshot taken at the first booking", async () => {
-    await configureParticipation(pg, { minParticipants: 2, minimumPolicy: "cancel" }, 2);
+    await configureParticipation(
+      pg,
+      { minParticipants: 2, minimumPolicy: "cancel" },
+      2,
+    );
     await book(players[0]!);
     await book(players[1]!);
     // The owner tightens the offering after people booked.
-    await configureParticipation(pg, { minParticipants: 6, minimumPolicy: "cancel" }, 2);
+    await configureParticipation(
+      pg,
+      { minParticipants: 6, minimumPolicy: "cancel" },
+      2,
+    );
     expect(await evaluate(afterLock)).toMatchObject({
       status: "settled",
       outcome: "minimum-met",
@@ -265,7 +283,11 @@ describe("a rule edit never touches a booked session (§4.3)", () => {
 
 describe("late cancellation (decision 4)", () => {
   it("pays the final price, returned when the place is refilled", async () => {
-    await configureParticipation(pg, { creditTiers: ladder, minParticipants: 2, minimumPolicy: "cancel" }, 3);
+    await configureParticipation(
+      pg,
+      { creditTiers: ladder, minParticipants: 2, minimumPolicy: "cancel" },
+      3,
+    );
     const first = await book(players[0]!);
     await book(players[1]!);
     await book(players[2]!);
@@ -295,24 +317,34 @@ describe("late cancellation (decision 4)", () => {
     // Someone takes the place: the late canceller gets the final price back.
     await book(players[3]!, { now: new Date("2026-12-10T09:00:00.000Z") });
     expect(await wallet(players[0]!)).toBe(10);
-    expect((await notices("place-refilled")).map((row) => row.recipient_person_id)).toEqual([
-      players[0],
-    ]);
+    expect(
+      (await notices("place-refilled")).map((row) => row.recipient_person_id),
+    ).toEqual([players[0]]);
     // The newcomer paid the final price, never the reserve.
     expect(await wallet(players[3]!)).toBe(8);
   });
 });
 
 describe("places, duplicates and concurrency", () => {
-  beforeEach(() => configureParticipation(pg, { minParticipants: 2, minimumPolicy: "cancel" }, 2));
+  beforeEach(() =>
+    configureParticipation(
+      pg,
+      { minParticipants: 2, minimumPolicy: "cancel" },
+      2,
+    ),
+  );
 
   it("blocks a second booking of the same session (decision 5)", async () => {
     await book(players[0]!);
     const second = book(players[0]!);
     await expect(second).rejects.toBeInstanceOf(CatalogCheckoutError);
-    await expect(book(players[0]!)).rejects.toThrow("You're already booked for this session");
+    await expect(book(players[0]!)).rejects.toThrow(
+      "You're already booked for this session",
+    );
     // A family booking for the child is a different participant.
-    expect(await book(players[0]!, { participantPersonId: child })).toMatchObject({
+    expect(
+      await book(players[0]!, { participantPersonId: child }),
+    ).toMatchObject({
       orderStatus: "paid",
     });
     expect(await wallet(players[0]!)).toBe(6);
@@ -320,11 +352,23 @@ describe("places, duplicates and concurrency", () => {
 
   it("gives the last place to exactly one of two people booking at once", async () => {
     // The offering's first booking creates its catalog version; do that first.
-    await book(players[2]!, { catalogSessionOccurrenceId: academy.secondOccurrence });
-    await pg.query(`update catalog_session_occurrences set capacity = 1 where id = $1`, [occurrence]);
-    const results = await Promise.allSettled([book(players[0]!), book(players[1]!)]);
-    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    const rejected = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
+    await book(players[2]!, {
+      catalogSessionOccurrenceId: academy.secondOccurrence,
+    });
+    await pg.query(
+      `update catalog_session_occurrences set capacity = 1 where id = $1`,
+      [occurrence],
+    );
+    const results = await Promise.allSettled([
+      book(players[0]!),
+      book(players[1]!),
+    ]);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    const rejected = results.find(
+      (result) => result.status === "rejected",
+    ) as PromiseRejectedResult;
     expect(String(rejected.reason)).toContain("enough open places");
     const active = await pg.query<{ count: number }>(
       `select count(*)::int as count from catalog_fulfillments
@@ -332,7 +376,9 @@ describe("places, duplicates and concurrency", () => {
       [occurrence],
     );
     expect(active.rows[0]!.count).toBe(1);
-    expect((await wallet(players[0]!)) + (await wallet(players[1]!))).toBe(18);
+    expect(
+      ((await wallet(players[0]!)) ?? 0) + ((await wallet(players[1]!)) ?? 0),
+    ).toBe(18);
   });
 
   it("the schedule is safe to run twice and concurrently", async () => {
@@ -361,7 +407,11 @@ describe("places, duplicates and concurrency", () => {
 
 describe("the club cancels", () => {
   it("refunds everyone, marks the session cancelled and tells each booker", async () => {
-    await configureParticipation(pg, { minParticipants: 2, minimumPolicy: "cancel" }, 2);
+    await configureParticipation(
+      pg,
+      { minParticipants: 2, minimumPolicy: "cancel" },
+      2,
+    );
     await book(players[0]!);
     await book(players[1]!);
     await evaluate(afterLock);
@@ -395,8 +445,16 @@ describe("the club cancels", () => {
   });
 
   it("a coach requests; only the assigned coach or staff may", async () => {
-    await configureParticipation(pg, { minParticipants: 2, minimumPolicy: "cancel" }, 2);
-    const coachActor = { ...testActor(coach, org), roles: ["coach" as const], scopes: ["sessions:read"] };
+    await configureParticipation(
+      pg,
+      { minParticipants: 2, minimumPolicy: "cancel" },
+      2,
+    );
+    const coachActor = {
+      ...testActor(coach, org),
+      roles: ["coach" as const],
+      scopes: ["sessions:read"],
+    };
     const first = await requestParticipationCancel({
       actor: coachActor,
       organizationId: org,
@@ -439,7 +497,10 @@ describe("attendance without a money permission", () => {
     const coachActor = { ...testActor(coach, org), scopes: ["sessions:read"] };
     const during = new Date("2026-12-10T17:10:00.000Z");
     const marks = [
-      { bookingId: await bookingId(first.orderId), status: "attended" as const },
+      {
+        bookingId: await bookingId(first.orderId),
+        status: "attended" as const,
+      },
       { bookingId: await bookingId(second.orderId), status: "absent" as const },
     ];
     const result = await recordParticipationAttendance({
@@ -459,12 +520,20 @@ describe("attendance without a money permission", () => {
       organizationId: org,
       subjectType: SUBJECT,
       subjectId: occurrence,
-      marks: [{ ...marks[1]!, status: "attended", deviceMarkedAt: new Date("2026-12-10T17:01:00.000Z") }],
+      marks: [
+        {
+          ...marks[1]!,
+          status: "attended",
+          deviceMarkedAt: new Date("2026-12-10T17:01:00.000Z"),
+        },
+      ],
       idempotencyKey: crypto.randomUUID(),
       requestId: crypto.randomUUID(),
       now: during,
     });
-    expect(stale.ignored).toEqual([{ bookingId: marks[1]!.bookingId, reason: "newer-mark-exists" }]);
+    expect(stale.ignored).toEqual([
+      { bookingId: marks[1]!.bookingId, reason: "newer-mark-exists" },
+    ]);
     // Both paid the 2-player price (decision 2: no attendance pricing).
     expect(await wallet(players[0]!)).toBe(8);
     expect(await wallet(players[1]!)).toBe(8);
@@ -497,7 +566,12 @@ describe("the club default", () => {
     const saved = await setParticipationDefaults({
       organizationId: org,
       actorPersonId: owner,
-      rules: { minParticipants: 3, minimumPolicy: "cancel", lockMinutesBeforeStart: 1440, waitlist: true },
+      rules: {
+        minParticipants: 3,
+        minimumPolicy: "cancel",
+        lockMinutesBeforeStart: 1440,
+        waitlist: true,
+      },
       appliesTo: ["service"],
       requestId: crypto.randomUUID(),
       now,
@@ -511,7 +585,9 @@ describe("the club default", () => {
       requestId: crypto.randomUUID(),
       now,
     });
-    expect(invalid.issues).toEqual(["We need to decide before the session starts."]);
+    expect(invalid.issues).toEqual([
+      "We need to decide before the session starts.",
+    ]);
     await book(players[0]!);
     const risk = await participationAtRisk({
       organizationId: org,
@@ -519,9 +595,13 @@ describe("the club default", () => {
       now,
       to: new Date("2026-12-31T00:00:00.000Z"),
     });
-    expect(risk.sessions.map((session) => [session.subjectId, session.booked, session.min])).toEqual([
-      [occurrence, 1, 3],
-    ]);
+    expect(
+      risk.sessions.map((session) => [
+        session.subjectId,
+        session.booked,
+        session.min,
+      ]),
+    ).toEqual([[occurrence, 1, 3]]);
     expect(risk.totals).toMatchObject({ sessions: 1, atStakeCredits: 2 });
     const quote = await participationQuote({
       actor: testActor(players[1]!),

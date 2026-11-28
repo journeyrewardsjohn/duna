@@ -110,7 +110,11 @@ describe("the transition function (property-style)", () => {
   it("a session that already started is never cancelled for numbers", () => {
     for (const rule of rules) {
       const machine = initialParticipationMachine(rule, 0);
-      const late = participationTransition(machine, { type: "lock", late: true }, rule);
+      const late = participationTransition(
+        machine,
+        { type: "lock", late: true },
+        rule,
+      );
       expect(late.machine.state).not.toBe("cancelled-low");
       const ended = participationTransition(machine, { type: "end" }, rule);
       expect(ended.machine.state).toBe("done");
@@ -162,11 +166,19 @@ describe("the transition function (property-style)", () => {
 });
 
 describe("worked example 1: semi-private (2 of 2, cancel)", () => {
-  const rule = { minParticipants: 2, capacity: 2, minimumPolicy: "cancel" } as const;
+  const rule = {
+    minParticipants: 2,
+    capacity: 2,
+    minimumPolicy: "cancel",
+  } as const;
 
   it("Maya alone is cancelled at the lock with everything returned", () => {
     let machine = initialParticipationMachine(rule);
-    const booked = participationTransition(machine, { type: "booked", places: 1 }, rule);
+    const booked = participationTransition(
+      machine,
+      { type: "booked", places: 1 },
+      rule,
+    );
     expect(booked.machine.state).toBe("needs-players");
     expect(booked.effects).toEqual([
       { type: "notice", kind: "booked-needs-players", audience: "booker" },
@@ -174,7 +186,9 @@ describe("worked example 1: semi-private (2 of 2, cancel)", () => {
     machine = booked.machine;
     const locked = participationTransition(machine, { type: "lock" }, rule);
     expect(locked.machine.state).toBe("cancelled-low");
-    expect(locked.effects.map((effect) => effect.type)).toContain("return-everything");
+    expect(locked.effects.map((effect) => effect.type)).toContain(
+      "return-everything",
+    );
   });
 
   it("Run anyway before the lock makes it run small", () => {
@@ -183,10 +197,14 @@ describe("worked example 1: semi-private (2 of 2, cancel)", () => {
       { type: "booked", places: 1 },
       rule,
     ).machine;
-    machine = participationTransition(machine, { type: "run-anyway" }, rule).machine;
-    expect(participationTransition(machine, { type: "lock" }, rule).machine.state).toBe(
-      "running-small",
-    );
+    machine = participationTransition(
+      machine,
+      { type: "run-anyway" },
+      rule,
+    ).machine;
+    expect(
+      participationTransition(machine, { type: "lock" }, rule).machine.state,
+    ).toBe("running-small");
   });
 
   it("a full session offers the waitlist when a place opens", () => {
@@ -197,8 +215,11 @@ describe("worked example 1: semi-private (2 of 2, cancel)", () => {
     );
     expect(full.machine.state).toBe("full");
     expect(
-      participationTransition(full.machine, { type: "cancelled", places: 1 }, rule)
-        .effects,
+      participationTransition(
+        full.machine,
+        { type: "cancelled", places: 1 },
+        rule,
+      ).effects,
     ).toEqual([{ type: "offer-waitlist" }]);
   });
 });
@@ -222,17 +243,26 @@ describe("money properties", () => {
       const reserve = participationReservePerPlayer(tiers)!;
       for (let run = 0; run < 300; run += 1) {
         const groupSize = Math.floor(next() * 14);
-        const bookings = Array.from({ length: 1 + Math.floor(next() * 5) }, (_, index) => {
-          const quantity = 1 + Math.floor(next() * 3);
-          return { id: `b${index}`, quantity, reservedCredits: reserve * quantity };
-        });
+        const bookings = Array.from(
+          { length: 1 + Math.floor(next() * 5) },
+          (_, index) => {
+            const quantity = 1 + Math.floor(next() * 3);
+            return {
+              id: `b${index}`,
+              quantity,
+              reservedCredits: reserve * quantity,
+            };
+          },
+        );
         for (const line of planParticipationSettlement({
           creditTiers: tiers,
           headcount: groupSize,
           bookings,
         })) {
           const booking = bookings.find((entry) => entry.id === line.id)!;
-          expect(line.settledCredits).toBeLessThanOrEqual(booking.reservedCredits);
+          expect(line.settledCredits).toBeLessThanOrEqual(
+            booking.reservedCredits,
+          );
           expect(line.returnedCredits).toBeGreaterThanOrEqual(0);
         }
         for (const booking of bookings) {

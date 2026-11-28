@@ -128,7 +128,9 @@ function readTiers(value: unknown): ParticipationPriceTier[] {
       ...(hasAmount ? { amountMinorPerPlayer: amount } : {}),
     });
   }
-  return tiers.sort((left, right) => left.minParticipants - right.minParticipants);
+  return tiers.sort(
+    (left, right) => left.minParticipants - right.minParticipants,
+  );
 }
 
 /**
@@ -144,7 +146,8 @@ export function readParticipationRuleV2(
   const min = whole(input.minParticipants) ?? 1;
   const max = whole(input.maxParticipants);
   const lock =
-    whole(input.lockMinutesBeforeStart) ?? whole(input.cutoffMinutesBeforeStart);
+    whole(input.lockMinutesBeforeStart) ??
+    whole(input.cutoffMinutesBeforeStart);
   const tiers = readTiers(
     Array.isArray(input.tiers) ? input.tiers : input.creditTiers,
   );
@@ -218,7 +221,10 @@ export function resolveParticipationRuleV2(
 
 /** True when the rule changes nothing compared with a capacity-only session. */
 export function participationRuleIsInert(
-  rule: Pick<ParticipationRuleV2, "minParticipants" | "minimumPolicy" | "tiers" | "splitCostMinor">,
+  rule: Pick<
+    ParticipationRuleV2,
+    "minParticipants" | "minimumPolicy" | "tiers" | "splitCostMinor"
+  >,
 ): boolean {
   return (
     rule.tiers.length === 0 &&
@@ -263,7 +269,9 @@ function tierPrice(
   tier: ParticipationPriceTier | undefined,
   unit: ParticipationPriceUnit,
 ): number | undefined {
-  return unit === "credits" ? tier?.creditsPerPlayer : tier?.amountMinorPerPlayer;
+  return unit === "credits"
+    ? tier?.creditsPerPlayer
+    : tier?.amountMinorPerPlayer;
 }
 
 /** The per-player price at a group size, in credits or minor units. */
@@ -327,8 +335,10 @@ export function formatParticipationMoney(
   locale = "en-US",
 ): string {
   const digits =
-    new Intl.NumberFormat(locale, { style: "currency", currency })
-      .resolvedOptions().maximumFractionDigits ?? 2;
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+    }).resolvedOptions().maximumFractionDigits ?? 2;
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
@@ -438,7 +448,10 @@ export function splitCostTiers(
   capacity: number,
 ): {
   readonly tiers: readonly ParticipationPriceTier[];
-  readonly remainders: readonly { readonly groupSize: number; readonly remainderMinor: number }[];
+  readonly remainders: readonly {
+    readonly groupSize: number;
+    readonly remainderMinor: number;
+  }[];
 } {
   const start = Math.max(1, Math.trunc(minimum));
   const end = Math.max(start, Math.trunc(capacity));
@@ -512,7 +525,11 @@ export function validateParticipationRuleV2(
   }
   const issues: string[] = [];
   const unit: ParticipationUnit = input.unit === "team" ? "team" : "player";
-  if (input.unit !== undefined && input.unit !== "player" && input.unit !== "team") {
+  if (
+    input.unit !== undefined &&
+    input.unit !== "player" &&
+    input.unit !== "team"
+  ) {
     issues.push("Choose whether the group counts players or teams.");
   }
   const ownMax =
@@ -552,7 +569,9 @@ export function validateParticipationRuleV2(
   const policy =
     input.minimumPolicy === undefined ? "run" : input.minimumPolicy;
   if (policy !== "cancel" && policy !== "run") {
-    issues.push("Choose whether a session that is too small is cancelled or runs anyway.");
+    issues.push(
+      "Choose whether a session that is too small is cancelled or runs anyway.",
+    );
   }
 
   const rawLock =
@@ -599,7 +618,9 @@ export function validateParticipationRuleV2(
       `Prices by group size can have at most ${MAX_PARTICIPATION_PRICE_TIERS} rows.`,
     );
   } else if (rawTiers.length > 0 && context.forClubDefault) {
-    issues.push("Prices by group size are set on each offering, not the club default.");
+    issues.push(
+      "Prices by group size are set on each offering, not the club default.",
+    );
   } else if (rawTiers.length > 0) {
     let usesCredits: boolean | undefined;
     let usesAmount: boolean | undefined;
@@ -690,7 +711,11 @@ export function validateParticipationRuleV2(
       const start = Math.min(min ?? 1, sorted[0]!.minParticipants);
       const counts = new Map<number, number>();
       for (const tier of sorted) {
-        for (let size = tier.minParticipants; size <= tier.maxParticipants; size += 1) {
+        for (
+          let size = tier.minParticipants;
+          size <= tier.maxParticipants;
+          size += 1
+        ) {
           counts.set(size, (counts.get(size) ?? 0) + 1);
         }
       }
@@ -698,7 +723,9 @@ export function validateParticipationRuleV2(
         .filter(([, count]) => count > 1)
         .map(([size]) => size);
       for (const size of overlapping.slice(0, 1)) {
-        issues.push(`Two prices cover ${plural(size, unit === "team" ? "team" : "player")}.`);
+        issues.push(
+          `Two prices cover ${plural(size, unit === "team" ? "team" : "player")}.`,
+        );
       }
       const missing: number[] = [];
       for (let size = start; size <= end; size += 1) {
@@ -715,7 +742,8 @@ export function validateParticipationRuleV2(
           const before = sorted[index - 1]!;
           const after = sorted[index]!;
           const rises =
-            (after.creditsPerPlayer ?? 0) > (before.creditsPerPlayer ?? Infinity) ||
+            (after.creditsPerPlayer ?? 0) >
+              (before.creditsPerPlayer ?? Infinity) ||
             (after.amountMinorPerPlayer ?? 0) >
               (before.amountMinorPerPlayer ?? Infinity);
           if (rises) {
@@ -862,7 +890,10 @@ export function participationPreset(
 
 /** Which preset a rule matches exactly (ignoring the lock), if any. */
 export function matchParticipationPreset(
-  rule: Pick<ParticipationRuleV2, "minParticipants" | "minimumPolicy" | "waitlist">,
+  rule: Pick<
+    ParticipationRuleV2,
+    "minParticipants" | "minimumPolicy" | "waitlist"
+  >,
   capacity: number,
 ): ParticipationPresetId | undefined {
   return PARTICIPATION_PRESETS.find(
@@ -943,7 +974,7 @@ function compare(
   loosensWhen: "lower" | "higher",
 ): ParticipationChangeClass {
   if (before === after) return "neutral";
-  return (after < before) === (loosensWhen === "lower") ? "loosens" : "tightens";
+  return after < before === (loosensWhen === "lower") ? "loosens" : "tightens";
 }
 
 /**
@@ -967,8 +998,10 @@ export function classifyRuleChange(
         // A ladder added or removed: the reserve is what people agreed to.
         const wasMax = participationReservePerPlayer(before.tiers, unit);
         const nowMax = participationReservePerPlayer(after.tiers, unit);
-        if (wasMax !== undefined && now !== undefined && now > wasMax) dearer = true;
-        else if (nowMax !== undefined && was !== undefined && was > nowMax) cheaper = true;
+        if (wasMax !== undefined && now !== undefined && now > wasMax)
+          dearer = true;
+        else if (nowMax !== undefined && was !== undefined && was > nowMax)
+          cheaper = true;
         else if (was === undefined) dearer = true;
         else cheaper = true;
         continue;

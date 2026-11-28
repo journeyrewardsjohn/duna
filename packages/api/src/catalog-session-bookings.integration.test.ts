@@ -717,7 +717,9 @@ describe("cancelling a session booking", () => {
     // The lock is the free-cancellation deadline (decision 1), even though
     // the club's refund window is later.
     await expect(
-      cancel(guardian, bookingId, { now: new Date("2026-12-09T05:00:00.000Z") }),
+      cancel(guardian, bookingId, {
+        now: new Date("2026-12-09T05:00:00.000Z"),
+      }),
     ).rejects.toThrow(
       "Cancelling now costs 2 credits. You get them back if someone takes your place.",
     );

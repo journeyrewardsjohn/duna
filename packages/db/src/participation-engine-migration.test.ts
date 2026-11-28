@@ -8,7 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const directory = new URL("../drizzle/", import.meta.url);
 const journal = JSON.parse(
   readFileSync(new URL("meta/_journal.json", directory), "utf8"),
-) as { readonly entries: readonly { readonly idx: number; readonly tag: string }[] };
+) as {
+  readonly entries: readonly { readonly idx: number; readonly tag: string }[];
+};
 const entry = journal.entries.find((candidate) =>
   candidate.tag.endsWith("_participation_engine"),
 );
@@ -62,7 +64,9 @@ describe("PART-2 applied to a database with legacy rows", () => {
   const occurrence = "50000000-0000-4000-8000-0000000000a1";
 
   beforeAll(async () => {
-    for (const { tag } of journal.entries.filter((candidate) => candidate.idx < 118)) {
+    for (const { tag } of journal.entries.filter(
+      (candidate) => candidate.idx < 118,
+    )) {
       await apply(pg, tag);
     }
     await pg.exec(`
@@ -96,7 +100,11 @@ describe("PART-2 applied to a database with legacy rows", () => {
   afterAll(() => pg.close());
 
   it("maps never-enforced minimums to rules that run, pending review (decision 7)", async () => {
-    const sessions = await pg.query<{ slug: string; participation: unknown; participation_review_state: string | null }>(
+    const sessions = await pg.query<{
+      slug: string;
+      participation: unknown;
+      participation_review_state: string | null;
+    }>(
       `select slug, participation, participation_review_state from sessions order by slug`,
     );
     expect(sessions.rows).toEqual([
@@ -112,11 +120,16 @@ describe("PART-2 applied to a database with legacy rows", () => {
         },
         participation_review_state: "pending",
       },
-      { slug: "legacy-open", participation: null, participation_review_state: null },
+      {
+        slug: "legacy-open",
+        participation: null,
+        participation_review_state: null,
+      },
     ]);
-    const pickups = await pg.query<{ title: string; participation: Record<string, unknown> | null }>(
-      `select title, participation from pickup_sessions order by title`,
-    );
+    const pickups = await pg.query<{
+      title: string;
+      participation: Record<string, unknown> | null;
+    }>(`select title, participation from pickup_sessions order by title`);
     expect(pickups.rows[0]!.participation).toBeNull();
     expect(pickups.rows[1]!.participation).toMatchObject({
       minParticipants: 4,
@@ -169,7 +182,10 @@ describe("PART-2 applied to a database with legacy rows", () => {
     const booking = (orderId: string, lineId: string, status = "ready") =>
       `insert into catalog_fulfillments (organization_id, order_id, order_item_id, catalog_item_id, catalog_variant_id, catalog_session_occurrence_id, person_id, kind, status)
         values ('${org}', '${orderId}', '${lineId}', '${item}', '${variant}', '${occurrence}', '${person}', 'appointment', '${status}')`;
-    const ids = Array.from({ length: 6 }, (_, index) => `80000000-0000-4000-8000-0000000000b${index}`);
+    const ids = Array.from(
+      { length: 6 },
+      (_, index) => `80000000-0000-4000-8000-0000000000b${index}`,
+    );
     await pg.exec(order(ids[0]!));
     await pg.exec(line(ids[1]!, ids[0]!));
     await pg.exec(booking(ids[0]!, ids[1]!));

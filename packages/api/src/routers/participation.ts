@@ -125,18 +125,19 @@ async function idempotent<T extends object>(input: {
   readonly request: Readonly<Record<string, unknown>>;
   readonly execute: () => Promise<T>;
 }): Promise<T> {
-  return guarded(async () =>
-    (
-      await executeIdempotent({
-        key: input.key,
-        procedure: `participation.${input.procedure}`,
-        personId: input.ctx.actor?.personId,
-        organizationId: input.ctx.actor?.organizationId,
-        request: JSON.parse(JSON.stringify(input.request)),
-        now: input.ctx.now,
-        execute: input.execute,
-      })
-    ).result,
+  return guarded(
+    async () =>
+      (
+        await executeIdempotent({
+          key: input.key,
+          procedure: `participation.${input.procedure}`,
+          personId: input.ctx.actor?.personId,
+          organizationId: input.ctx.actor?.organizationId,
+          request: JSON.parse(JSON.stringify(input.request)),
+          now: input.ctx.now,
+          execute: input.execute,
+        })
+      ).result,
   );
 }
 
@@ -225,10 +226,15 @@ export const participationOperatorRouter = router({
       if (usesDemoData()) {
         if (includeMoney) return participationDemo.atRisk;
         return {
-          sessions: participationDemo.atRisk.sessions.map(
-            ({ atStakeMinor: _minor, atStakeCredits: _credits, ...session }) =>
-              session,
-          ),
+          sessions: participationDemo.atRisk.sessions.map((session) => {
+            const copy: Partial<typeof session> = { ...session };
+            delete copy.atStakeMinor;
+            delete copy.atStakeCredits;
+            return copy as Omit<
+              typeof session,
+              "atStakeMinor" | "atStakeCredits"
+            >;
+          }),
           totals: {
             sessions: participationDemo.atRisk.totals.sessions,
             booked: participationDemo.atRisk.totals.booked,

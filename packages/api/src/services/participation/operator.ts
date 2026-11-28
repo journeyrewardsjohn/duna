@@ -75,7 +75,10 @@ async function loadSession(
   const row = await getDatabase()
     .select({ occurrence: catalogSessionOccurrences, item: catalogItems })
     .from(catalogSessionOccurrences)
-    .innerJoin(catalogItems, eq(catalogSessionOccurrences.catalogItemId, catalogItems.id))
+    .innerJoin(
+      catalogItems,
+      eq(catalogSessionOccurrences.catalogItemId, catalogItems.id),
+    )
     .where(
       and(
         eq(catalogSessionOccurrences.id, occurrenceId),
@@ -109,18 +112,20 @@ async function audit(input: {
   readonly requestId: string;
   readonly now: Date;
 }): Promise<void> {
-  await getDatabase().insert(auditLog).values({
-    organizationId: input.organizationId,
-    actorPersonId: input.actorPersonId,
-    actorType: "person",
-    action: input.action,
-    entityType: "catalog-session-occurrence",
-    entityId: input.entityId,
-    afterHash: stableHash(input.after),
-    reason: input.reason,
-    traceId: input.requestId,
-    createdAt: input.now,
-  });
+  await getDatabase()
+    .insert(auditLog)
+    .values({
+      organizationId: input.organizationId,
+      actorPersonId: input.actorPersonId,
+      actorType: "person",
+      action: input.action,
+      entityType: "catalog-session-occurrence",
+      entityId: input.entityId,
+      afterHash: stableHash(input.after),
+      reason: input.reason,
+      traceId: input.requestId,
+      createdAt: input.now,
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +146,10 @@ export async function getParticipationDefaults(
   requireParticipationDatabase();
   const current = await loadClubParticipationDefault(organizationId);
   const items = await getDatabase()
-    .select({ type: catalogItems.type, configuration: catalogItems.configuration })
+    .select({
+      type: catalogItems.type,
+      configuration: catalogItems.configuration,
+    })
     .from(catalogItems)
     .where(
       and(
@@ -162,7 +170,8 @@ export async function getParticipationDefaults(
     inheritedBy: current.rules
       ? items.filter(
           (item) =>
-            catalogItemTakesGroupRules(item) && capacityOf(item.configuration) > 1,
+            catalogItemTakesGroupRules(item) &&
+            capacityOf(item.configuration) > 1,
         ).length
       : 0,
   };
@@ -181,7 +190,9 @@ export async function setParticipationDefaults(input: {
   readonly warnings: readonly ParticipationRevenueCliff[];
 }> {
   requireParticipationDatabase();
-  const result = validateParticipationRuleV2(input.rules, { forClubDefault: true });
+  const result = validateParticipationRuleV2(input.rules, {
+    forClubDefault: true,
+  });
   if (!result.rule) {
     const current = await loadClubParticipationDefault(input.organizationId);
     return {
@@ -214,18 +225,20 @@ export async function setParticipationDefaults(input: {
         updatedAt: input.now,
       },
     });
-  await getDatabase().insert(auditLog).values({
-    organizationId: input.organizationId,
-    actorPersonId: input.actorPersonId,
-    actorType: "person",
-    action: "participation.defaults_saved",
-    entityType: "organization",
-    entityId: input.organizationId,
-    afterHash: stableHash({ rules: stored, appliesTo: input.appliesTo }),
-    reason: "Club booking rule saved.",
-    traceId: input.requestId,
-    createdAt: input.now,
-  });
+  await getDatabase()
+    .insert(auditLog)
+    .values({
+      organizationId: input.organizationId,
+      actorPersonId: input.actorPersonId,
+      actorType: "person",
+      action: "participation.defaults_saved",
+      entityType: "organization",
+      entityId: input.organizationId,
+      afterHash: stableHash({ rules: stored, appliesTo: input.appliesTo }),
+      reason: "Club booking rule saved.",
+      traceId: input.requestId,
+      createdAt: input.now,
+    });
   log.info("participation.rule.saved", {
     organizationId: input.organizationId,
     subjectType: "organization-default",
@@ -281,14 +294,16 @@ export async function previewParticipationRuleChange(input: {
       eq(catalogItems.organizationId, input.organizationId),
     ),
   });
-  if (!item) throw new ParticipationError("NOT_FOUND", "This offering was not found.");
+  if (!item)
+    throw new ParticipationError("NOT_FOUND", "This offering was not found.");
   const capacity = Math.max(1, Number(item.configuration.capacity ?? 1) || 1);
   const creditPrice = await database.execute(sql`
     SELECT max(credit_amount) AS credits FROM catalog_prices
     WHERE catalog_item_id = ${item.id}::uuid AND payment_kind = 'credit' AND active = true
   `);
   const creditCost = Number(
-    (creditPrice as unknown as { rows: { credits: number | null }[] }).rows[0]?.credits ?? NaN,
+    (creditPrice as unknown as { rows: { credits: number | null }[] }).rows[0]
+      ?.credits ?? NaN,
   );
   const validation = validateParticipationRuleV2(input.rules, {
     capacity,
@@ -330,7 +345,9 @@ export async function previewParticipationRuleChange(input: {
       });
     }
   }
-  const changeClass = after ? classifyRuleChange(before, after).overall : "neutral";
+  const changeClass = after
+    ? classifyRuleChange(before, after).overall
+    : "neutral";
   log.info("participation.rule.changePreviewed", {
     organizationId: input.organizationId,
     subjectId: item.id,
@@ -366,22 +383,28 @@ export async function applyParticipationRuleToBooked(input: {
       eq(catalogItems.organizationId, input.organizationId),
     ),
   });
-  if (!item) throw new ParticipationError("NOT_FOUND", "This offering was not found.");
+  if (!item)
+    throw new ParticipationError("NOT_FOUND", "This offering was not found.");
   let updated = 0;
   const skipped: string[] = [];
   for (const occurrenceId of input.occurrenceIds) {
-    const occurrence = await database.query.catalogSessionOccurrences.findFirst({
-      where: and(
-        eq(catalogSessionOccurrences.id, occurrenceId),
-        eq(catalogSessionOccurrences.catalogItemId, item.id),
-      ),
-    });
+    const occurrence = await database.query.catalogSessionOccurrences.findFirst(
+      {
+        where: and(
+          eq(catalogSessionOccurrences.id, occurrenceId),
+          eq(catalogSessionOccurrences.catalogItemId, item.id),
+        ),
+      },
+    );
     const decision = occurrence ? await loadDecision(occurrence.id) : undefined;
     if (!occurrence || !decision || decision.outcome) {
       skipped.push(occurrenceId);
       continue;
     }
-    const live = await resolveCatalogItemRule({ item, capacity: occurrence.capacity });
+    const live = await resolveCatalogItemRule({
+      item,
+      capacity: occurrence.capacity,
+    });
     const before = resolveParticipationRuleV2(
       readParticipationRuleV2(decision.ruleSnapshot)!,
       { capacity: occurrence.capacity },
@@ -402,8 +425,7 @@ export async function applyParticipationRuleToBooked(input: {
         ruleSnapshot: serializeParticipationRule(after),
         snapshotAt: input.now,
         // A later lock never moves earlier than an extension already granted.
-        lockAt:
-          decision.lockAt > lockAt ? decision.lockAt : lockAt,
+        lockAt: decision.lockAt > lockAt ? decision.lockAt : lockAt,
         updatedAt: input.now,
       })
       .where(
@@ -469,14 +491,18 @@ export async function participationAtRisk(input: {
   const database = getDatabase();
   const from = input.from ?? input.now;
   const to =
-    input.to ?? new Date(input.now.getTime() + PARTICIPATION_AT_RISK_DAYS * 86_400_000);
+    input.to ??
+    new Date(input.now.getTime() + PARTICIPATION_AT_RISK_DAYS * 86_400_000);
   const organization = await database.query.organizations.findFirst({
     where: (table, { eq: equals }) => equals(table.id, input.organizationId),
   });
   const rows = await database
     .select({ occurrence: catalogSessionOccurrences, item: catalogItems })
     .from(catalogSessionOccurrences)
-    .innerJoin(catalogItems, eq(catalogSessionOccurrences.catalogItemId, catalogItems.id))
+    .innerJoin(
+      catalogItems,
+      eq(catalogSessionOccurrences.catalogItemId, catalogItems.id),
+    )
     .where(
       and(
         eq(catalogSessionOccurrences.organizationId, input.organizationId),
@@ -491,7 +517,11 @@ export async function participationAtRisk(input: {
   const sessions: ParticipationAtRiskSession[] = [];
   const coachIds = new Set<string>();
   for (const { occurrence, item } of rows) {
-    const picture = await catalogSessionPicture({ occurrence, item, now: input.now });
+    const picture = await catalogSessionPicture({
+      occurrence,
+      item,
+      now: input.now,
+    });
     if (!picture || picture.rule.minParticipants <= 1) continue;
     if (picture.state.displayState !== "needs-players") continue;
     // People or money at stake: an empty session is not "at risk" news.
@@ -570,8 +600,15 @@ async function openDecision(input: {
   readonly now: Date;
 }) {
   assertCatalogSubject(input.subjectType);
-  const { occurrence, item } = await loadSession(input.organizationId, input.subjectId);
-  const decision = await ensureCatalogDecision({ occurrence, item, now: input.now });
+  const { occurrence, item } = await loadSession(
+    input.organizationId,
+    input.subjectId,
+  );
+  const decision = await ensureCatalogDecision({
+    occurrence,
+    item,
+    now: input.now,
+  });
   if (!decision) {
     throw new ParticipationError("NO_RULE", "This session has no group rule.");
   }
@@ -673,7 +710,11 @@ export async function runParticipationAnyway(input: {
     subjectId: occurrence.id,
     action: "run",
   });
-  const picture = await catalogSessionPicture({ occurrence, item, now: input.now });
+  const picture = await catalogSessionPicture({
+    occurrence,
+    item,
+    now: input.now,
+  });
   return { displayState: picture?.state.displayState ?? "needs-players" };
 }
 
@@ -710,18 +751,27 @@ export async function cancelParticipationSession(input: {
   readonly mergedIntoSubjectId?: string;
   readonly requestId: string;
   readonly now: Date;
-}): Promise<{ readonly cancellations: readonly ParticipationCancellationResult[] }> {
+}): Promise<{
+  readonly cancellations: readonly ParticipationCancellationResult[];
+}> {
   requireParticipationDatabase();
   assertCatalogSubject(input.subjectType);
   const database = getDatabase();
-  const { occurrence, item } = await loadSession(input.organizationId, input.subjectId);
+  const { occurrence, item } = await loadSession(
+    input.organizationId,
+    input.subjectId,
+  );
   if (occurrence.endsAt <= input.now) {
     throw new ParticipationError(
       "NOT_ALLOWED",
       "This session has ended. Use a refund on each booking instead.",
     );
   }
-  let decision = await ensureCatalogDecision({ occurrence, item, now: input.now });
+  let decision = await ensureCatalogDecision({
+    occurrence,
+    item,
+    now: input.now,
+  });
   if (!decision) {
     // A session without a group rule still records who cancelled it.
     await database
@@ -730,7 +780,9 @@ export async function cancelParticipationSession(input: {
         organizationId: input.organizationId,
         subjectType: CATALOG_SUBJECT,
         subjectId: occurrence.id,
-        ruleSnapshot: serializeParticipationRule(inertBase(occurrence.capacity)),
+        ruleSnapshot: serializeParticipationRule(
+          inertBase(occurrence.capacity),
+        ),
         snapshotAt: input.now,
         lockAt: occurrence.startsAt,
         createdAt: input.now,
@@ -766,7 +818,10 @@ export async function cancelParticipationSession(input: {
           eq(participationDecisions.id, decision.id),
           or(
             isNull(participationDecisions.outcome),
-            inArray(participationDecisions.outcome, ["minimum-met", "run-under-minimum"]),
+            inArray(participationDecisions.outcome, [
+              "minimum-met",
+              "run-under-minimum",
+            ]),
           ),
         ),
       );
@@ -800,7 +855,8 @@ export async function cancelParticipationSession(input: {
     actorPersonId: input.actorPersonId,
     requestId: input.requestId,
     now: input.now,
-    cancellationReason: input.reason === "merged" ? "merged" : "cancelled-by-club",
+    cancellationReason:
+      input.reason === "merged" ? "merged" : "cancelled-by-club",
     refundReason: `Session cancelled by the club: ${reasonWords[input.reason]}.`,
   });
   const review = cancellations.filter(
@@ -823,9 +879,14 @@ export async function cancelParticipationSession(input: {
     subjectId: occurrence.id,
     reason: input.reason,
     bookings: cancellations.length,
-    released: cancellations.filter((entry) => entry.refundStatus === "released").length,
-    creditsRestored: cancellations.filter((entry) => entry.refundStatus === "credits-restored").length,
-    refundsSubmitted: cancellations.filter((entry) => entry.refundStatus === "refund-submitted").length,
+    released: cancellations.filter((entry) => entry.refundStatus === "released")
+      .length,
+    creditsRestored: cancellations.filter(
+      (entry) => entry.refundStatus === "credits-restored",
+    ).length,
+    refundsSubmitted: cancellations.filter(
+      (entry) => entry.refundStatus === "refund-submitted",
+    ).length,
     reviewRequired: review.length,
   });
   log.info("participation.intervention.recorded", {
@@ -848,7 +909,10 @@ export async function requestParticipationCancel(input: {
 }): Promise<{ readonly requestId: string }> {
   requireParticipationDatabase();
   assertCatalogSubject(input.subjectType);
-  const { occurrence } = await loadSession(input.organizationId, input.subjectId);
+  const { occurrence } = await loadSession(
+    input.organizationId,
+    input.subjectId,
+  );
   if (
     !occurrence.coachPersonIds.includes(input.actor.personId) &&
     !actorHasScope(input.actor, "sessions:write")
@@ -908,7 +972,9 @@ export async function listParticipationCancelRequests(organizationId: string) {
 }
 
 function rowKey(idempotencyKey: string, bookingId: string): string {
-  const hex = createHash("sha256").update(`${idempotencyKey}:${bookingId}`).digest("hex");
+  const hex = createHash("sha256")
+    .update(`${idempotencyKey}:${bookingId}`)
+    .digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
@@ -933,12 +999,18 @@ export async function recordParticipationAttendance(input: {
   readonly now: Date;
 }): Promise<{
   readonly recorded: number;
-  readonly ignored: readonly { readonly bookingId: string; readonly reason: string }[];
+  readonly ignored: readonly {
+    readonly bookingId: string;
+    readonly reason: string;
+  }[];
 }> {
   requireParticipationDatabase();
   assertCatalogSubject(input.subjectType);
   const database = getDatabase();
-  const { occurrence } = await loadSession(input.organizationId, input.subjectId);
+  const { occurrence } = await loadSession(
+    input.organizationId,
+    input.subjectId,
+  );
   if (
     !actorHasScope(input.actor, "sessions:write") &&
     !occurrence.coachPersonIds.includes(input.actor.personId)
@@ -949,13 +1021,20 @@ export async function recordParticipationAttendance(input: {
     );
   }
   if (input.now < occurrence.startsAt) {
-    throw new ParticipationError("NOT_ALLOWED", "Attendance opens when the session starts.");
+    throw new ParticipationError(
+      "NOT_ALLOWED",
+      "Attendance opens when the session starts.",
+    );
   }
   const closesAt = new Date(
-    occurrence.endsAt.getTime() + PARTICIPATION_ATTENDANCE_WINDOW_MINUTES * 60_000,
+    occurrence.endsAt.getTime() +
+      PARTICIPATION_ATTENDANCE_WINDOW_MINUTES * 60_000,
   );
   if (input.now > closesAt) {
-    throw new ParticipationError("NOT_ALLOWED", "Attendance for this session has closed.");
+    throw new ParticipationError(
+      "NOT_ALLOWED",
+      "Attendance for this session has closed.",
+    );
   }
   const bookings = await database
     .select()
@@ -963,7 +1042,10 @@ export async function recordParticipationAttendance(input: {
     .where(
       and(
         eq(catalogFulfillments.catalogSessionOccurrenceId, occurrence.id),
-        inArray(catalogFulfillments.id, input.marks.map((mark) => mark.bookingId)),
+        inArray(
+          catalogFulfillments.id,
+          input.marks.map((mark) => mark.bookingId),
+        ),
       ),
     );
   const byId = new Map(bookings.map((booking) => [booking.id, booking]));
@@ -975,7 +1057,11 @@ export async function recordParticipationAttendance(input: {
       ignored.push({ bookingId: mark.bookingId, reason: "not-in-session" });
       continue;
     }
-    if (!(ACTIVE_CATALOG_BOOKING_STATUSES as readonly string[]).includes(booking.status)) {
+    if (
+      !(ACTIVE_CATALOG_BOOKING_STATUSES as readonly string[]).includes(
+        booking.status,
+      )
+    ) {
       ignored.push({ bookingId: mark.bookingId, reason: "cancelled" });
       continue;
     }
@@ -983,7 +1069,9 @@ export async function recordParticipationAttendance(input: {
     const existing = await database.query.participationAttendance.findFirst({
       where: eq(participationAttendance.bookingId, booking.id),
     });
-    const existingAt = existing ? existing.deviceMarkedAt ?? existing.markedAt : undefined;
+    const existingAt = existing
+      ? (existing.deviceMarkedAt ?? existing.markedAt)
+      : undefined;
     if (existing && existingAt && existingAt > markedAt) {
       ignored.push({ bookingId: mark.bookingId, reason: "newer-mark-exists" });
       continue;
@@ -1022,7 +1110,9 @@ export async function recordParticipationAttendance(input: {
       .set({
         status: mark.status === "attended" ? "fulfilled" : booking.status,
         fulfilledAt:
-          mark.status === "attended" ? (booking.fulfilledAt ?? input.now) : booking.fulfilledAt,
+          mark.status === "attended"
+            ? (booking.fulfilledAt ?? input.now)
+            : booking.fulfilledAt,
         details: {
           ...booking.details,
           attendance: mark.status === "attended" ? "attended" : "no-show",
@@ -1048,12 +1138,16 @@ export async function recordParticipationAttendance(input: {
     subjectId: occurrence.id,
     marked: recorded,
     absent: input.marks.filter((mark) => mark.status === "absent").length,
-    offlineQueued: input.marks.some((mark) => mark.deviceMarkedAt !== undefined),
+    offlineQueued: input.marks.some(
+      (mark) => mark.deviceMarkedAt !== undefined,
+    ),
     delaySeconds: Math.max(
       0,
       ...input.marks.map((mark) =>
         mark.deviceMarkedAt
-          ? Math.round((input.now.getTime() - mark.deviceMarkedAt.getTime()) / 1000)
+          ? Math.round(
+              (input.now.getTime() - mark.deviceMarkedAt.getTime()) / 1000,
+            )
           : 0,
       ),
     ),

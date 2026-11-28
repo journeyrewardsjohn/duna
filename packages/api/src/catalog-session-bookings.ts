@@ -1072,7 +1072,10 @@ export async function cancelCatalogSessionBooking(input: {
     const fresh = await database.query.catalogFulfillments.findFirst({
       where: eq(catalogFulfillments.id, row.fulfillment.id),
     });
-    if (!fresh || !(activeStatuses as readonly string[]).includes(fresh.status)) {
+    if (
+      !fresh ||
+      !(activeStatuses as readonly string[]).includes(fresh.status)
+    ) {
       throw new CatalogSessionBookingError(
         "NOT_CANCELLABLE",
         "This session was cancelled because it did not reach its minimum. Everything was returned.",
@@ -1266,7 +1269,7 @@ export async function cancelCatalogSessionBooking(input: {
             : chargedCredits !== undefined
               ? `${row.title} cancelled. You paid ${chargedCredits} credit${chargedCredits === 1 ? "" : "s"}; they come back if someone takes your place.`
               : hasValue
-              ? `${row.title} cancelled after the refund window. Nothing was returned.`
-              : `${row.title} cancelled.`,
+                ? `${row.title} cancelled after the refund window. Nothing was returned.`
+                : `${row.title} cancelled.`,
   };
 }

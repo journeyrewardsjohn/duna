@@ -90,7 +90,10 @@ export async function participationQuote(input: {
       organization: organizations,
     })
     .from(catalogSessionOccurrences)
-    .innerJoin(catalogItems, eq(catalogSessionOccurrences.catalogItemId, catalogItems.id))
+    .innerJoin(
+      catalogItems,
+      eq(catalogSessionOccurrences.catalogItemId, catalogItems.id),
+    )
     .innerJoin(organizations, eq(catalogItems.organizationId, organizations.id))
     .where(
       and(
@@ -104,8 +107,13 @@ export async function participationQuote(input: {
     throw new ParticipationError("NOT_FOUND", "This session was not found.");
   }
   const { occurrence, item, organization } = row;
-  const picture = await catalogSessionPicture({ occurrence, item, now: input.now });
-  const participantPersonId = input.participantPersonId ?? input.actor?.personId;
+  const picture = await catalogSessionPicture({
+    occurrence,
+    item,
+    now: input.now,
+  });
+  const participantPersonId =
+    input.participantPersonId ?? input.actor?.personId;
   if (
     input.actor &&
     input.participantPersonId &&
@@ -139,7 +147,8 @@ export async function participationQuote(input: {
     held: picture?.held ?? 0,
     waiting: picture?.waitlistCount ?? 0,
     outcome:
-      (picture?.decision?.outcome as ParticipationDecisionOutcome | null | undefined) ??
+      (picture?.decision?.outcome as
+        ParticipationDecisionOutcome | null | undefined) ??
       (occurrence.status === "cancelled" ? "cancelled-by-club" : undefined),
     decidedGroupSize: picture?.decision?.decidedGroupSize,
     lockAt: picture?.lockAt,
@@ -163,7 +172,10 @@ export async function participationQuote(input: {
     display,
     copy: renderParticipationDisplay(display),
     ...(display.price
-      ? { reserve: display.price.reservePerPlayer, maxCharge: display.price.maxCharge }
+      ? {
+          reserve: display.price.reservePerPlayer,
+          maxCharge: display.price.maxCharge,
+        }
       : {}),
     alreadyBooked,
     ...(picture ? { lockAt: picture.lockAt.toISOString() } : {}),
