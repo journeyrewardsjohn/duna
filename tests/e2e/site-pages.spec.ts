@@ -59,7 +59,8 @@ const PAGES: readonly FirstScreen[] = [
     cta: (page: Page) =>
       page
         .getByRole("main")
-        .getByRole("link", { name: "Start coaching on Duna" }),
+        .getByRole("link", { name: "Start coaching on Duna" })
+        .first(),
   },
   {
     path: "/pricing",
@@ -76,6 +77,7 @@ const PAGES: readonly FirstScreen[] = [
         ? page.getByRole("banner").getByRole("button", { name: "Open menu" })
         : page
             .getByRole("banner")
+            .getByRole("navigation", { name: "Main" })
             .getByRole("link", { name: "Find a game", exact: true }),
   },
   {
