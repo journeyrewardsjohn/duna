@@ -7,8 +7,9 @@
 export function persistableSnapshot<
   T extends { readonly memberCard?: unknown },
 >(snapshot: T): Omit<T, "memberCard"> {
-  const { memberCard: _credential, ...rest } = snapshot;
-  return rest;
+  const rest: Partial<T> = { ...snapshot };
+  delete rest.memberCard;
+  return rest as Omit<T, "memberCard">;
 }
 
 /** A stored snapshot from before this rule still holds the credential. */
