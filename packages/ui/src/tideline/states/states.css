@@ -1,0 +1,223 @@
+/* Tideline states: layout-shaped skeletons, error, offline, not configured, switched off, no permission, partial data and AsyncBoundary. Rules: see styles.css, docs/design/tideline-components.md and docs/design/interaction-kit.md. */
+@layer tideline {
+  .td {
+    /* ---------- A state: icon, title, a line or two, the next step ---------- */
+
+    .td-state {
+      display: flex;
+      gap: var(--td-space-4);
+      align-items: flex-start;
+      padding: var(--td-space-6);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface);
+      box-shadow: var(--td-shadow-surface);
+      color: var(--td-text);
+    }
+
+    .td-state--compact {
+      gap: var(--td-space-3);
+      padding: var(--td-space-3) var(--td-space-4);
+      border-radius: var(--td-radius-md);
+      box-shadow: inset 0 0 0 1px var(--td-line);
+    }
+
+    .td-state__glyph {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-space-10);
+      height: var(--td-space-10);
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface-sunken);
+      color: var(--td-text-2);
+
+      .td-state--compact & {
+        width: var(--td-space-8);
+        height: var(--td-space-8);
+      }
+    }
+
+    .td-state[data-kind="error"] .td-state__glyph {
+      background: var(--td-danger-wash);
+      color: var(--td-danger);
+    }
+
+    .td-state__body {
+      display: grid;
+      flex: 1;
+      gap: var(--td-space-2);
+      min-width: 0;
+    }
+
+    .td-state__title {
+      font: var(--td-type-heading-18);
+      letter-spacing: var(--td-type-heading-18-tracking);
+
+      .td-state--compact & {
+        font: var(--td-type-label);
+        letter-spacing: var(--td-type-label-tracking);
+      }
+    }
+
+    .td-state__text {
+      display: grid;
+      gap: var(--td-space-2);
+      max-width: 60ch;
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .td-state__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      margin-block-start: var(--td-space-2);
+    }
+
+    .td-state__reference {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-1) var(--td-space-3);
+      align-items: center;
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    .td-state__code {
+      font: var(--td-type-code);
+      user-select: all;
+      overflow-wrap: anywhere;
+    }
+
+    /* ---------- Skeletons shaped like their layouts ---------- */
+
+    .td-skelrow {
+      align-items: center;
+    }
+
+    .td-skelcard {
+      display: grid;
+      gap: var(--td-space-3);
+    }
+
+    .td-skelcards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+      gap: var(--td-space-4);
+    }
+
+    .td-skeltable {
+      display: grid;
+      overflow: hidden;
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 1px var(--td-line);
+    }
+
+    .td-skeltable__row {
+      display: grid;
+      grid-template-columns: subgrid;
+      grid-column: 1 / -1;
+      gap: var(--td-space-4);
+      align-items: center;
+      min-height: var(--td-row);
+      padding: 0 var(--td-space-4);
+
+      & + & {
+        box-shadow: inset 0 1px 0 var(--td-line);
+      }
+    }
+
+    .td-skeltable__row--head {
+      min-height: var(--td-control-sm);
+      background: var(--td-surface-subtle);
+    }
+
+    .td-skeltable__cell {
+      height: 10px;
+
+      &:not([data-first]) {
+        width: 64%;
+      }
+    }
+
+    .td-skelheader {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-4);
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .td-skelheader__text {
+      display: grid;
+      flex: 1;
+      gap: var(--td-space-2);
+      min-width: min(240px, 100%);
+    }
+
+    .td-skelheader__title {
+      width: min(320px, 70%);
+      height: 32px;
+      border-radius: var(--td-radius-sm);
+    }
+
+    .td-skelheader__meta {
+      width: min(200px, 45%);
+      height: 12px;
+    }
+
+    .td-skelheader__actions {
+      display: flex;
+      gap: var(--td-space-2);
+    }
+
+    .td-skelheader__action {
+      width: 104px;
+      height: var(--td-control);
+      border-radius: var(--td-radius-md);
+    }
+
+    .td-skeldetail {
+      display: grid;
+      gap: var(--td-space-6);
+    }
+
+    /* ---------- AsyncBoundary ---------- */
+
+    /* The first load's placeholder holds its space, unseen for 250 ms. */
+
+    .td-async__wait {
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity var(--td-duration-quick) var(--td-ease-ui);
+
+      &[data-visible] {
+        visibility: visible;
+        opacity: 1;
+      }
+    }
+
+    .td-async {
+      display: grid;
+      gap: var(--td-space-4);
+    }
+
+    /* Data from an earlier load stays, dimmed, while the next one runs or after an error. */
+
+    .td-async__content {
+      transition: opacity var(--td-duration-quick) var(--td-ease-ui);
+
+      &[data-stale] {
+        opacity: 0.6;
+      }
+    }
+
+    @media (max-width: 599px) {
+      .td-state {
+        flex-direction: column;
+        padding: var(--td-space-5);
+      }
+    }
+  }
+}

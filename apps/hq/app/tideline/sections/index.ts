@@ -24,3 +24,7 @@ export { default as loaders } from "./loaders";
 export { default as surfaces } from "./surfaces";
 export { default as progress } from "./progress";
 export { default as foundations } from "./foundations";
+export { default as motion } from "./motion";
+export { default as confirm } from "./confirm";
+export { default as states } from "./states";
+export { default as form } from "./form";

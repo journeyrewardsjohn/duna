@@ -1,0 +1,317 @@
+/* Tideline motion: Rise, Rally, Cross, the animated list, number changes and the first-open sequence. Rules: see styles.css, docs/design/tideline-components.md and docs/design/interaction-kit.md. */
+@layer tideline {
+  .td {
+    /*
+     * How far things travel, scaled by --td-motion (0 under reduced motion,
+     * so every verb becomes the token fade). PROMOTE: --td-distance-rise,
+     * --td-distance-cross.
+     */
+    --td-rise-distance: calc(var(--td-space-3) * var(--td-motion));
+    --td-cross-distance: calc(var(--td-space-6) * var(--td-motion));
+
+    /* ---------- Rise: grow out of a line ---------- */
+
+    /*
+     * The element is revealed from the edge nearest its line (clip-path)
+     * while it travels a short way off that line. Only clip-path, translate
+     * and opacity change, so nothing around it moves, and it is usable
+     * while it arrives.
+     */
+    .td-rise {
+      --td-rise-x: 0px;
+      --td-rise-y: var(--td-rise-distance);
+      --td-rise-clip: inset(calc(100% * var(--td-motion)) 0 0 0);
+      /* Backwards only: once it has arrived nothing clips it (focus rings, shadows). */
+      animation: td-rise var(--td-duration-rise) var(--td-ease-rise) backwards;
+      animation-delay: calc(var(--td-stagger-rally) * var(--td-rally-i, 0));
+    }
+
+    .td-rise--top {
+      --td-rise-y: calc(-1 * var(--td-rise-distance));
+      --td-rise-clip: inset(0 0 calc(100% * var(--td-motion)) 0);
+    }
+
+    .td-rise--start {
+      --td-rise-x: calc(-1 * var(--td-rise-distance));
+      --td-rise-y: 0px;
+      --td-rise-clip: inset(0 calc(100% * var(--td-motion)) 0 0);
+    }
+
+    .td-rise--end {
+      --td-rise-x: var(--td-rise-distance);
+      --td-rise-y: 0px;
+      --td-rise-clip: inset(0 0 0 calc(100% * var(--td-motion)));
+    }
+
+    /* An insert or a confirmation arriving in place: half the time, half the way. */
+
+    .td-rise--short {
+      --td-rise-distance: calc(var(--td-space-2) * var(--td-motion));
+      animation-duration: calc(var(--td-duration-rise) / 2);
+    }
+
+    .td-rally-change {
+      display: inline-block;
+    }
+
+    /* ---------- Cross: travel over a line to the next view ---------- */
+
+    .td-cross {
+      animation: td-cross var(--td-duration-cross) var(--td-ease-cross) both;
+    }
+
+    .td-cross--back {
+      --td-cross-distance: calc(-1 * var(--td-space-6) * var(--td-motion));
+    }
+
+    /* ---------- Animated list ---------- */
+
+    .td-alist {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    /* A removal fades where it was, then leaves; it takes no input meanwhile. */
+
+    .td-alist__item--exiting {
+      animation: td-fade-out var(--td-duration-cross) var(--td-ease-exit) both;
+      pointer-events: none;
+    }
+
+    /* ---------- Number change: the changed digits Rally up ---------- */
+
+    .td-numchange {
+      display: inline-flex;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-numchange__digits {
+      display: inline-flex;
+    }
+
+    /* Each character sits in a clipped cell: it rises from the baseline. */
+
+    .td-numchange__cell {
+      display: inline-block;
+      overflow: hidden;
+      vertical-align: bottom;
+    }
+
+    .td-numchange__cell > span {
+      display: inline-block;
+    }
+
+    .td-numchange__char--changed {
+      animation: td-digit var(--td-duration-rally) var(--td-ease-rally) both;
+      animation-delay: calc(var(--td-stagger-rally) * var(--td-rally-i, 0));
+    }
+
+    /* ---------- First open ---------- */
+
+    .td-firstopen-host {
+      position: relative;
+    }
+
+    .td-firstopen {
+      position: fixed;
+      inset: 0;
+      z-index: var(--td-z-dialog);
+      display: grid;
+      place-items: center;
+      background: var(--td-brand-night-court);
+      transform-origin: left center;
+      backface-visibility: hidden;
+    }
+
+    .td-firstopen-host--contained {
+      height: 100%;
+    }
+
+    .td-firstopen--contained {
+      position: absolute;
+    }
+
+    .td-firstopen__lockup {
+      display: grid;
+      gap: var(--td-space-4);
+      justify-items: center;
+    }
+
+    .td-firstopen__mark {
+      display: block;
+      height: var(--td-space-24);
+      overflow: visible;
+    }
+
+    /* The stacked lockup: the wordmark exactly as wide as the mark. */
+
+    .td-firstopen__wordmark {
+      display: block;
+      width: calc(var(--td-space-24) * 59 / 74);
+      overflow: visible;
+      opacity: 0;
+    }
+
+    /*
+     * The mark is Dune on Night Court (brand book: logo grounds). The layer
+     * is a dark Tideline scope, where the action colour is Dune.
+     */
+
+    .td-firstopen__line {
+      fill: var(--td-action);
+      transform-box: fill-box;
+      transform-origin: center;
+      scale: 1 0;
+    }
+
+    .td-firstopen__crest {
+      fill: var(--td-action);
+      transform-box: fill-box;
+      transform-origin: left center;
+      scale: 0 1;
+    }
+
+    .td-firstopen__stroke {
+      fill: none;
+      stroke: var(--td-brand-salt);
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+      stroke-linecap: square;
+      stroke-width: 9;
+    }
+
+    .td-firstopen:not([data-phase="ground"]) .td-firstopen__line {
+      animation: td-line-stand var(--td-firstopen-line) var(--td-ease-rise) both;
+    }
+
+    .td-firstopen:is(
+        [data-phase="crests"],
+        [data-phase="wordmark"],
+        [data-phase="turn"]
+      )
+      .td-firstopen__crest {
+      animation: td-crest-rise var(--td-duration-rise) var(--td-ease-rise) both;
+      animation-delay: calc(var(--td-stagger-rally) * var(--td-crest-i, 0));
+    }
+
+    .td-firstopen:is([data-phase="wordmark"], [data-phase="turn"]) {
+      .td-firstopen__wordmark {
+        opacity: 1;
+      }
+
+      .td-firstopen__stroke {
+        animation: td-draw var(--td-firstopen-wordmark) var(--td-ease-out) both;
+      }
+    }
+
+    /* The launch layer turns from its left edge like a page. */
+
+    .td-firstopen[data-phase="turn"] {
+      animation: td-page-turn var(--td-firstopen-turn) var(--td-ease-in) both;
+      pointer-events: none;
+    }
+
+    .td-firstopen__skip {
+      position: absolute;
+      inset: auto var(--td-space-6) var(--td-space-6) auto;
+    }
+
+    /* ---------- Reduced motion: end states and short fades ---------- */
+
+    @media (prefers-reduced-motion: reduce) {
+      /* The finished lockup at once; the turn becomes a cross-fade. */
+
+      .td-firstopen .td-firstopen__line,
+      .td-firstopen .td-firstopen__crest,
+      .td-firstopen .td-firstopen__stroke {
+        animation: none;
+        scale: 1 1;
+        stroke-dashoffset: 0;
+      }
+
+      .td-firstopen .td-firstopen__wordmark {
+        opacity: 1;
+      }
+
+      .td-firstopen[data-phase="turn"] {
+        animation: td-fade-out var(--td-firstopen-turn) var(--td-ease-out) both;
+      }
+    }
+  }
+
+  @keyframes td-rise {
+    from {
+      opacity: 0;
+      clip-path: var(--td-rise-clip);
+      translate: var(--td-rise-x) var(--td-rise-y);
+    }
+
+    /* Past the box, so the reveal never trims a shadow or focus ring. */
+    to {
+      opacity: 1;
+      clip-path: inset(calc(-1 * var(--td-space-6)));
+      translate: 0 0;
+    }
+  }
+
+  @keyframes td-cross {
+    from {
+      opacity: 0;
+      translate: var(--td-cross-distance) 0;
+    }
+  }
+
+  @keyframes td-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes td-digit {
+    from {
+      opacity: 0;
+      translate: 0 calc(100% * var(--td-motion));
+    }
+  }
+
+  @keyframes td-line-stand {
+    from {
+      scale: 1 0;
+    }
+
+    to {
+      scale: 1 1;
+    }
+  }
+
+  @keyframes td-crest-rise {
+    from {
+      scale: 0 1;
+    }
+
+    to {
+      scale: 1 1;
+    }
+  }
+
+  @keyframes td-draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes td-page-turn {
+    from {
+      transform: perspective(1500px) rotateY(0deg);
+    }
+
+    to {
+      transform: perspective(1500px) rotateY(-108deg);
+    }
+  }
+}
