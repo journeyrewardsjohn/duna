@@ -374,6 +374,48 @@ and pays nobody here.
 `operator.teamPayouts.*` (B3c) stays "not implemented yet" by design; see
 [`docs/money/contractor-payouts.md`](money/contractor-payouts.md).
 
+## Concierge (`operator.concierge`, `player.concierge`, owner B7)
+
+Shapes in `packages/api/src/contracts/concierge.ts`; product rules in
+[`docs/product/concierge.md`](product/concierge.md). Every procedure is live
+and returns its fixture from `@duna/core/demo/concierge` in demo mode. A
+thread is a `messaging_conversations` row; nothing sends without a person
+confirming the reviewed `contentHash`.
+
+| Procedure                                                   | Scope                                | Notes                                                                                                                                                                         |
+| ----------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `operator.concierge.threads`                                | `messages:read`                      | All / Unread / Families counts, `kind`, `search`, staff `queue` (`all`, `mine`, `unassigned`), keyset cursor                                                                  |
+| `operator.concierge.thread`                                 | `messages:read`                      | Participants, last 50 messages (`beforeSequence` for older), per-message delivery for staff                                                                                   |
+| `operator.concierge.markRead`                               | `messages:read`                      | The club's read watermark                                                                                                                                                     |
+| `operator.concierge.assignThread`                           | `messages:propose`                   | Staff queue; `null` clears                                                                                                                                                    |
+| `operator.concierge.draftSend`                              | `messages:propose`                   | The Send review: recipients × one channel or reason, guardian note, `contentHash`, expires in 15 minutes                                                                      |
+| `operator.concierge.drafts.createFromHandoff`               | `messages:propose`                   | The one hand-off entry point: the thread for a thing (`lesson`, `event`, `division`, `league`, `organization`, `rental`, `direct`) and a review when `suggestedText` is given |
+| `operator.concierge.proposal`                               | `messages:read`                      | A review; an unconfirmed one past expiry reads as `expired`                                                                                                                   |
+| `operator.concierge.editDraft`                              | `messages:propose`                   | New text, new hash                                                                                                                                                            |
+| `operator.concierge.setRecipientChannel`                    | `messages:propose`                   | Only to a channel the rules would deliver on                                                                                                                                  |
+| `operator.concierge.confirmSend`                            | `messages:write`                     | Rate-limited per club and per sender; `CONFLICT` when the roster or text changed; idempotent                                                                                  |
+| `operator.concierge.cancelSend`                             | `messages:propose`                   | Before confirmation only                                                                                                                                                      |
+| `operator.concierge.deliveries`                             | `messages:read`                      | One row per person: channel, state, error code, attempts                                                                                                                      |
+| `operator.concierge.quarantine` / `dismissQuarantine`       | `messages:read` / `messages:propose` | Replies that could not be routed safely, attributable to the club                                                                                                             |
+| `player.concierge.threads` / `thread`                       | signed in                            | Own threads and juniors' as verified guardian; history from when the person joined                                                                                            |
+| `player.concierge.markRead`, `setThreadMute`, `setClubMute` | signed in                            | Rate-limited                                                                                                                                                                  |
+| `player.concierge.reply`                                    | signed in                            | Posted through the existing messaging send (screening for juniors); idempotency key                                                                                           |
+| `player.concierge.channels`                                 | signed in                            | Preferred and operational channel, quiet hours, availability, masked endpoints                                                                                                |
+| `player.concierge.connectChannel`                           | signed in, adults                    | A code through the channel; `not-enabled` / `provider-not-configured` without a provider call; 5 an hour                                                                      |
+| `player.concierge.verifyChannel` / `revokeChannel`          | signed in                            | Six-digit code, 5 attempts                                                                                                                                                    |
+| `player.concierge.setPreference`                            | signed in                            | Only connected channels; IANA time zone                                                                                                                                       |
+
+Errors: `NOT_FOUND` (another club's ids, not a participant), `CONFLICT`
+(stale review, already confirmed, cancelled, expired), `BAD_REQUEST` (a
+channel that cannot reach the person, wrong code), `PRECONDITION_FAILED`
+(nobody reachable, channel not connected, code expired), `FORBIDDEN` (a
+junior connecting an outside channel), `TOO_MANY_REQUESTS`.
+
+Webhooks (thin routes in `apps/web/app/api/concierge/**`, logic in
+`@duna/api/concierge-webhooks`): `POST /api/concierge/whatsapp`, `POST
+/api/concierge/email`, `POST /api/concierge/sendblue/status?delivery=<id>`;
+Sendblue inbound stays on `/api/sendblue/webhook`.
+
 ## HQ People (`operator.people`, PEOPLE-API)
 
 Rules, merge rules and the screen switches: [`docs/product/people.md`](product/people.md).

@@ -14,6 +14,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   time,
   uniqueIndex,
@@ -65,6 +66,14 @@ export const conciergeUnreachableReasons = [
   "quiet-hours",
   "blocked",
 ] as const;
+/** Why an endpoint was revoked (B7): by the person, by an opt-out keyword, or replaced. */
+export const conciergeEndpointRevokeReasons = [
+  "person",
+  "opt-out",
+  "replaced",
+] as const;
+/** Operational notices (cancellations, time changes) vs conversation (B7). */
+export const conciergeMessageKinds = ["conversation", "operational"] as const;
 export const conciergeDeliveryStatuses = [
   "queued",
   "sent",
@@ -92,10 +101,20 @@ export const personChannelEndpoints = pgTable(
       .default("pending-verification"),
     verifiedAt: at("verified_at"),
     revokedAt: at("revoked_at"),
+    /** B7: why it was revoked; an `opt-out` makes the person `no-consent` on that channel. */
+    revokedReason: varchar("revoked_reason", { length: 16 }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (table) => [
+    index("person_channel_endpoint_destination_idx").on(
+      table.channel,
+      table.destination,
+    ),
+    check(
+      "person_channel_endpoint_revoked_reason_valid",
+      nullOrOneOf(table.revokedReason, conciergeEndpointRevokeReasons),
+    ),
     uniqueIndex("person_channel_endpoint_active_unique")
       .on(table.personId, table.channel)
       .where(sql`${table.status} <> 'revoked'`),
@@ -128,6 +147,8 @@ export const personChannelPreferences = pgTable(
     preferredChannel: varchar("preferred_channel", { length: 10 })
       .notNull()
       .default("duna"),
+    /** B7: channel for operational notices; null means the preferred channel. */
+    operationalChannel: varchar("operational_channel", { length: 10 }),
     quietHoursStart: time("quiet_hours_start"),
     quietHoursEnd: time("quiet_hours_end"),
     timezone: varchar("timezone", { length: 64 }),
@@ -138,6 +159,10 @@ export const personChannelPreferences = pgTable(
     check(
       "person_channel_preference_channel_valid",
       oneOf(table.preferredChannel, conciergeChannels),
+    ),
+    check(
+      "person_channel_preference_operational_valid",
+      nullOrOneOf(table.operationalChannel, conciergeChannels),
     ),
     check(
       "person_channel_preference_quiet_hours_pair",
@@ -164,6 +189,12 @@ export const conciergeSendProposals = pgTable(
       .notNull()
       .references(() => people.id, { onDelete: "restrict" }),
     draftedBy: varchar("drafted_by", { length: 8 }).notNull().default("person"),
+    /** B7: the hand-off that created it ("participation.cancelSession"); null when typed in the thread. */
+    source: varchar("source", { length: 64 }),
+    /** B7: `operational` uses each person's operational channel and ignores quiet hours. */
+    messageKind: varchar("message_kind", { length: 16 })
+      .notNull()
+      .default("conversation"),
     body: text("body").notNull(),
     /** SHA-256 of body + recipients; a confirmation is valid only for this hash. */
     contentHash: varchar("content_hash", { length: 64 }).notNull(),
@@ -196,6 +227,10 @@ export const conciergeSendProposals = pgTable(
     check(
       "concierge_send_proposal_status_valid",
       oneOf(table.status, conciergeProposalStatuses),
+    ),
+    check(
+      "concierge_send_proposal_message_kind_valid",
+      oneOf(table.messageKind, conciergeMessageKinds),
     ),
     check(
       "concierge_send_proposal_drafted_by_valid",
@@ -274,6 +309,11 @@ export const conciergeDeliveries = pgTable(
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
     channel: varchar("channel", { length: 10 }).notNull(),
+    /** B7: the one destination frozen at confirmation (null for `duna`). */
+    endpointId: uuid("endpoint_id").references(
+      () => personChannelEndpoints.id,
+      { onDelete: "set null" },
+    ),
     status: varchar("status", { length: 24 }).notNull().default("queued"),
     providerMessageHandle: varchar("provider_message_handle", { length: 192 }),
     errorCode: varchar("error_code", { length: 64 }),
@@ -299,5 +339,100 @@ export const conciergeDeliveries = pgTable(
       oneOf(table.status, conciergeDeliveryStatuses),
     ),
     check("concierge_delivery_attempts_valid", sql`${table.attempts} >= 0`),
+  ],
+);
+
+/** B7: a one-time code proving a person controls an endpoint (hash only). */
+export const conciergeChannelVerifications = pgTable(
+  "concierge_channel_verifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    endpointId: uuid("endpoint_id")
+      .notNull()
+      .references(() => personChannelEndpoints.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    /** SHA-256 of endpoint id + code; the code itself is never stored. */
+    codeHash: varchar("code_hash", { length: 64 }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: at("expires_at").notNull(),
+    consumedAt: at("consumed_at"),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    index("concierge_channel_verification_endpoint_idx").on(
+      table.endpointId,
+      table.createdAt,
+    ),
+    index("concierge_channel_verification_person_idx").on(
+      table.personId,
+      table.createdAt,
+    ),
+    check(
+      "concierge_channel_verification_attempts_valid",
+      sql`${table.attempts} BETWEEN 0 AND 10`,
+    ),
+  ],
+);
+
+/** B7: a person mutes a club's outside-channel messages (in-app stays). */
+export const conciergeOrganizationMutes = pgTable(
+  "concierge_organization_mutes",
+  {
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [primaryKey({ columns: [table.personId, table.organizationId] })],
+);
+
+/** B7: who on the club's staff owns a thread (the staff queue). */
+export const conciergeThreadAssignments = pgTable(
+  "concierge_thread_assignments",
+  {
+    conversationId: uuid("conversation_id")
+      .primaryKey()
+      .references(() => messagingConversations.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    assignedPersonId: uuid("assigned_person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    assignedByPersonId: uuid("assigned_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    index("concierge_thread_assignment_org_person_idx").on(
+      table.organizationId,
+      table.assignedPersonId,
+    ),
+  ],
+);
+
+/** B7: the outside channel a thread message arrived on (inbound replies). */
+export const conciergeMessageChannels = pgTable(
+  "concierge_message_channels",
+  {
+    messageId: uuid("message_id")
+      .primaryKey()
+      .references(() => conversationMessages.id, { onDelete: "cascade" }),
+    channel: varchar("channel", { length: 10 }).notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [
+    check(
+      "concierge_message_channel_valid",
+      oneOf(table.channel, conciergeChannels),
+    ),
   ],
 );

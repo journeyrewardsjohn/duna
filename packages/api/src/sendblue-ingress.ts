@@ -11,6 +11,7 @@ import {
   parseChannelLinkCode,
   processVerifiedChannelInbound,
 } from "./messaging-channel-link";
+import { routeConciergePhoneInbound } from "./services/concierge/inbound";
 
 const phone = z.string().regex(/^\+[1-9]\d{7,14}$/);
 export const sendblueInboundSchema = z.object({
@@ -114,7 +115,7 @@ export async function receiveSendblueInbound(
         duplicate: true,
         disposition: String(event.payload.routingDisposition),
       };
-    const disposition = await processVerifiedChannelInbound({
+    let disposition = await processVerifiedChannelInbound({
       senderPhone: incoming.payload.from_number,
       endpoint: incoming.payload.to_number,
       content: incoming.payload.content,
@@ -126,6 +127,21 @@ export async function receiveSendblueInbound(
         incoming.payload.is_reaction === true ||
         incoming.payload.content.length > 10000,
     });
+    // Concierge (B7): a reply from a number with no pilot binding may answer
+    // a Concierge iMessage delivery; STOP also revokes Concierge endpoints.
+    if (disposition === "identity-required" || disposition === "opted-out") {
+      const routed = await routeConciergePhoneInbound({
+        channel: "imessage",
+        from: incoming.payload.from_number,
+        text: disposition === "opted-out" ? "STOP" : incoming.payload.content,
+        eventId: event.id,
+        hasMedia:
+          Boolean(incoming.payload.media_url) ||
+          incoming.payload.is_reaction === true,
+        now: new Date(),
+      });
+      if (routed === "posted") disposition = "delivered";
+    }
     await transaction
       .update(webhookEvents)
       .set({

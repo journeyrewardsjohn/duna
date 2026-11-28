@@ -18,6 +18,7 @@
  * `confirmed: true` (the interaction kit's confirm / strong tier) and an
  * idempotency key; a retry with the same key replays the first answer.
  */
+import { handOffToConcierge } from "../services/concierge/handoff";
 import { participationDemo } from "@duna/core/demo/participation";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -368,7 +369,23 @@ export const participationOperatorRouter = router({
             requestId: ctx.requestId,
             now: ctx.now,
           });
+          // B7: the club's personal note becomes a Concierge Send review for
+          // the people this cancelled; a person still presses Send there.
+          const conciergeDraft = input.note?.trim()
+            ? await handOffToConcierge({
+                actor: ctx.actor,
+                organizationId: ctx.organizationId,
+                source: "participation.cancelSession",
+                contextType: "lesson",
+                contextId: input.subjectId,
+                suggestedText: input.note,
+                kind: "operational",
+                requestId: ctx.requestId,
+                now: ctx.now,
+              })
+            : undefined;
           return {
+            ...(conciergeDraft ? { conciergeDraft } : {}),
             cancellations: result.cancellations.map((entry) => ({
               bookingId: entry.fulfillmentId,
               refundStatus: entry.refundStatus,
@@ -441,15 +458,52 @@ export const participationOperatorRouter = router({
         key: input.idempotencyKey,
         // The note is for Send review only: never stored or logged here.
         request: { ...input, note: undefined },
-        execute: () =>
-          resolveParticipationCancelRequest({
+        execute: async () => {
+          const result = await resolveParticipationCancelRequest({
             actor: ctx.actor,
             organizationId: ctx.organizationId,
             cancelRequestId: input.requestId,
             decision: input.decision,
             requestId: ctx.requestId,
             now: ctx.now,
-          }),
+          });
+          // B7: decline → a thread with the coach who asked (with the note as
+          // a Send review); approve with a note → the session thread's Send
+          // review. `coachNotified` stays false until a person sends it.
+          const conciergeDraft =
+            input.decision === "decline" && result.requestedByPersonId
+              ? await handOffToConcierge({
+                  actor: ctx.actor,
+                  organizationId: ctx.organizationId,
+                  source: "participation.resolveCancelRequest.decline",
+                  contextType: "direct",
+                  contextId: result.requestedByPersonId,
+                  suggestedText: input.note,
+                  kind: "operational",
+                  requestId: ctx.requestId,
+                  now: ctx.now,
+                })
+              : input.decision === "approve" && input.note?.trim()
+                ? await handOffToConcierge({
+                    actor: ctx.actor,
+                    organizationId: ctx.organizationId,
+                    source: "participation.resolveCancelRequest.approve",
+                    contextType: "lesson",
+                    contextId: result.subjectId,
+                    suggestedText: input.note,
+                    kind: "operational",
+                    requestId: ctx.requestId,
+                    now: ctx.now,
+                  })
+                : undefined;
+          return {
+            requestId: result.requestId,
+            status: result.status,
+            cancellations: result.cancellations,
+            coachNotified: result.coachNotified,
+            ...(conciergeDraft ? { conciergeDraft } : {}),
+          };
+        },
       });
     }),
 

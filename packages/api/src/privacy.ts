@@ -34,6 +34,7 @@ import {
   walletLedger,
   workflowJobs,
 } from "@duna/db";
+import { exportConciergePersonData } from "./services/concierge/export";
 import { foldWalletLedger } from "@duna/core";
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { ApiActor } from "./context";
@@ -465,6 +466,7 @@ export async function buildPersonDataExport(input: {
       shares: matchJournalShareRows,
     },
     communityComments: communityCommentRows,
+    concierge: await exportConciergePersonData(personId),
   };
 }
 
