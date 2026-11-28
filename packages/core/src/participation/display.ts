@@ -10,11 +10,13 @@ import {
 } from "./copy";
 import { formatParticipationTime, type ParticipationTimeLabel } from "./lock";
 import {
+  formatParticipationMoney,
   lateCancellationCharge,
   participationReservePerPlayer,
   participationRuleHasMinimum,
   perPlayerPrice,
   priceTierForGroupSize,
+  type ParticipationPriceTier,
   type ResolvedParticipationRule,
 } from "./rules";
 import {
@@ -111,6 +113,68 @@ export interface ParticipationDisplay {
     readonly line?: ParticipationToken;
   };
   readonly a11y: ParticipationToken;
+}
+
+/**
+ * The line under the price before the group is decided, true in every state
+ * of the ladder (participation.md §7):
+ * - a cheaper rung is still reachable and none is reached yet: "3 credits
+ *   now. If more join by Thu 6:00 PM, the difference comes back."
+ * - the group already reached a cheaper rung than the one reserved: "3
+ *   credits now; 1 comes back when the group is confirmed Thu 6:00 PM."
+ *   (", more if more join." when an even cheaper rung is still reachable).
+ *   The amount is what comes back if the group holds at today's size.
+ * - every rung costs the same: "3 credits now." (nothing about differences).
+ * Card payers get the same three lines in money, back "to your card".
+ */
+export function participationPriceLine(input: {
+  readonly tiers: readonly ParticipationPriceTier[];
+  readonly unit: "credits" | "minor";
+  readonly capacity: number;
+  /** The group as it stands (confirmed places, at least 1). */
+  readonly groupSize: number;
+  readonly quantity: number;
+  /** The lock, already formatted ("Thu 6:00 PM"). */
+  readonly lock: string;
+  /** Required for card (minor-unit) lines. */
+  readonly currency?: string;
+}): ParticipationToken | undefined {
+  const reserve = participationReservePerPlayer(input.tiers, input.unit);
+  if (reserve === undefined) return undefined;
+  if (input.unit === "minor" && !input.currency) return undefined;
+  const size = Math.max(1, Math.trunc(input.groupSize));
+  const capacity = Math.max(size, Math.trunc(input.capacity));
+  const quantity = Math.max(1, Math.trunc(input.quantity));
+  const current = perPlayerPrice(input.tiers, size, input.unit) ?? reserve;
+  const atCapacity =
+    perPlayerPrice(input.tiers, capacity, input.unit) ?? current;
+  const back = Math.max(0, reserve - current) * quantity;
+  const moreReachable = capacity > size && atCapacity < current;
+  const card = input.unit === "minor";
+  const amount = (value: number) =>
+    card ? formatParticipationMoney(value, input.currency!) : value;
+  const max = amount(reserve * quantity);
+  if (back > 0) {
+    return participationToken(
+      card
+        ? moreReachable
+          ? "price.card-now-returning-more"
+          : "price.card-now-returning"
+        : moreReachable
+          ? "price.now-returning-more"
+          : "price.now-returning",
+      { max, back: amount(back), lock: input.lock },
+    );
+  }
+  if (moreReachable) {
+    return participationToken(card ? "price.card-now" : "price.now", {
+      max,
+      lock: input.lock,
+    });
+  }
+  return participationToken(card ? "price.card-now-fixed" : "price.now-fixed", {
+    max,
+  });
 }
 
 function toneFor(state: ParticipationState | "open"): ParticipationTone {
@@ -271,6 +335,9 @@ export function participationDisplay(
   }
 
   // Price by group size, in credits, for credit payers (or anyone browsing).
+  // Card payers get no ladder line until `PARTICIPATION_POLICY.cardLadderCharged`
+  // (checkout charges cards the fixed price today): promising money back to a
+  // card would be untrue. `participationPriceLine` already speaks card.
   let price: ParticipationDisplay["price"];
   const method = input.payment?.method ?? "credit";
   const quantity = Math.max(1, input.viewer?.quantity ?? 1);
@@ -313,8 +380,12 @@ export function participationDisplay(
           ? participationToken("price.decided", {
               final: (finalPerPlayer ?? reserve) * quantity,
             })
-          : participationToken("price.now", {
-              max: reserve * quantity,
+          : participationPriceLine({
+              tiers: rule.tiers,
+              unit: "credits",
+              capacity,
+              groupSize: sizeNow,
+              quantity,
               lock: lockLabel,
             }),
         currentRow: participationToken("price.ladder-now", { n: sizeNow }),
