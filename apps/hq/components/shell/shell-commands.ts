@@ -136,6 +136,38 @@ const money: readonly ShellCommand[] = [
   },
 ];
 
+/** Club setup (H-SETUP): Duna reading the club's website, and its identity. */
+const setup: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("setupStart")}?path=website`,
+    label: "Read my website",
+    group: "Club setup",
+    icon: "find",
+    keywords: ["website", "import", "set up", "ai", "onboarding"],
+  },
+  {
+    value: `go:${hqHref("setupIdentity")}`,
+    label: "Edit club identity",
+    group: "Club setup",
+    icon: "member-card",
+    keywords: ["name", "logo", "colour", "color", "brand", "hours", "contact"],
+  },
+  {
+    value: `go:${hqHref("setupReview")}`,
+    label: "Review what Duna found",
+    group: "Club setup",
+    icon: "check",
+    keywords: ["proposals", "website read", "keep", "apply"],
+  },
+  {
+    value: `go:${hqHref("places")}`,
+    label: "Go to places and courts",
+    group: "Club setup",
+    icon: "venue",
+    keywords: ["venue", "court", "layout", "map"],
+  },
+];
+
 const run: readonly ShellCommand[] = [
   {
     value: "do:ask",
@@ -172,6 +204,7 @@ export const shellCommands: readonly ShellCommand[] = [
   ...places,
   ...create,
   ...money,
+  ...setup,
   ...run,
 ];
 

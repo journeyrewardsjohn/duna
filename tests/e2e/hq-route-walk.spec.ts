@@ -104,6 +104,7 @@ const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
   [hqRoutes.moneyDispute]: [`/money/disputes/${dispute}`],
   [hqRoutes.place]: [`/setup/places/${venue}`],
   [hqRoutes.placeLayout]: [`/setup/places/${venue}/layout`],
+  [hqRoutes.placeDetails]: [`/setup/places/${venue}/details`],
   [hqRoutes.placeCourtCreate]: [`/setup/places/${venue}/courts/create`],
   [hqRoutes.placeCourt]: [`/setup/places/${venue}/courts/${court}`],
   [hqRoutes.marketingAudience]: [`/marketing/audiences/${audience}`],
