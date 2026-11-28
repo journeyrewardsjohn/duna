@@ -6,7 +6,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { ArrowRight, ShieldCheck, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState, useTransition } from "react";
-import { transferFamilyCreditsAction } from "@/app/app/settings/actions";
+import { transferFamilyCreditsAction } from "@/app/(legacy)/app/settings/actions";
 
 type FamilyWallets = inferRouterOutputs<AppRouter>["player"]["familyWallets"];
 

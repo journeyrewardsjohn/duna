@@ -9,7 +9,9 @@
     "Higgsfield Soul Location",
     "Higgsfield GPT Image 2",
     "Higgsfield Recraft V4.1",
-    "Higgsfield GPT Image 2.5"
+    "Higgsfield GPT Image 2.5",
+    "Higgsfield Nano Banana 2.1",
+    "Higgsfield Seedance 2.5"
   ],
   "policy": {
     "identity": "No real player likenesses or identifiable public figures.",
@@ -17,12 +19,6 @@
     "treatment": "Preserve quiet negative space and use the shared fog-dissolve treatment at image boundaries."
   },
   "assets": [
-    {
-      "name": "duna-home-hero-v1",
-      "jobId": "ce3d726e-c7d2-4891-be33-9fefc2a34787",
-      "intent": "Anonymous beach athlete at first light with generous left-side editorial space.",
-      "reference": "/media/event-library/duna-event-sunrise-tournament.webp"
-    },
     {
       "name": "duna-club-hero-v1",
       "jobId": "f96152d5-782f-4e25-9223-d03ac636734b",
@@ -360,12 +356,137 @@
   ],
   "motionAssets": [
     {
-      "name": "duna-home-hero-motion-v1",
-      "jobId": "842590b1-ebbf-4eab-aab8-1559ab2a8e3e",
-      "intent": "A restrained first-light cinemagraph with a locked editorial frame, subtle athlete and dune movement, and a still-image dissolve at the loop boundary.",
-      "reference": "duna-home-hero-v1",
-      "durationSeconds": 8.04,
-      "delivery": "Muted progressive enhancement on unconstrained connections; never shown when reduced motion or data saving is active."
+      "name": "site/hero-loop",
+      "jobId": "e435f10c-4c44-4fe8-b194-98ff4c78bd86",
+      "model": "Higgsfield seedance_2_5 (omni_reference, 5 s, 720p, no audio)",
+      "intent": "Near-still breathing loop from the hero portrait.",
+      "reference": "site/hero-portrait",
+      "durationSeconds": 5.04,
+      "delivery": "Muted, after page load, paused off screen; never on reduced motion, data saver or 2G. H.264 720p, no audio track."
+    },
+    {
+      "name": "site/attack-loop",
+      "jobId": "c39c9de5-386d-4e54-8943-9e5800a700d2",
+      "model": "Higgsfield seedance_2_5 (omni_reference, 5 s, 720p, no audio)",
+      "intent": "Slow-motion attack from the beach attack still.",
+      "reference": "site/beach-attack",
+      "durationSeconds": 5.04,
+      "delivery": "Muted, after page load, paused off screen; never on reduced motion, data saver or 2G. H.264 720p, no audio track."
     }
-  ]
+  ],
+  "sitePhotographs": {
+    "note": "Public site home page (SITE-1). Stored in apps/web/public/site/ as one WebP source each; next/image serves AVIF and WebP widths. Credits: apps/web/public/site/CREDITS.md.",
+    "assets": [
+      {
+        "name": "site/hero-portrait",
+        "createdAt": "2026-11-28",
+        "jobId": "85f8a76a-5130-4269-9122-33d3b77035c1",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Female beach player resting between rallies, rim light, sand on shoulder, subject left, net blurred right; 85 mm. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/hero-portrait.webp"]
+      },
+      {
+        "name": "site/beach-attack",
+        "createdAt": "2026-11-28",
+        "jobId": "6e7cac07-2409-4931-a465-da30ed5f5fca",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Doubles attack over block at golden hour, regulation net, side-on; 35 mm. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/beach-attack.webp"]
+      },
+      {
+        "name": "site/partners-lowfive",
+        "createdAt": "2026-11-28",
+        "jobId": "6ca68ae4-fca6-49e6-8d3c-df47f319f50a",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Two partners low-five after a point, sand on knees; 50 mm. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/partners-lowfive.webp"]
+      },
+      {
+        "name": "site/indoor-serve",
+        "createdAt": "2026-11-28",
+        "jobId": "30012d6f-cce9-4f93-b344-1ac464d35950",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Jump serve in a community gym at night, hardwood glow. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/indoor-serve.webp"]
+      },
+      {
+        "name": "site/coach-morning",
+        "createdAt": "2026-11-28",
+        "jobId": "7906d958-d80a-4d25-9246-72ecb22161d2",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Female coach demonstrating a platform to two adults, morning haze. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/coach-morning.webp"]
+      },
+      {
+        "name": "site/friends-walk",
+        "createdAt": "2026-11-28",
+        "jobId": "c621b5dd-6001-4c3e-a212-b7bfe6670c37",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Four friends walking to the nets at sunset. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/friends-walk.webp"]
+      },
+      {
+        "name": "site/courts-first-light",
+        "createdAt": "2026-11-28",
+        "jobId": "4da0872a-8e17-427a-8bc5-e31d2c507b66",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Empty beach courts at first light, no people. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/courts-first-light.webp"]
+      },
+      {
+        "name": "site/dig-spray",
+        "createdAt": "2026-11-28",
+        "jobId": "98029778-9fca-4e38-8e85-bfceb273bfcc",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Diving dig, sand arc frozen; 70 mm. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/dig-spray.webp"]
+      },
+      {
+        "name": "site/indoor-huddle",
+        "createdAt": "2026-11-28",
+        "jobId": "64e5ce36-75de-43fe-b0ac-5fb54259cd1a",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Adult rec team huddle between sets, coach with clipboard. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/indoor-huddle.webp"]
+      },
+      {
+        "name": "site/watch-rest",
+        "createdAt": "2026-11-28",
+        "jobId": "5d7283de-093c-4e50-b100-187c67448123",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site home page (docs/design/website.md §5).",
+        "promptIntent": "Player on the sand checking a blank watch, face out of frame. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/watch-rest.webp"]
+      }
+    ]
+  }
 }

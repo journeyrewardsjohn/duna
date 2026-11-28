@@ -1,26 +1,24 @@
 "use client";
 
-import { PageTransition, Tideline } from "@duna/ui/tideline";
-import { usePathname } from "next/navigation";
+import { Tideline } from "@duna/ui/tideline";
 import { type ReactNode, useEffect, useRef } from "react";
 
 const SCOPE_ID = "legal-scope";
 
 /**
  * Set before first paint: the scope takes the site's resolved theme (the
- * root layout's boot script has already written it on <html>), so a dark
- * reader never sees a light flash.
+ * site's boot script has already written it on <html>), so a dark reader
+ * never sees a light flash. A design-system scope does not inherit a theme.
  */
 const themeScript = `(function(){var s=document.getElementById("${SCOPE_ID}");if(s)s.dataset.theme=document.documentElement.dataset.theme==="dark"?"dark":"light";})();`;
 
 /**
  * The Tideline scope of the legal center. It follows the site's light / dark
- * choice (and keeps following it when the person changes it), and Crosses
- * the content when the reader moves between documents.
+ * choice (and keeps following it when the person changes it). Moving between
+ * documents Crosses through the site shell's page transition.
  */
 export function LegalScope({ children }: { readonly children: ReactNode }) {
   const scope = useRef<HTMLDivElement>(null);
-  const pathname = usePathname();
 
   useEffect(() => {
     const root = document.documentElement;
@@ -54,7 +52,7 @@ export function LegalScope({ children }: { readonly children: ReactNode }) {
         hidden
         suppressHydrationWarning
       />
-      <PageTransition routeKey={pathname}>{children}</PageTransition>
+      {children}
     </Tideline>
   );
 }

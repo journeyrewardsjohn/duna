@@ -3,7 +3,7 @@
 import { Check, MapPin, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { claimMatchParticipantInvitationAction } from "@/app/join/match/[inviteToken]/actions";
+import { claimMatchParticipantInvitationAction } from "@/app/(legacy)/join/match/[inviteToken]/actions";
 
 interface MatchParticipantInvitation {
   readonly matchId: string;

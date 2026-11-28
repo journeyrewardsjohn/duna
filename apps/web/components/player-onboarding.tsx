@@ -25,7 +25,7 @@ import {
   requestProfileClaimAction,
   startIdentityVerificationAction,
   updatePlayingProfileAction,
-} from "@/app/app/settings/actions";
+} from "@/app/(legacy)/app/settings/actions";
 import { HeightInput } from "@/components/height-input";
 import { VoiceExperienceGuide } from "@/components/voice-experience-guide";
 

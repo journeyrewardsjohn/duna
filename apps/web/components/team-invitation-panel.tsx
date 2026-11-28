@@ -3,7 +3,7 @@
 import { BriefcaseBusiness, Check, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { claimTeamInvitationAction } from "@/app/join/team/[inviteToken]/actions";
+import { claimTeamInvitationAction } from "@/app/(legacy)/join/team/[inviteToken]/actions";
 
 interface TeamInvitation {
   readonly organizationName: string;

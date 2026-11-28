@@ -17,6 +17,14 @@ const nextConfig = {
   ],
   experimental: {
     optimizePackageImports: ["lucide-react"],
+    // The web app has two root layouts, app/(legacy) and app/(next)
+    // (docs/design/web-shell.md), so an unmatched address is answered by
+    // app/global-not-found.tsx.
+    globalNotFound: true,
+  },
+  images: {
+    // AVIF first, WebP for browsers without it (docs/design/website.md §6).
+    formats: ["image/avif", "image/webp"],
   },
 };
 
