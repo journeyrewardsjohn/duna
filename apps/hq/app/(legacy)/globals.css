@@ -5970,7 +5970,7 @@ button {
     grid-template-columns: 1fr;
   }
 
-    .admin-payment-hero > div:last-child {
+  .admin-payment-hero > div:last-child {
     grid-template-columns: 1fr;
   }
 
@@ -38610,4 +38610,3 @@ body {
   white-space: nowrap;
   width: 1px;
 }
-
