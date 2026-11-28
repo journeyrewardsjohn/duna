@@ -13,6 +13,7 @@ import {
   getTransactionalDatabase,
   orders,
   participationAdjustments,
+  participationWaitlistEntries,
   refundRecords,
 } from "@duna/db";
 import {
@@ -20,11 +21,17 @@ import {
   PARTICIPATION_REMINDER_MINUTES_BEFORE_LOCK,
 } from "@duna/core";
 import { log } from "@duna/observability";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { stableHash } from "../../canonical";
 import { processDueCatalogParticipation } from "../../catalog-participation";
 import { refundOrganizationOrder } from "../../catalog-service";
+import {
+  acceptWaitlistOnBooking,
+  expireWaitlistOffers,
+  offerOpenPlaces,
+} from "./waitlist";
 import type { ApiActor } from "../../context";
+import { processDueSubjectParticipation } from "./subjects";
 import {
   ACTIVE_BOOKING_STATUSES,
   CATALOG_SUBJECT,
@@ -157,8 +164,22 @@ export async function claimOccurrencePlace(input: {
           (Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 1)
         );
       }, 0);
+    // Places held for someone else's waitlist offer are taken too.
+    const offers = await transaction
+      .select({ quantity: participationWaitlistEntries.quantity })
+      .from(participationWaitlistEntries)
+      .where(
+        and(
+          eq(participationWaitlistEntries.subjectType, CATALOG_SUBJECT),
+          eq(participationWaitlistEntries.subjectId, input.occurrenceId),
+          eq(participationWaitlistEntries.status, "offered"),
+          gt(participationWaitlistEntries.holdExpiresAt, input.now),
+          ne(participationWaitlistEntries.personId, mine.personId),
+        ),
+      );
+    const held = offers.reduce((total, row) => total + row.quantity, 0);
     const quantity = Number(mine.details.quantity ?? 1);
-    if (taken + quantity > capacity) return false;
+    if (taken + held + quantity > capacity) return false;
     const { placeClaimPending: _pending, ...details } = mine.details;
     void _pending;
     await transaction
@@ -190,6 +211,16 @@ export async function afterCatalogBookingConfirmed(input: {
   });
   if (!occurrence) return;
   const rule = decisionRule(decision, occurrence.capacity);
+  const booked = await database.query.catalogFulfillments.findFirst({
+    where: eq(catalogFulfillments.id, input.fulfillmentId),
+  });
+  if (booked) {
+    await acceptWaitlistOnBooking({
+      subjectId: occurrence.id,
+      personId: booked.personId,
+      now: input.now,
+    });
+  }
   if (decision.outcome) {
     await settleRefilledPlaces({ occurrenceId: occurrence.id, now: input.now });
     return;
@@ -398,12 +429,36 @@ export async function processDueParticipation(input: {
   readonly settled: number;
   readonly awaitingAttendance: number;
   readonly failed: number;
+  readonly subjects: number;
+  readonly waitlistExpired: number;
+  readonly waitlistOffered: number;
 }> {
   const catalog = await processDueCatalogParticipation(input);
-  if (catalog.failed > 0) {
-    log.warn("participation.schedule.failures", { failed: catalog.failed });
+  let subjects = 0;
+  let waitlistExpired = 0;
+  let waitlistOffered = 0;
+  let failed = catalog.failed;
+  if (process.env.DATABASE_URL) {
+    try {
+      const other = await processDueSubjectParticipation(input);
+      subjects = other.examined;
+      failed += other.failed;
+    } catch (error) {
+      failed += 1;
+      log.error("participation.subjects.sweepFailed", { error });
+    }
+    try {
+      waitlistExpired = await expireWaitlistOffers({ now: input.now });
+      waitlistOffered = await offerOpenPlaces({ now: input.now });
+    } catch (error) {
+      failed += 1;
+      log.error("participation.waitlist.sweepFailed", { error });
+    }
   }
-  return catalog;
+  if (failed > 0) {
+    log.warn("participation.schedule.failures", { failed });
+  }
+  return { ...catalog, failed, subjects, waitlistExpired, waitlistOffered };
 }
 
 export { CATALOG_SUBJECT };

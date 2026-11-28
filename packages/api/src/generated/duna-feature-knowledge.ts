@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "e957410b0be2a2cf7db3ae2b55127aa2f13e5f4780f6e0aca8d006c27ab350e0",
+    "813f6a62abc24902780dabb3f663e4cfe19f1337be60783edad83506ba923f10",
   modules: [
     {
       id: "M1",
@@ -351,7 +351,12 @@ export const generatedDunaFeatureKnowledge = {
     "organizationWallets",
     "organizations",
     "overview",
+    "participation.createInvite",
+    "participation.invite",
+    "participation.joinWaitlist",
+    "participation.leaveWaitlist",
     "participation.quote",
+    "participation.setPickupRule",
     "paymentSchedules",
     "paymentWorkspace",
     "pendingTicketApprovals",

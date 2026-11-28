@@ -834,6 +834,13 @@
       "when": 1795843717862,
       "tag": "0118_participation_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1795846702274,
+      "tag": "0119_participation_pickups_without_club",
+      "breakpoints": true
     }
   ]
 }

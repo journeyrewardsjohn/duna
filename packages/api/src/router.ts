@@ -83,6 +83,7 @@ import {
 import {
   participationOperatorRouter,
   participationPlayerRouter,
+  participationPublicRouter,
 } from "./routers/participation";
 import {
   accountDeletionReadinessSchema,
@@ -2783,6 +2784,7 @@ const publicRouter = router({
   conditions: conditionsPublicRouter,
   // W3-0 seams (schema steward): legal document versions.
   legal: legalPublicRouter,
+  participation: participationPublicRouter,
 });
 
 const playerRouter = router({

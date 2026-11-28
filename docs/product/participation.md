@@ -139,9 +139,42 @@ review.
 - The schedule runs every 5 minutes (`/api/cron/catalog-participation`); its
   `failed` count raises an alert.
 
+## Waitlist, invite links and merging (part 2)
+
+- **Waitlist.** When a session with "waitlist on" is full, players (or a
+  parent for a child) join the line. When a place opens (a cancellation, an
+  offer nobody took) the first person in line gets an offer that holds the
+  place for 2 hours, never past the start; nobody else can book it meanwhile.
+  An offer nobody answers passes to the next person. Someone who needs two
+  places is never skipped by someone who needs one.
+- **Invite links.** An adult who holds a place can share the session. The link
+  shows the session, the club, the time and "Needs 2 more", never who booked
+  or what they paid. It expires when the session starts. Juniors cannot create
+  links; their guardians can. Duna counts opens (and, once checkout passes the
+  code, bookings) and nothing about visitors.
+- **Merging two thin sessions.** An owner moves everyone from one session into
+  another of the same offering after a strong confirmation. Nobody's price can
+  go up (Duna refuses a merge that would); each person keeps what they reserved
+  and settles at the new group. Someone already booked in both is refunded for
+  the first. Moved people are told; the emptied session shows "Cancelled"
+  (merged). Directors can merge two thin divisions of an event the same way.
+
+## Event sessions, divisions and pickups
+
+The same engine decides event sessions, divisions (counting teams) and pickups
+at their decision time, from the rule on each one. Old settings that never
+worked (the HQ "Minimum to run", the event builder's and pickup form's
+"Auto-cancel") were mapped to rules that RUN, so nothing anyone booked is
+cancelled by this change (decision 7); they appear under "Rules to review"
+with Keep or Turn on cancel. New rules set from now on cancel when they say so.
+A player hosting a pickup sets its rule themselves. A pickup cancelled under its
+minimum is cancelled for everyone with a notice; a paid place in a pickup with
+no club is flagged to the host.
+
 ## Not built yet
 
-Event sessions, divisions and pickups on the same engine, the waitlist, invite
-links and merging two thin sessions (PART-3 part 2 and PART-9); notice sending
+Cancelling event sessions and pickups by hand still uses their own flows;
+offers to the waitlist when a club raises a session's capacity; counting
+bookings made through an invite link (needs the code at checkout); notice sending
 (PART-5); card price ladders and partial refunds (PART-10); every screen
 (PART-6 to PART-12).
