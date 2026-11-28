@@ -230,7 +230,7 @@ cancels when plans change. Mostly in the Player app, sometimes on the web.
 | PA-5.2 | Sees the refund with its amount and where it went                                                                  | Web         | P6             | Planned |
 | PA-6.1 | Signs the club's waiver for the junior before the first session (`/waivers/complete` exists)                       | Web         | none           | **Gap** |
 | PA-7.1 | Opens Home → Next up first                                                                                         | Web         | P1             | Main    |
-| PA-7.2 | Next up includes the junior's sessions, labelled with the junior's name                                            | Web         | P1             | Planned |
+| PA-7.2 | Next up includes the junior's sessions, labelled with the junior's name                                            | Web         | P1             | Main    |
 | PA-7.n | The family's next session as a widget and Live Activity                                                            | Player      | M-K2           | Native  |
 | PA-8.1 | Books a clinic for a child → checkout shows "3 credits now" and the ladder; the guardian receives the confirmation | Web         | PART-8         | Planned |
 | PA-8.2 | The clinic is cancelled under its minimum → the guardian is told and the credits are back in the wallet            | Web         | PART-5, PART-8 | Planned |
@@ -297,21 +297,21 @@ approves requests, stops play for weather.
 Arrives from search or a link, looks around, decides to book or to run a
 club, and signs up without losing their place.
 
-| Step   | The person does → expected result                                                                                                  | Surface | Packages   | Status  |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------- | ------- |
-| VI-1.1 | Opens the home page → leads with the Where · When · What search; "I play / I run a club" switch; no layout jump or sideways scroll | Web     | SITE-1     | Main    |
-| VI-1.2 | Chooses "I run a club" → the call to action becomes "Start your club" and is remembered                                            | Web     | SITE-1     | Main    |
-| VI-2.1 | Discovers play without signing in                                                                                                  | Web     | P3         | Main    |
-| VI-2.2 | Opens a public event page                                                                                                          | Web     | P2         | Main    |
-| VI-2.3 | Opens a club's public page                                                                                                         | Web     | P4         | Main    |
-| VI-2.4 | Reads the rankings                                                                                                                 | Web     | P2         | Main    |
-| VI-3.1 | Opens a public checkout → what happens next is explained                                                                           | Web     | P5         | Main    |
-| VI-3.2 | Booking asks them to sign in and returns them to the same place                                                                    | Web     | P1         | Planned |
-| VI-4.1 | Opens sign-up → a secure account hand-off                                                                                          | Web     | P2         | Main    |
-| VI-4.2 | After sign-up, onboarding asks who the account is for (me, my junior, my club)                                                     | Web     | P1         | Planned |
-| VI-4.n | Installs the app; first open (Crest sequence) and sign-in                                                                          | Player  | M-C6, M-P0 | Native  |
-| VI-5.1 | A club organiser starts an event without an account                                                                                | Web     | P2         | Main    |
-| VI-5.2 | A machine reads the Markdown companion of a public page (`/index.md`)                                                              | Web     | P2         | Main    |
+| Step   | The person does → expected result                                                                                                  | Surface | Packages   | Status |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------- | ------ |
+| VI-1.1 | Opens the home page → leads with the Where · When · What search; "I play / I run a club" switch; no layout jump or sideways scroll | Web     | SITE-1     | Main   |
+| VI-1.2 | Chooses "I run a club" → the call to action becomes "Start your club" and is remembered                                            | Web     | SITE-1     | Main   |
+| VI-2.1 | Discovers play without signing in                                                                                                  | Web     | P3         | Main   |
+| VI-2.2 | Opens a public event page                                                                                                          | Web     | P2         | Main   |
+| VI-2.3 | Opens a club's public page                                                                                                         | Web     | P4         | Main   |
+| VI-2.4 | Reads the rankings                                                                                                                 | Web     | P2         | Main   |
+| VI-3.1 | Opens a public checkout → what happens next is explained                                                                           | Web     | P5         | Main   |
+| VI-3.2 | Booking asks them to sign in and returns them to the same place                                                                    | Web     | P1         | Main   |
+| VI-4.1 | Opens sign-up → a secure account hand-off                                                                                          | Web     | P2         | Main   |
+| VI-4.2 | After sign-up, onboarding asks who the account is for (me, my junior, my club)                                                     | Web     | P1         | Main   |
+| VI-4.n | Installs the app; first open (Crest sequence) and sign-in                                                                          | Player  | M-C6, M-P0 | Native |
+| VI-5.1 | A club organiser starts an event without an account                                                                                | Web     | P2         | Main   |
+| VI-5.2 | A machine reads the Markdown companion of a public page (`/index.md`)                                                              | Web     | P2         | Main   |
 
 ## Gaps for the orchestrator
 
@@ -391,7 +391,7 @@ Mono loads) failing to load in a sandboxed browser; F3 removes those loads.
   demo actor that persona's roles (`visitor` has no actor). It is honoured only
   without identity-provider credentials, in demo mode, with that variable, and
   never when `VERCEL_ENV=production`. The person and organisation stay the demo
-  ones; parent journeys have no junior fixture yet.
+  ones. The households seam gives the `parent` persona two juniors (Remy, Sky); there is no junior booking fixture yet.
 - **Moves** (`support/moves.ts`): `openHqArea` and `openPlayerArea` navigate
   by the new information architecture (HQ areas map to today's routes through
   `packages/core/src/hq-routes.ts`; S2 updates one table), `openObjectTab`,

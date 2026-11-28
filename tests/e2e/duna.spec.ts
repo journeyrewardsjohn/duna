@@ -316,55 +316,6 @@ test("club and coach marketing keeps both operating paths clear", async ({
   await expectNoHorizontalOverflow(page);
 });
 
-test("player home puts useful actions and the personal calendar first", async ({
-  page,
-}) => {
-  await page.goto("/app");
-  await expect(
-    page.getByRole("heading", { name: "What would you like to do?" }),
-  ).toBeVisible();
-  const quickActions = page.getByRole("navigation", {
-    name: "Player quick actions",
-  });
-  await expect(
-    quickActions.getByRole("link", { name: /Find play/ }),
-  ).toBeVisible();
-  await expect(
-    quickActions.getByRole("link", { name: /Host pickup/ }),
-  ).toBeVisible();
-  await expect(page.getByText("Next up", { exact: true })).toBeVisible();
-  const aiTrigger = page
-    .getByRole("button", { name: "Open Duna AI", exact: true })
-    .filter({ visible: true });
-  await expect(aiTrigger).toBeVisible();
-  await aiTrigger.click();
-  const dunaAi = page.getByRole("region", { name: "Duna AI assistant" });
-  await expect(dunaAi).toBeVisible();
-  await expect(
-    dunaAi.getByRole("button", { name: "Attach an image or file" }),
-  ).toBeVisible();
-  await expect(
-    dunaAi.getByRole("button", { name: "Talk to Duna AI" }),
-  ).toBeVisible();
-  await dunaAi.getByRole("button", { name: "Close Duna AI" }).click();
-  await page
-    .getByRole("button", { name: "Search Duna", exact: true })
-    .filter({ visible: true })
-    .click();
-  const command = page.getByRole("dialog", { name: "Search Duna Player" });
-  await expect(command).toBeVisible();
-  await expect(command.getByText("Go anywhere")).toBeVisible();
-  await page.keyboard.press("Escape");
-  const nextUpDate = page
-    .getByRole("region", { name: "Your day" })
-    .locator("time")
-    .first();
-  await expect(nextUpDate).toBeVisible();
-  await expect(nextUpDate).not.toContainText(":");
-  await expect(page.locator('img[src*="duna-campaign-rally"]')).toHaveCount(0);
-  await expectNoHorizontalOverflow(page);
-});
-
 test("public pickup pages keep their story and booking rail contained", async ({
   page,
 }) => {

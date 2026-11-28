@@ -1,25 +1,113 @@
 import type { SurfaceContract } from "./types";
 
-/** Signed-in Player web (`apps/web/app/(legacy)/app/**` and its components). Owners: P1, P3–P9. */
+/** Legacy sheets that no design-system document may import (mirrors public.ts). */
+const legacySheets = [
+  "@duna/ui/styles.css",
+  "@duna/ui/public-website.css",
+  "@duna/ui/player-workspace.css",
+  "@duna/ui/hq-workspace.css",
+  "globals.css",
+  "design-v3.css",
+  "design-v4.css",
+  "public-website.css",
+  "player-focus.css",
+  "legacy-bridge",
+  ".module.css",
+];
+
+/**
+ * Signed-in Player web. Rebuilt pages live in `apps/web/app/(next)/(app)`
+ * with the shell in `components/app-shell` (docs/design/player-web-shell.md);
+ * pages not rebuilt yet stay in `app/(legacy)/app/**`. Owners: P1, P3–P9.
+ */
 export const web: SurfaceContract = {
   surface: "web",
   owners: "P1, P3, P4, P5, P6, P7, P8, P9",
-  migrated: [],
+  migrated: [
+    "apps/web/app/(next)/(app)/",
+    "apps/web/components/app-shell/",
+    "apps/web/lib/app-routes.ts",
+  ],
   checks: [
+    // The rebuilt Player web app (P1): the shell, Home and the route table.
+    {
+      kind: "absent",
+      path: "apps/web/app/(legacy)/app/page.tsx",
+      message:
+        "Player web Home lives in app/(next)/(app)/app/page.tsx; the old Home is deleted",
+    },
+    {
+      kind: "absent",
+      path: "apps/web/app/(legacy)/app/player-dashboard.module.css",
+    },
+    {
+      kind: "treeExcludes",
+      root: "apps/web/app/(next)/(app)",
+      values: legacySheets,
+      message:
+        "app/(next)/(app) imports only the design system (docs/plan/legacy-styles.md)",
+    },
+    {
+      kind: "treeExcludes",
+      root: "apps/web/components/app-shell",
+      values: [...legacySheets, "lucide-react", "@duna/ui/theme-toggle"],
+      message:
+        "The Player web shell renders in app/(next): design-system parts and @duna/ui/icons only",
+    },
+    {
+      kind: "excludes",
+      file: "apps/web/app/(next)/(app)/app-shell.css",
+      values: ["@import", "!important"],
+      message:
+        "app-shell.css is the app's own token-based sheet: no imports, no !important",
+    },
     {
       kind: "includes",
-      file: "apps/web/app/(legacy)/app/page.tsx",
+      file: "apps/web/app/(next)/(app)/layout.tsx",
+      values: ['import "./app-shell.css"', "<AppShell", "SignedOutRedirect"],
+      message:
+        "Every rebuilt /app page gets the Player shell, and signed out it sends the person to sign in",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/components/app-shell/app-shell.tsx",
       values: [
-        "futureBookings",
-        "nextPersonalEvent",
-        "defaultEventMedia",
-        "new Date(event.startsAt).getTime() >= now",
-        "new Date(booking.startsAt).getTime() >= now",
-        'aria-label="Player quick actions"',
+        'href="#main"',
+        'aria-label="Duna Player"',
+        'aria-label="Main"',
+        "<CommandPalette",
+        "<PageTransition",
+        "<AskDunaSheet",
+        "<PersonMenu",
+        "<ActingForBand",
       ],
       message:
-        "Player web Home must keep future-only Next up and quick actions (re-assert the behaviour in a test when this migrates)",
-      legacy: "legacy: delete when Player web Home migrates (P1)",
+        "The Player shell keeps its skip link, rail, phone bar, command palette, page transition, Ask Duna, person menu and acting-for band",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/lib/app-routes.ts",
+      values: [
+        'title: "Find"',
+        'title: "Play"',
+        'title: "Improve"',
+        'title: "Connect"',
+      ],
+      message: "Player web navigation uses the four verbs (contract R15)",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/components/app-shell/person-menu.tsx",
+      values: ["Create new organisation", "Whose account", "Sign out of Duna?"],
+      message:
+        "The person menu keeps the club switcher with Create new organisation, the acting-for switch and a confirmed sign out (contract R21)",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/components/app-shell/home/home-model.ts",
+      values: ["inFuture(", "renderParticipationCopy"],
+      message:
+        "Home's Next up is future-only and group-session words come from the shared copy table",
     },
     {
       kind: "excludes",

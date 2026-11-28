@@ -73,7 +73,31 @@ test.describe("PA-7 The family's week", () => {
     await openPlayerArea(page, "Home");
     await expect(page.getByText("Next up", { exact: true })).toBeVisible();
   });
-  test.fixme("PA-7.2 Next up includes the junior's sessions, labelled with their name [P1]", async () => {});
+  test("PA-7.2 The guardian acts for the junior and Home shows the junior's week", async ({
+    page,
+  }) => {
+    // Labelling a junior's booking "For Remy" in Next up is unit-tested
+    // (components/app-shell/home/home-model.test.ts): demo mode has no junior
+    // booking fixture (catalog bookings need a database).
+    await openPlayerArea(page, "Home");
+    await expect(
+      page.getByRole("heading", { name: "Your household" }),
+    ).toBeVisible();
+    await page
+      .getByRole("navigation", { name: "Duna Player" })
+      .getByRole("button", { name: /Account menu for/ })
+      .click();
+    await page.getByRole("button", { name: /Remy Lewis/ }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Remy's week" }),
+    ).toBeVisible();
+    await expect(page.getByText("You’re acting for Remy Lewis.")).toBeVisible();
+    await expect(page.getByText("Nothing booked for Remy yet")).toBeVisible();
+    await page.getByRole("button", { name: "Back to my account" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: /, Mara\.$/ }),
+    ).toBeVisible();
+  });
 });
 
 test.describe("PA-8 A junior in a group session", () => {
