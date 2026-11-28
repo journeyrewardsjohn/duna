@@ -5,7 +5,6 @@ import {
   getDatabase,
   guardianships,
   healthConnections,
-  healthSharingGrants,
   membershipTiers,
   memberships,
   messages,
@@ -29,7 +28,7 @@ import {
   videos,
 } from "@duna/db";
 import { arrivalSharingWindow } from "@duna/scheduling";
-import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
   eventCaptainPaymentComplete,
@@ -46,7 +45,15 @@ import type {
 import type { ApiActor } from "./context";
 import { canonicalPublicWebUrl } from "./public-web-url";
 import { loadSessionArrivalBoard } from "./arrival-service";
-import { loadHealthProfile } from "./health-service";
+import {
+  organizationViewerRolesFor,
+  type HealthAgeBand,
+} from "./services/health/policy";
+import {
+  HealthServiceError,
+  healthSummaryVisibleTo,
+  loadHealthProfile,
+} from "./health-service";
 import {
   loadEventCancellationPreview,
   loadOperatorDivisionDetail,
@@ -464,7 +471,7 @@ export async function loadOperatorMemberProfile(input: {
     orderRows,
     attendanceRows,
     videoRows,
-    healthGrant,
+    healthAccess,
   ] = await Promise.all([
     database
       .select({ membership: memberships, tier: membershipTiers })
@@ -533,16 +540,13 @@ export async function loadOperatorMemberProfile(input: {
       )
       .orderBy(desc(videos.createdAt))
       .limit(24),
-    database.query.healthSharingGrants.findFirst({
-      where: and(
-        eq(healthSharingGrants.ownerPersonId, personId),
-        eq(healthSharingGrants.audienceKind, "organization"),
-        eq(healthSharingGrants.organizationId, organizationId),
-        isNull(healthSharingGrants.revokedAt),
-        gte(healthSharingGrants.expiresAt, input.now),
-        sql`${healthSharingGrants.scopes} @> ARRAY['summary']::text[]`,
-      ),
-      orderBy: [desc(healthSharingGrants.createdAt)],
+    // PRIV-1: the Health service's own viewer rule, narrowed to this club.
+    // Anyone it does not name gets no health block at all.
+    healthSummaryVisibleTo({
+      subjectPersonId: personId,
+      viewer: input.actor,
+      organizationId,
+      now: input.now,
     }),
   ]);
 
@@ -568,16 +572,21 @@ export async function loadOperatorMemberProfile(input: {
             .orderBy(desc(refundRecords.createdAt))
         : Promise.resolve([]),
       loadSessionNotes({ organizationId, personId }),
-      healthGrant
+      healthAccess
         ? loadHealthProfile({
             actor: input.actor,
             subjectPersonId: personId,
             now: input.now,
             requestId: input.requestId,
             ipAddress: input.ipAddress,
+          }).catch((error: unknown) => {
+            // Fail closed: a refusal between the check and the read omits
+            // the block instead of failing the whole profile.
+            if (error instanceof HealthServiceError) return undefined;
+            throw error;
           })
         : Promise.resolve(undefined),
-      healthGrant
+      healthAccess
         ? database.query.healthConnections.findFirst({
             where: eq(healthConnections.personId, personId),
           })
@@ -754,12 +763,13 @@ export async function loadOperatorMemberProfile(input: {
     purchases,
     notes,
     videos: mappedVideos,
-    health:
-      healthGrant && healthProfile
-        ? {
+    // PRIV-1: the key is absent, not undefined or null, for a non-viewer.
+    ...(healthAccess && healthProfile
+      ? {
+          health: {
             source: "apple-healthkit",
-            scopes: healthGrant.categories,
-            grantedAt: healthGrant.createdAt.toISOString(),
+            scopes: [...healthAccess.categories],
+            grantedAt: healthAccess.grantedAt,
             observedAt: healthConnection?.lastSyncedAt?.toISOString(),
             metrics: {
               readinessScore: healthProfile.intelligence.readiness.score,
@@ -785,8 +795,9 @@ export async function loadOperatorMemberProfile(input: {
                 (entry) => entry.metric === "workout",
               )?.startedAt,
             },
-          }
-        : undefined,
+          },
+        }
+      : {}),
     timeline,
   };
 }
@@ -810,9 +821,24 @@ export async function loadOperatorMemberHealthProfile(input: {
   });
 }
 
+/**
+ * Demo stand-in for the Health viewer rule: the demo player shared a summary
+ * with the club, so it reaches exactly the roles the Health policy names for
+ * an organization grant (`organizationViewerRolesFor`), adult viewers only.
+ */
+export function demoHealthVisibleTo(
+  viewer: Pick<ApiActor, "roles" | "ageBand">,
+  ownerBand: HealthAgeBand = "adult",
+): boolean {
+  if (viewer.ageBand !== "adult") return false;
+  const roles = organizationViewerRolesFor(ownerBand);
+  return viewer.roles.some((role) => roles.includes(role));
+}
+
 export async function loadDemoOperatorMemberProfile(
   organizationId: string,
   personId: string,
+  viewer: Pick<ApiActor, "roles" | "ageBand">,
 ): Promise<OperatorMemberProfile> {
   const { relationship, workspace } = await assertRelationship(
     organizationId,
@@ -1039,9 +1065,9 @@ export async function loadDemoOperatorMemberProfile(
     purchases,
     notes,
     videos,
-    health:
-      relationship.displayName === "Maya Chen"
-        ? {
+    ...(relationship.displayName === "Maya Chen" && demoHealthVisibleTo(viewer)
+      ? {
+          health: {
             source: "apple-healthkit",
             scopes: ["activity", "heart-rate", "sleep", "workouts"],
             grantedAt: new Date(
@@ -1057,8 +1083,9 @@ export async function loadDemoOperatorMemberProfile(
               exerciseMinutes: 71,
               latestWorkoutAt: completedSession?.endsAt,
             },
-          }
-        : undefined,
+          },
+        }
+      : {}),
     timeline,
   };
 }
