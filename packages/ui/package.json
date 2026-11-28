@@ -34,6 +34,10 @@
     "./native/brand": "./src/native/brand/index.ts",
     "./native/score": "./src/native/score/index.ts",
     "./native/conditions": "./src/native/conditions/index.ts",
+    "./native/time": "./src/native/time/index.ts",
+    "./native/search": "./src/native/search/index.ts",
+    "./native/participation": "./src/native/participation/index.ts",
+    "./native/map": "./src/native/map/index.ts",
     "./native/foundations": "./src/native/foundations/FoundationsScreen.tsx",
     "./assets/fonts/*": "./assets/fonts/*"
   },
