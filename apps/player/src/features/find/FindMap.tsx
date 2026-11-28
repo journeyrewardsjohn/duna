@@ -19,6 +19,7 @@ import {
 } from "@duna/ui/native/map";
 import Mapbox, { type MapState } from "@rnmapbox/maps";
 import { useEffect, useMemo, useState } from "react";
+import { usePaneEdges } from "../../app/ui";
 import { useFind } from "./FindContext";
 import type { FindResult } from "./find-search";
 import { useMapboxTokenState } from "./mapbox-token";
@@ -73,6 +74,7 @@ export function FindMap({
 }) {
   const find = useFind();
   const { colors, tokens } = useTheme();
+  const edges = usePaneEdges();
   const map = useMapboxTokenState();
   const [zoom, setZoom] = useState(11);
   const [chosenLook, setChosenLook] = useState<MapStyle | null>(null);
@@ -205,7 +207,10 @@ export function FindMap({
       <View
         style={[
           styles.controls,
-          { top: tokens.space["3"], right: tokens.space["3"] },
+          {
+            top: edges.top + tokens.space["3"],
+            right: edges.right + tokens.space["3"],
+          },
         ]}
       >
         <MapControls>

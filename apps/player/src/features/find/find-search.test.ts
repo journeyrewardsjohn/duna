@@ -127,10 +127,11 @@ describe("search-to-results parameter mapping", () => {
       sessions: [],
       criteria: EMPTY_CRITERIA,
       sessionResult: (s) => sessionResult(s),
+      now,
     });
     expect(all.groups.map((group) => group.key)).toEqual([
-      "matches",
       "training",
+      "matches",
       "tournaments",
       "court-rentals",
       "coaches",
@@ -140,6 +141,7 @@ describe("search-to-results parameter mapping", () => {
       sessions: [],
       criteria: { ...EMPTY_CRITERIA, what: ["coaches"] },
       sessionResult: (s) => sessionResult(s),
+      now,
     });
     expect(coaches.groups.map((group) => group.key)).toEqual(["coaches"]);
     const weekend = runFindSearch({
@@ -151,8 +153,37 @@ describe("search-to-results parameter mapping", () => {
         what: ["matches"],
       },
       sessionResult: (s) => sessionResult(s),
+      now,
     });
     expect(weekend.total).toBe(0);
+  });
+
+  it("leaves out results that already ended unless they are live", () => {
+    const past = [
+      item({
+        id: "old",
+        entityType: "match",
+        kind: "pickup",
+        startsAt: "2026-05-31T08:00:00.000Z",
+      }),
+      item({
+        id: "old-live",
+        entityType: "match",
+        kind: "pickup",
+        startsAt: "2026-05-31T08:00:00.000Z",
+        live: true,
+      }),
+    ];
+    const outcome = runFindSearch({
+      items: past,
+      sessions: [],
+      criteria: EMPTY_CRITERIA,
+      sessionResult: (s) => sessionResult(s),
+      now,
+    });
+    expect(
+      outcome.groups.flatMap((g) => g.results.map((r) => r.item?.id)),
+    ).toEqual(["old-live"]);
   });
 
   it("adds club sessions with their participation and filters them by When", () => {
@@ -165,6 +196,7 @@ describe("search-to-results parameter mapping", () => {
       sessions,
       criteria: { ...EMPTY_CRITERIA, what: ["training"] },
       sessionResult: (s) => sessionResult(s),
+      now,
     });
     const training = outcome.groups.find((group) => group.key === "training")!;
     expect(training.results).toHaveLength(sessions.length);
@@ -179,6 +211,7 @@ describe("search-to-results parameter mapping", () => {
         when: { preset: "custom", from: "2026-01-01", to: "2026-01-02" },
       },
       sessionResult: (s) => sessionResult(s),
+      now,
     });
     expect(none.total).toBe(0);
   });

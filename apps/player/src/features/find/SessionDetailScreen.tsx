@@ -97,6 +97,17 @@ export function SessionDetailScreen() {
   const [inviting, setInviting] = useState(false);
   const [reload, setReload] = useState(0);
   const client = runtime.client;
+  // Preview builds: `duna://dev/shell?…&step=book` opens the sheet for screenshots.
+  useEffect(() => {
+    if (!session?.demo) return;
+    if (
+      entry?.prompt === "book" ||
+      entry?.prompt === "waitlist" ||
+      entry?.prompt === "cancel"
+    )
+      setSheet(entry.prompt);
+    if (entry?.prompt === "confirm") setSheet("book");
+  }, [entry?.prompt, session?.demo]);
 
   useEffect(() => {
     if (!session || !client || session.demo) return;
@@ -215,7 +226,8 @@ export function SessionDetailScreen() {
     alreadyBooked: Boolean(quote?.alreadyBooked || booking),
     waitlisted: Boolean(quote?.waitlist),
     waitlist: undefined,
-    demo: Boolean(session.demo),
+    // Preview builds show the same buttons; the sheet says it can't book.
+    demo: false,
   });
   const live =
     Date.parse(session.startsAt) <= Date.now() &&
@@ -270,12 +282,8 @@ export function SessionDetailScreen() {
             </Text>
           </View>
           <Title>{session.title}</Title>
-          {view ? (
-            <ParticipationChip
-              label={view.chip.label}
-              live={live}
-              tone={view.chip.tone}
-            />
+          {view && live ? (
+            <ParticipationChip label="Live now" live tone={view.chip.tone} />
           ) : null}
         </View>
 
@@ -446,10 +454,6 @@ export function SessionDetailScreen() {
                 testID="session-cancel"
               />
             </>
-          ) : action === "preview" ? (
-            <Text tone="text-2" variant="phone-meta">
-              Preview build: sign in to the full app to book.
-            </Text>
           ) : (
             <Text tone="text-2" variant="phone-body">
               This session can't be booked.
@@ -469,6 +473,7 @@ export function SessionDetailScreen() {
         onInvite={() => void invite()}
         participation={participation}
         session={session}
+        startAtReview={Boolean(session.demo && entry?.prompt === "confirm")}
         visible={sheet !== null}
         whenText={when.club}
       />

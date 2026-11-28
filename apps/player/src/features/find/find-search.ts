@@ -418,9 +418,23 @@ function wants(criteria: FindCriteria, group: FindWhat): boolean {
   );
 }
 
+// Sessions you can book (and help fill) lead; then games, events, places.
+const CLOSED_STATES = new Set([
+  "cancelled-low",
+  "cancelled-club",
+  "done",
+  "settled",
+]);
+
+/** A session that can no longer be booked sinks to the end of its group. */
+function isClosed(result: FindResult): boolean {
+  const state = result.session?.participation?.displayState;
+  return state !== undefined && CLOSED_STATES.has(state);
+}
+
 const GROUP_ORDER: readonly FindWhat[] = [
-  "matches",
   "training",
+  "matches",
   "events",
   "tournaments",
   "leagues",
@@ -440,7 +454,14 @@ export function runFindSearch(input: {
   readonly criteria: FindCriteria;
   readonly yourOrganizationIds?: ReadonlySet<string>;
   readonly sessionResult: (session: FindSession) => FindResult;
+  /** Results that already ended (and are not live) are left out. */
+  readonly now?: Date;
 }): FindOutcome {
+  const nowMs = (input.now ?? new Date()).getTime();
+  const ended = (item: DiscoveryMapItem) => {
+    const end = Date.parse(item.endsAt ?? item.startsAt ?? "");
+    return !item.live && Number.isFinite(end) && end < nowMs;
+  };
   const discovery = runDiscoverySearch(
     input.items,
     toDiscoveryCriteria(input.criteria),
@@ -451,6 +472,7 @@ export function runFindSearch(input: {
   };
   const results: FindResult[] = [];
   for (const item of discovery.items) {
+    if (ended(item)) continue;
     const result = resultForItem(item, {
       origin: discovery.origin,
       yourOrganizationIds: input.yourOrganizationIds,
@@ -469,6 +491,7 @@ export function runFindSearch(input: {
       .filter((result) => result.group === key)
       .sort(
         (left, right) =>
+          Number(isClosed(left)) - Number(isClosed(right)) ||
           Number(right.live) - Number(left.live) ||
           Number(right.yours) - Number(left.yours) ||
           (Date.parse(left.startsAt ?? "") || Number.MAX_SAFE_INTEGER) -

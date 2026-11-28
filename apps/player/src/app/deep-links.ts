@@ -1,4 +1,16 @@
+import type { DiscoverIntentKind } from "../features/find/discover-intent";
 import { isRouteKey } from "./router";
+
+const INTENTS: readonly string[] = [
+  "find-match",
+  "book-court",
+  "join-event",
+  "watch-pros",
+  "search",
+];
+function isIntent(value: string | null): boolean {
+  return value !== null && INTENTS.includes(value);
+}
 import type { ShellAction } from "./shell-state";
 
 /** Where an old Live Activity link lands (kept for links already on Lock Screens). */
@@ -235,7 +247,16 @@ export function parseDevShellUrl(url: string | null): DevShellLink | null {
   const route = query.get("route");
   const id = query.get("id");
   if (route && isRouteKey(route))
-    actions.push({ type: "open", route, ...(id ? { targetId: id } : {}) });
+    actions.push({
+      type: "open",
+      route,
+      ...(id ? { targetId: id } : {}),
+      // A detail's first step, for screenshots ("book", "waitlist").
+      ...(query.get("step") ? { prompt: query.get("step")! } : {}),
+      ...(isIntent(query.get("intent"))
+        ? { intent: query.get("intent") as DiscoverIntentKind }
+        : {}),
+    });
   if (query.get("sheet") === "new") actions.push({ type: "open-sheet" });
   const theme = query.get("theme");
   return {

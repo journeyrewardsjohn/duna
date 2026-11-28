@@ -103,15 +103,33 @@ export function ActionButton({
 export function GroupHeader({
   label,
   count,
+  action,
+  onAction,
 }: {
   readonly label: string;
   readonly count: number;
+  readonly action?: string;
+  readonly onAction?: () => void;
 }) {
   return (
     <View style={styles.groupHeader}>
-      <Text accessibilityRole="header" variant="phone-heading">
-        {`${label} · ${count}`}
-      </Text>
+      <View style={styles.groupTitle}>
+        <Text accessibilityRole="header" variant="phone-heading">
+          {`${label} · ${count}`}
+        </Text>
+      </View>
+      {action && onAction ? (
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={12}
+          onPress={onAction}
+          style={styles.seeAll}
+        >
+          <Text tone="link" variant="phone-meta" weight={600}>
+            {action}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -238,7 +256,20 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   loader: { flex: 1, alignItems: "center", justifyContent: "center" },
-  groupHeader: { paddingTop: 16, paddingBottom: 8 },
+  groupHeader: {
+    paddingTop: 16,
+    paddingBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    columnGap: 8,
+  },
+  // Keeps its natural width so a long name wraps by word, and "See all"
+  // moves to the next line at large text sizes instead of squeezing it.
+  groupTitle: { flexGrow: 1, flexShrink: 0, maxWidth: "100%" },
+  fill: { flex: 1 },
+  seeAll: { minHeight: 44, justifyContent: "center" },
   row: { flexDirection: "row", alignItems: "flex-start", minHeight: 64 },
   avatar: {
     width: 40,

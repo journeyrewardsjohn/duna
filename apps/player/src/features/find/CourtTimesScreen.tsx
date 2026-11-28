@@ -7,7 +7,12 @@
  * "Continue" opens checkout (the court checkout sheet: policy, split pay,
  * hosting a match and payment, unchanged).
  */
-import { ScrollView, StyleSheet, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { formatMoney } from "@duna/core";
 import { report } from "@duna/observability";
 import { sunTimes } from "@duna/tideline-core";
@@ -86,6 +91,7 @@ export function CourtTimesScreen() {
   const runtime = usePlayerRuntime();
   const edges = usePaneEdges();
   const { colors, tokens } = useTheme();
+  const { fontScale } = useWindowDimensions();
   const venueId = entry?.targetId;
   const client = runtime.publicClient ?? runtime.client;
   const today = isoDate(new Date());
@@ -179,6 +185,9 @@ export function CourtTimesScreen() {
   }, [date, venue?.latitude, venue?.longitude]);
   const lit = inventory?.courts.some((court) => court.lit) ?? false;
   const chosen = slots.find((slot) => slot.startMinute === start);
+  // At the largest text sizes the action scrolls with the times instead of
+  // covering half the screen.
+  const largeText = fontScale >= 1.6;
 
   if (!venueId) return null;
   if (loading && !inventory) {
@@ -210,6 +219,39 @@ export function CourtTimesScreen() {
       </View>
     );
   }
+
+  const footer = (
+    <View
+      style={{
+        paddingHorizontal: edges.left + tokens.space["4"],
+        paddingTop: tokens.space["3"],
+        paddingBottom: edges.bottom + tokens.space["3"],
+        borderTopColor: colors.line,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        backgroundColor: colors.surface,
+        gap: tokens.space["1"],
+      }}
+    >
+      {chosen?.fromMinor !== undefined && chosen.currency ? (
+        <Text tabular variant="phone-body" weight={600}>
+          {`From ${formatMoney(chosen.fromMinor, chosen.currency)} · ${chosen.remaining} court${chosen.remaining === 1 ? "" : "s"} open`}
+        </Text>
+      ) : null}
+      <ActionButton
+        disabled={start === null || !duration}
+        label={start === null ? "Choose a time to continue" : "Continue"}
+        onPress={() => {
+          if (!duration) return;
+          shell.openCourtBooking({
+            venueId,
+            date,
+            durationMinutes: duration,
+          });
+        }}
+        testID="court-continue"
+      />
+    </View>
+  );
 
   return (
     <View
@@ -286,37 +328,9 @@ export function CourtTimesScreen() {
             title="Times didn't refresh"
           />
         ) : null}
+        {largeText ? footer : null}
       </ScrollView>
-      <View
-        style={{
-          paddingHorizontal: edges.left + tokens.space["4"],
-          paddingTop: tokens.space["3"],
-          paddingBottom: edges.bottom + tokens.space["3"],
-          borderTopColor: colors.line,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          backgroundColor: colors.surface,
-          gap: tokens.space["1"],
-        }}
-      >
-        {chosen?.fromMinor !== undefined && chosen.currency ? (
-          <Text tabular variant="phone-body" weight={600}>
-            {`From ${formatMoney(chosen.fromMinor, chosen.currency)} · ${chosen.remaining} court${chosen.remaining === 1 ? "" : "s"} open`}
-          </Text>
-        ) : null}
-        <ActionButton
-          disabled={start === null || !duration}
-          label={start === null ? "Choose a time to continue" : "Continue"}
-          onPress={() => {
-            if (!duration) return;
-            shell.openCourtBooking({
-              venueId,
-              date,
-              durationMinutes: duration,
-            });
-          }}
-          testID="court-continue"
-        />
-      </View>
+      {largeText ? null : footer}
     </View>
   );
 }

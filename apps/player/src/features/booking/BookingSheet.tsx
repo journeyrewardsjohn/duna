@@ -150,6 +150,7 @@ export function BookingSheet({
   onClose,
   onDone,
   onInvite,
+  startAtReview = false,
 }: {
   readonly visible: boolean;
   readonly mode: BookingSheetMode;
@@ -166,6 +167,8 @@ export function BookingSheet({
   /** Something changed: refresh the quote and the person's plans. */
   readonly onDone: () => void;
   readonly onInvite?: () => void;
+  /** Open on the confirmation (preview screenshots). */
+  readonly startAtReview?: boolean;
 }) {
   const runtime = usePlayerRuntime();
   const haptics = useHaptics();
@@ -189,7 +192,7 @@ export function BookingSheet({
       draft: { participant: me, method: firstMethod },
     });
     if (mode === "cancel") dispatch({ type: "start-cancel" });
-    else if (mode === "waitlist") dispatch({ type: "review" });
+    else if (mode === "waitlist" || startAtReview) dispatch({ type: "review" });
     setCreditsReturned(undefined);
     // Reset only when the sheet opens.
   }, [visible, mode]);

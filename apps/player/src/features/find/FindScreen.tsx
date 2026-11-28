@@ -38,6 +38,9 @@ import { whatLabel, whenLabel, type FindResult } from "./find-search";
 import { ActionButton, GroupHeader, ResultRow } from "./parts";
 import { SearchSheet } from "./SearchSheet";
 
+/** Rows a group shows before "See all". */
+const GROUP_PREVIEW = 4;
+
 /** Where a result opens. */
 export function useOpenResult(): (result: FindResult) => void {
   const shell = useShell();
@@ -170,6 +173,7 @@ function Results({
 }) {
   const find = useFind();
   const { tokens } = useTheme();
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   if (find.loading && find.results.length === 0) {
     return (
       <LoadingState count={4} label="Finding games" loading skeleton="row" />
@@ -223,8 +227,22 @@ function Results({
       {find.outcome.groups.map((group, groupIndex) => (
         <Rise delay={Math.min(groupIndex, 4) * 40} key={group.key}>
           <View style={{ gap: tokens.space["2"] }}>
-            <GroupHeader count={group.results.length} label={group.label} />
-            {group.results.map((result) => (
+            <GroupHeader
+              action={
+                group.results.length > GROUP_PREVIEW && !expanded.has(group.key)
+                  ? `See all ${group.results.length}`
+                  : undefined
+              }
+              count={group.results.length}
+              label={group.label}
+              onAction={() =>
+                setExpanded((current) => new Set([...current, group.key]))
+              }
+            />
+            {(expanded.has(group.key)
+              ? group.results
+              : group.results.slice(0, GROUP_PREVIEW)
+            ).map((result) => (
               <ResultRow
                 key={result.id}
                 onPress={() => onOpen(result)}
