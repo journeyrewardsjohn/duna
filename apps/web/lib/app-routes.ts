@@ -59,15 +59,16 @@ function route(
 }
 
 export const APP_ROUTES = {
-  // Find: courts, clubs, matches, events and coaches. The search lives on the
-  // public site; the old /app/discover addresses redirect there (proxy.ts).
+  // Find: courts, clubs, matches, events and coaches. Search is the
+  // signed-in twin of the public /discover (SITE-4); the old /results and
+  // /map addresses redirect to it with their query strings.
   search: route(
-    "/discover",
+    "/app/discover",
     "find",
     "Search",
     "find",
     "Courts, clubs, matches and events near you",
-    { external: true },
+    { rebuilt: true },
   ),
   coaches: route(
     "/coaches",
@@ -77,21 +78,13 @@ export const APP_ROUTES = {
     "Lessons, clinics and coaches to book",
     { external: true },
   ),
-  discover: route(
-    "/app/discover",
-    "find",
-    "Search",
-    "find",
-    "Moved to Search",
-    { listed: false },
-  ),
   discoverMap: route(
     "/app/discover/map",
     "find",
     "Map",
     "map",
     "Moved to Search",
-    { listed: false },
+    { listed: false, rebuilt: true },
   ),
   discoverResults: route(
     "/app/discover/results",
@@ -99,7 +92,7 @@ export const APP_ROUTES = {
     "Results",
     "find",
     "Moved to Search",
-    { listed: false },
+    { listed: false, rebuilt: true },
   ),
   venue: route(
     "/app/venues/[venueId]",
@@ -107,7 +100,7 @@ export const APP_ROUTES = {
     "Venue",
     "venue",
     "Courts and open times at a venue",
-    { listed: false },
+    { listed: false, rebuilt: true },
   ),
 
   // Play: Home is the root; plans, results and hosting live here.
