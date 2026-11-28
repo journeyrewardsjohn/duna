@@ -47,7 +47,12 @@ artifacts/
 # changing either app's installed workspace dependency graph.
 /apps/web/
 /apps/hq/
-/docs/
+# /docs is excluded except the two inputs the root postinstall needs to
+# generate packages/api/src/generated/duna-feature-knowledge.ts (the manifest
+# is no longer committed; without these the install phase fails on EAS).
+/docs/*
+!/docs/surfaces/
+!/docs/BUILD_MATRIX.md
 /tests/
 /.agents/
 /packages/db/drizzle/meta/
