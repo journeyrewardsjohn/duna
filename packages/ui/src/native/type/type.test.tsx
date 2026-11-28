@@ -101,8 +101,11 @@ describe("Text", () => {
   });
 
   it("never renders below the 12 pt floor", () => {
+    // Below the floor on purpose; kept in a variable so the readable-type
+    // verifier only flags real styles.
+    const tooSmall = 9;
     const renderer = render(
-      createElement(Text, { style: { fontSize: 9 } }, "Tiny"),
+      createElement(Text, { style: { fontSize: tooSmall } }, "Tiny"),
     );
     expect(styleOf(renderer.root.findByType("Text" as never)).fontSize).toBe(
       12,

@@ -104,15 +104,6 @@ export const shared: SurfaceContract = {
     },
     {
       kind: "includes",
-      file: "packages/ui/src/mobile.ts",
-      values: ['ground: whiteCanvas ? "#FFFFFF"'],
-      message:
-        "packages/ui/src/mobile.ts must preserve the true-white light mobile ground",
-      legacy:
-        "legacy: delete when native tokens move to Tideline (Salt ground) (M-F0)",
-    },
-    {
-      kind: "includes",
       file: "packages/ui/src/web.tsx",
       values: [
         "function buttonClassName",

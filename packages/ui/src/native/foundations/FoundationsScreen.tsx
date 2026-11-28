@@ -543,7 +543,14 @@ function Loaders({ onFirstOpen }: { readonly onFirstOpen: () => void }) {
         </Text>
         <Skeleton count={2} kind="row" />
       </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
         <View
           style={{
             flexDirection: "row",
@@ -700,8 +707,10 @@ function Body({
         <View
           style={{
             flexDirection: "row",
+            flexWrap: "wrap",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: 8,
           }}
         >
           <Text
