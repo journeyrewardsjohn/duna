@@ -6,6 +6,9 @@ const beginMarker = "    # duna-pro-ios-path-compatibility";
 const endMarker = "    # /duna-pro-ios-path-compatibility";
 const reactNativeBundleCommand =
   "`\\\"$NODE_BINARY\\\" --print \\\"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\\\"`\\n";
+// Expo SDK 58's template already quotes the command substitution, which is
+// safe for paths containing spaces, so it needs no rewrite.
+const upstreamQuotedBundleCommand = `\\"${reactNativeBundleCommand.slice(0, -2)}\\"\\n`;
 const safeReactNativeBundleCommand =
   'REACT_NATIVE_XCODE_SCRIPT=\\"$(\\"$NODE_BINARY\\" --print \\"require(\'path\').dirname(require.resolve(\'react-native/package.json\')) + \'/scripts/react-native-xcode.sh\'\\")\\"\\n\\"$REACT_NATIVE_XCODE_SCRIPT\\"\\n';
 
@@ -59,7 +62,10 @@ module.exports = function withIosPathCompatibility(config) {
           reactNativeBundleCommand,
           safeReactNativeBundleCommand,
         );
-      } else if (!project.includes(safeReactNativeBundleCommand)) {
+      } else if (
+        !project.includes(safeReactNativeBundleCommand) &&
+        !project.includes(upstreamQuotedBundleCommand)
+      ) {
         throw new Error(
           "Duna Pro could not locate the React Native bundle script.",
         );

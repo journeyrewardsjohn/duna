@@ -221,7 +221,7 @@ export function DunaApp() {
       setEventIndex(null);
       setTab(link.tab);
     };
-    void Linking.getInitialURL().then(openLiveActivity);
+    void Linking.getInitialURL().then((url) => openLiveActivity(url ?? null));
     const subscription = Linking.addEventListener("url", ({ url }) =>
       openLiveActivity(url),
     );

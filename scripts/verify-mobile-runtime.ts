@@ -11,11 +11,17 @@ interface PackageManifest {
 interface ExpoAppManifest {
   readonly expo?: {
     readonly ios?: {
+      readonly supportsTablet?: boolean;
+      readonly requireFullScreen?: boolean;
       readonly entitlements?: Readonly<Record<string, unknown>>;
       readonly infoPlist?: Readonly<Record<string, unknown>>;
     };
+    readonly plugins?: readonly unknown[];
   };
 }
+
+// iOS minimum for both apps (owner decision, Tideline 4.1.1 adaptive rules).
+const minimumIosVersion = "26.0";
 
 interface RuntimeResolution {
   readonly app: string;
@@ -149,11 +155,58 @@ function verifyPlayerHealthPrivacy(): {
   };
 }
 
+function verifyAdaptiveIosConfig(appDirectory: "apps/player" | "apps/pro"): {
+  readonly app: string;
+  readonly deploymentTarget: string;
+  readonly universal: boolean;
+  readonly resizable: boolean;
+} {
+  const appManifest = JSON.parse(
+    readFileSync(resolve(workspaceRoot, appDirectory, "app.json"), "utf8"),
+  ) as ExpoAppManifest;
+  const ios = appManifest.expo?.ios;
+  const buildProperties = appManifest.expo?.plugins?.find(
+    (plugin): plugin is [string, { ios?: Record<string, unknown> }] =>
+      Array.isArray(plugin) && plugin[0] === "expo-build-properties",
+  );
+  const iosBuildProperties = buildProperties?.[1]?.ios ?? {};
+
+  assert(
+    iosBuildProperties.deploymentTarget === minimumIosVersion,
+    `${appDirectory} must set ios.deploymentTarget ${minimumIosVersion} through expo-build-properties`,
+  );
+  // SDK 58 always uses the UIKit scene life cycle; the SDK 57 opt-in is obsolete.
+  assert(
+    !("enableSceneSupport" in iosBuildProperties),
+    `${appDirectory} must not set the obsolete ios.enableSceneSupport build property`,
+  );
+  assert(
+    ios?.supportsTablet === true,
+    `${appDirectory} must stay universal (ios.supportsTablet)`,
+  );
+  assert(
+    ios?.requireFullScreen !== true &&
+      ios?.infoPlist?.UIRequiresFullScreen !== true,
+    `${appDirectory} must not opt out of resizable windows`,
+  );
+
+  return {
+    app: appDirectory,
+    deploymentTarget: minimumIosVersion,
+    universal: true,
+    resizable: true,
+  };
+}
+
 console.log(
   JSON.stringify(
     {
       status: "ok",
       runtimes: [verifyApp("apps/player"), verifyApp("apps/pro")],
+      adaptiveIos: [
+        verifyAdaptiveIosConfig("apps/player"),
+        verifyAdaptiveIosConfig("apps/pro"),
+      ],
       healthPrivacy: verifyPlayerHealthPrivacy(),
     },
     null,

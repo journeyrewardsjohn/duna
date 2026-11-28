@@ -12,6 +12,9 @@
         "EXPO_PUBLIC_DUNA_PREVIEW": "true",
         "EXPO_PUBLIC_DUNA_AUTH_URL": "https://duna.coach",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "preview": {
@@ -21,6 +24,9 @@
         "EXPO_PUBLIC_DUNA_PREVIEW": "true",
         "EXPO_PUBLIC_DUNA_AUTH_URL": "https://duna.coach",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "preview-simulator": {
@@ -32,7 +38,8 @@
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
       },
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "testflight": {
@@ -43,6 +50,9 @@
         "EXPO_PUBLIC_DUNA_PREVIEW": "false",
         "EXPO_PUBLIC_DUNA_AUTH_URL": "https://duna.coach",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "production": {
@@ -52,6 +62,9 @@
         "EXPO_PUBLIC_DUNA_PREVIEW": "false",
         "EXPO_PUBLIC_DUNA_AUTH_URL": "https://duna.coach",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     }
   },

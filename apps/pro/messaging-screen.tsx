@@ -349,7 +349,7 @@ export function ProMessagingScreen({
   const [creating, setCreating] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>();
   const [enablingNotifications, setEnablingNotifications] = useState(false);
-  const threadScroll = useRef<ScrollView>(null);
+  const threadScroll = useRef<import("react-native").ScrollViewInstance>(null);
   const initialPersonApplied = useRef(false);
   const initialAudienceApplied = useRef(false);
 

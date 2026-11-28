@@ -78,7 +78,7 @@ export function DunaAiScreen({
   readonly pathname: string;
 }) {
   const runtime = useProRuntime();
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<import("react-native").ScrollViewInstance>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();

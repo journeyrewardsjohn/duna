@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text as NativeText,
   TextInput as NativeTextInput,
+  type TextInputInstance,
   type TextInputProps,
   type TextProps,
   type TextStyle,
@@ -135,7 +136,7 @@ export function DunaNumericText({
 export function SatoshiTextInput({
   style,
   ...props
-}: TextInputProps & { readonly ref?: Ref<NativeTextInput> }) {
+}: TextInputProps & { readonly ref?: Ref<TextInputInstance> }) {
   return (
     <NativeTextInput
       {...props}

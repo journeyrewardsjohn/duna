@@ -15,6 +15,9 @@
         "EXPO_PUBLIC_DUNA_WEB_URL": "https://duna.coach",
         "EXPO_PUBLIC_MAPBOX_API_TOKEN": "pk.eyJ1Ijoiam91cm5leXJld2FyZHMiLCJhIjoiY21zZ2owdmptMDEzdDJ3cTMwMzB1NjlmZyJ9.R8GE9N4AarYIttUwtvuCzQ",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "preview": {
@@ -27,6 +30,9 @@
         "EXPO_PUBLIC_DUNA_WEB_URL": "https://duna.coach",
         "EXPO_PUBLIC_MAPBOX_API_TOKEN": "pk.eyJ1Ijoiam91cm5leXJld2FyZHMiLCJhIjoiY21zZ2owdmptMDEzdDJ3cTMwMzB1NjlmZyJ9.R8GE9N4AarYIttUwtvuCzQ",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "preview-simulator": {
@@ -41,7 +47,8 @@
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
       },
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "testflight": {
@@ -55,6 +62,9 @@
         "EXPO_PUBLIC_DUNA_WEB_URL": "https://duna.coach",
         "EXPO_PUBLIC_MAPBOX_API_TOKEN": "pk.eyJ1Ijoiam91cm5leXJld2FyZHMiLCJhIjoiY21zZ2owdmptMDEzdDJ3cTMwMzB1NjlmZyJ9.R8GE9N4AarYIttUwtvuCzQ",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "production": {
@@ -67,6 +77,9 @@
         "EXPO_PUBLIC_DUNA_WEB_URL": "https://duna.coach",
         "EXPO_PUBLIC_MAPBOX_API_TOKEN": "pk.eyJ1Ijoiam91cm5leXJld2FyZHMiLCJhIjoiY21zZ2owdmptMDEzdDJ3cTMwMzB1NjlmZyJ9.R8GE9N4AarYIttUwtvuCzQ",
         "EXPO_PUBLIC_WORKOS_CLIENT_ID": "client_01KYZD6CFHPKW2C43JMF1GKQDN"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     }
   },
