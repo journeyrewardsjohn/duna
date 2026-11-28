@@ -15,10 +15,14 @@ import { expectAccessible } from "./personas/support/a11y";
 const LEGACY_SHEETS = /globals|design-v3|design-v4|public-website|player-focus/;
 
 async function expectNoHorizontalOverflow(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(2);
+  // Measured once the page's Cross-in (16 to 24 px of travel) has settled.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    )
+    .toBeLessThanOrEqual(2);
 }
 
 async function wide(page: Page) {
@@ -146,7 +150,9 @@ test.describe("find a game", () => {
     await expect(
       page.getByRole("heading", { name: "Nearest to Qzxv Lagoon" }),
     ).toBeVisible();
-    const add = page.getByRole("link", { name: "Add a score", exact: true });
+    const add = page
+      .getByRole("region", { name: /No games match/ })
+      .getByRole("link", { name: "Add a score", exact: true });
     await expect(add).toHaveAttribute("href", "/add-score?where=Qzxv%20Lagoon");
     await add.click();
     await page.waitForURL(/\/add-score\?where=Qzxv/);
