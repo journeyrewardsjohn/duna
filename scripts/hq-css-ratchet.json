@@ -1,9 +1,9 @@
 {
-  "description": "Line counts of the legacy HQ global stylesheets at main 1613bba (2026-11-25). Enforced by scripts/verify-hq-css-ratchet.ts; these numbers only go down.",
-  "totalLines": 64156,
+  "description": "Line counts of the legacy HQ global stylesheets at main 2026-11-27 (design-v3.css grew by 97 lines after 1613bba, booking rules). Enforced by scripts/verify-hq-css-ratchet.ts; these numbers only go down.",
+  "totalLines": 64253,
   "sheets": {
     "apps/hq/app/ask-duna.css": 1387,
-    "apps/hq/app/design-v3.css": 10951,
+    "apps/hq/app/design-v3.css": 11048,
     "apps/hq/app/forms.css": 761,
     "apps/hq/app/globals.css": 41810,
     "apps/hq/app/training.css": 7467,

@@ -91,9 +91,11 @@ The command builds HQ in demo mode itself, starts it on port `3210`, and
 compares against baselines. It never reads `apps/hq/.env.local` values for
 the database or WorkOS: the config blanks them.
 
-`tests/e2e/hq-visual/routes.ts` is the route matrix. A new `page.tsx` must be
+`tests/e2e/hq-visual/routes.ts` is the route matrix. A new route in the central
+HQ route map (`packages/core/src/hq-routes.ts`, `@duna/core/hq-routes`) must be
 added to `visualRoutes`, or to `skippedPages` with the reason it cannot render
-in demo mode; `route-manifest.spec.ts` fails otherwise.
+in demo mode; `route-manifest.spec.ts` fails otherwise. Development-only
+surfaces (`hqDevOnlyRoutePrefixes`, today the Tideline gallery) are excluded.
 
 ### Where baselines come from
 
@@ -182,7 +184,8 @@ both statically unmatched and unexercised, and the visual suite still passes;
 hover, focus, dialog, and error states, and the routes demo mode cannot
 render, are outside the matrix.
 
-`pnpm verify:hq-css-ratchet` is part of `pnpm verify`. It fails when any HQ
+`pnpm verify:hq-css-ratchet` is part of `pnpm verify` and of the
+`static-checks` job in `verify.yml`. It fails when any HQ
 global stylesheet has more lines than `scripts/hq-css-ratchet.json` records.
 After deleting or splitting CSS, run it with `--update` and commit the lower
 numbers.
