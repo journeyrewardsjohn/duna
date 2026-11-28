@@ -1,7 +1,7 @@
 /**
  * Regenerates the Tideline token outputs from the design contract.
  *
- *   pnpm tideline:tokens           write tokens.json, tokens.css and tokens.ts
+ *   pnpm tideline:tokens           write tokens.json, tokens.css, tokens.root.css and tokens.ts
  *   pnpm tideline:tokens --check   exit 1 when a generated file is stale
  *
  * The source of truth is the contract's `docs/design/tideline-4.1.1/tokens.json`.
@@ -9,6 +9,8 @@
  * contract's `$duna` zone and icon decisions into tokens
  * (`canonicalTidelineSource`), writing `packages/ui/src/tideline/tokens/tokens.json`,
  * the code source that web (`tokens.css`, `tokens.ts`) and native builders read.
+ * `tokens.root.css` carries the same custom properties on `:root` for the
+ * legacy stylesheets (variables only; see docs/design/legacy-aliases.md).
  * Names the code needs before design publishes them live in
  * `tokens.additions.json`. To take a new design revision, replace the contract
  * file and run the first command.
@@ -17,6 +19,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { format } from "prettier";
 import {
+  buildTidelineRootTokensCss,
   buildTidelineTokensCss,
   buildTidelineTokensTs,
   canonicalTidelineSource,
@@ -49,6 +52,10 @@ async function main() {
     [
       join(directory, "tokens.css"),
       await format(buildTidelineTokensCss(source), { parser: "css" }),
+    ],
+    [
+      join(directory, "tokens.root.css"),
+      await format(buildTidelineRootTokensCss(source), { parser: "css" }),
     ],
     [
       join(directory, "tokens.ts"),

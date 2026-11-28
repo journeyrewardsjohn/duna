@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { format } from "prettier";
 import { describe, expect, it } from "vitest";
 import {
+  buildTidelineRootTokensCss,
   buildTidelineTokensCss,
   buildTidelineTokensTs,
   canonicalTidelineSource,
@@ -65,6 +66,45 @@ describe("Tideline token pipeline", () => {
     expect(css).toBe(
       await format(buildTidelineTokensCss(source), { parser: "css" }),
     );
+  });
+
+  it("tokens.root.css is current with tokens.json (run `pnpm tideline:tokens`)", async () => {
+    expect(read("tokens.root.css")).toBe(
+      await format(buildTidelineRootTokensCss(source), { parser: "css" }),
+    );
+  });
+
+  it("tokens.root.css carries the same --td-* values on :root, and nothing else", () => {
+    const root = read("tokens.root.css");
+    expect(root).not.toContain("@layer");
+    expect(root).not.toMatch(/color-scheme/);
+    // next/font defines the families on <html>; the root sheet must not.
+    expect(root).not.toMatch(/--td-font-(?:ui|brand|mono|display|numeric):/);
+    const declarations = root.match(/^\s+[a-z-]+(?=:)/gm) ?? [];
+    expect(declarations.length).toBeGreaterThan(200);
+    expect(declarations.every((name) => name.trim().startsWith("--td-"))).toBe(
+      true,
+    );
+    const selectors = root.match(/^[^\s@}/].*(?=,$| \{$)/gm) ?? [];
+    expect(selectors.every((selector) => selector.startsWith(":root"))).toBe(
+      true,
+    );
+    expect(root).toContain(':root,\n:root[data-theme="light"] {');
+    expect(root).toContain(':root[data-theme="dark"] {');
+    expect(root).toContain(
+      ':root[data-zone="live"],\n:root [data-zone="live"] {',
+    );
+    expect(root).toContain(':root[data-zone="hq"] {');
+    // Every colour role the library declares has the same value at the root.
+    const roleLines = (sheet: string) =>
+      new Set(
+        (sheet.match(/^\s+--td-[a-z0-9-]+: [^;]+;/gm) ?? []).map((line) =>
+          line.trim(),
+        ),
+      );
+    const library = roleLines(css);
+    const legacy = roleLines(root);
+    for (const line of legacy) expect(library.has(line)).toBe(true);
   });
 
   it("tokens.ts is current with tokens.json (run `pnpm tideline:tokens`)", async () => {

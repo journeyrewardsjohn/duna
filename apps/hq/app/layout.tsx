@@ -41,6 +41,7 @@ export default function RootLayout({
       className={dunaFontClassName}
       data-theme="light"
       data-theme-preference="system"
+      data-zone="hq"
       lang="en"
       suppressHydrationWarning
     >
