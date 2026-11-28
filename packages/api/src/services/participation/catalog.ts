@@ -421,7 +421,8 @@ async function syncFromOccurrence(
 }
 
 export interface ParticipationNoticeIntent {
-  readonly organizationId: string;
+  /** Null only for a player-hosted pickup with no club. */
+  readonly organizationId: string | null;
   readonly subjectType?: string;
   readonly subjectId: string;
   readonly recipientPersonId: string;

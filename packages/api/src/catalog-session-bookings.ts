@@ -33,6 +33,8 @@ import {
   loadDecision,
 } from "./services/participation/catalog";
 import { participationAdjustments } from "@duna/db";
+import { log } from "@duna/observability";
+import { offerOpenPlaces } from "./services/participation/waitlist";
 import { refundOrganizationOrder } from "./catalog-service";
 import type { ApiActor } from "./context";
 
@@ -1229,6 +1231,14 @@ export async function cancelCatalogSessionBooking(input: {
       })
       .onConflictDoNothing();
   }
+  // A place opened: offer it to the next person waiting (PART-4).
+  await offerOpenPlaces({ now: input.now, subjectId: row.occurrence.id }).catch(
+    (error: unknown) =>
+      log.error("participation.waitlist.offerFailed", {
+        subjectId: row.occurrence.id,
+        error,
+      }),
+  );
   await database.insert(auditLog).values({
     organizationId,
     actorPersonId: input.actor.personId,

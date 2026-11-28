@@ -21,6 +21,7 @@ import {
 import { and, eq, gt, inArray, or, isNull } from "drizzle-orm";
 import { assertGuardianCanBookFor } from "../../catalog-checkout";
 import type { ApiActor } from "../../context";
+import { myWaitlistEntry } from "./waitlist";
 import {
   ACTIVE_BOOKING_STATUSES,
   ParticipationError,
@@ -43,6 +44,8 @@ export interface ParticipationQuote {
   readonly maxCharge?: number;
   readonly alreadyBooked: boolean;
   readonly lockAt?: string;
+  /** PART-4: the viewer's place on the waitlist, if any. */
+  readonly waitlist?: Awaited<ReturnType<typeof myWaitlistEntry>>;
 }
 
 /** Whether this person already holds a place (decision 5). */
@@ -139,6 +142,12 @@ export async function participationQuote(input: {
         now: input.now,
       })
     : false;
+  const waitlist = participantPersonId
+    ? await myWaitlistEntry({
+        subjectId: occurrence.id,
+        personId: participantPersonId,
+      })
+    : undefined;
   const display = participationDisplay({
     rule: picture?.rule,
     title: item.title,
@@ -179,5 +188,6 @@ export async function participationQuote(input: {
       : {}),
     alreadyBooked,
     ...(picture ? { lockAt: picture.lockAt.toISOString() } : {}),
+    ...(waitlist ? { waitlist } : {}),
   };
 }
