@@ -419,6 +419,10 @@
 
     /* ---------- Page and states ---------- */
 
+    .site-stage {
+      overflow-x: clip;
+    }
+
     .site-page {
       min-height: 60dvh;
     }
