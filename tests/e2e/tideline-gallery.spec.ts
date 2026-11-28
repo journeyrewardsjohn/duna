@@ -738,3 +738,248 @@ test.describe("Tideline gallery, foundations", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+test.describe("Tideline gallery, interaction kit", () => {
+  test.beforeEach(async ({ page }) => {
+    await openGallery(page);
+  });
+
+  test("a double click or double tap books once", async ({ page }) => {
+    const lab = page.locator("section#interactions");
+    await lab.getByRole("radio", { name: "600ms" }).click();
+    const book = lab.getByRole("button", { name: "Book court 2" });
+    await book.dblclick();
+    await book.click({ force: true });
+    await expect(book).toHaveAttribute("aria-busy", "true");
+    await expect(
+      page.locator(".td-toast").filter({ hasText: "Court 2 booked" }),
+    ).toBeVisible();
+    await expect(lab.getByTestId("book-calls")).toHaveText("Action calls: 1");
+  });
+
+  test("Enter held down books once, and a retry reuses the key", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Keyboard, on desktop");
+    const lab = page.locator("section#interactions");
+    await lab.getByRole("radio", { name: "0ms", exact: true }).click();
+    const book = lab.getByRole("button", { name: "Book court 2" });
+    await book.focus();
+    // A held key repeats keydown; only the first press counts.
+    for (let repeat = 0; repeat < 10; repeat += 1) {
+      await page.keyboard.down("Enter");
+    }
+    await page.keyboard.up("Enter");
+    await page.waitForTimeout(800);
+    await expect(lab.getByTestId("book-calls")).toHaveText("Action calls: 1");
+
+    // A failure, then a retry: the same idempotency key both times.
+    await lab.getByRole("button", { name: "New booking" }).click();
+    await lab.getByRole("switch", { name: "Fail next request" }).click();
+    await book.click();
+    await expect(
+      page.getByText("Could not book the court. Nothing was charged."),
+    ).toBeVisible();
+    await book.click();
+    await expect(lab.getByTestId("book-calls")).toHaveText("Action calls: 3");
+    const keys = (await lab.getByTestId("book-keys").textContent()) ?? "";
+    const [, second, third] = keys.replace("Keys: ", "").split(", ");
+    expect(second).toBeTruthy();
+    expect(third).toBe(second);
+  });
+
+  test("debounced search sends one request per burst and ignores a stale answer", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Typing, on desktop");
+    const lab = page.locator("section#interactions");
+    await lab.getByRole("radio", { name: "150ms" }).click();
+    const input = lab.getByRole("textbox", { name: "Find a player" });
+    const counts = lab.getByTestId("latest-counts");
+    const results = lab.getByTestId("latest-results");
+
+    // "sa" is a burst: one request, which this fake server answers slowly.
+    await input.pressSequentially("sa", { delay: 30 });
+    await expect(counts).toHaveText("Requests: 1 · stale answers ignored: 0");
+    // A second burst while it is in flight: one more request, answered fast.
+    await input.pressSequentially("m rivera", { delay: 30 });
+    await expect(results).toHaveText("Results for “sam rivera”: Sam Rivera");
+    await expect(counts).toHaveText("Requests: 2 · stale answers ignored: 0");
+    // The first answer arrives late and is dropped: the results stay.
+    await expect(counts).toHaveText("Requests: 2 · stale answers ignored: 1");
+    await expect(results).toHaveText("Results for “sam rivera”: Sam Rivera");
+  });
+
+  test("Undo restores an archived drill", async ({ page }) => {
+    const lab = page.locator("section#confirmations");
+    await lab.getByRole("radio", { name: "150ms" }).click();
+    const count = lab.getByTestId("drill-count");
+    await expect(count).toHaveText("4 drills");
+    await lab.getByRole("button", { name: "Archive Serve receive" }).click();
+    // Tier 0: no dialog, the change shows at once.
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(count).toHaveText("3 drills");
+    const toast = page
+      .locator(".td-toast")
+      .filter({ hasText: "Serve receive archived" });
+    await expect(toast).toBeVisible();
+    await expect(toast.locator(".td-toast__countdown")).toBeAttached();
+    await toast.getByRole("button", { name: "Undo" }).click();
+    await expect(count).toHaveText("4 drills");
+    await expect(
+      page.locator(".td-toast").filter({ hasText: "Serve receive restored" }),
+    ).toBeVisible();
+  });
+
+  test("tier 1: Cancel is first for destructive actions, Escape answers no", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Keyboard, on desktop");
+    const lab = page.locator("section#confirmations");
+    await lab.getByRole("radio", { name: "0ms", exact: true }).click();
+    const trigger = lab.getByRole("button", { name: "Cancel practice" });
+    await trigger.click();
+    const dialog = page.getByRole("alertdialog", {
+      name: "Cancel Tuesday practice?",
+    });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("14 players on the roster are emailed");
+    await expect(
+      dialog.getByRole("button", { name: "Keep practice" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    const verb = dialog.getByRole("button", {
+      name: "Cancel and notify 14 players",
+    });
+    await expect(verb).toBeFocused();
+    await expect(verb).toHaveAttribute(
+      "data-agent-confirm",
+      "Cancels Tuesday's 6:00 PM practice and emails 14 players",
+    );
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(
+      lab.getByText("Tuesday practice, 6:00 PM · Scheduled"),
+    ).toBeVisible();
+
+    // Not destructive: focus starts on the verb, and it runs.
+    await lab.getByRole("button", { name: "Publish change" }).click();
+    const publish = page.getByRole("alertdialog", {
+      name: "Publish the website change?",
+    });
+    const publishVerb = publish.getByRole("button", {
+      name: "Publish opening hours",
+    });
+    await expect(publishVerb).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(publish).toBeHidden();
+    await expect(
+      page.locator(".td-toast").filter({ hasText: "Opening hours published" }),
+    ).toBeVisible();
+  });
+
+  test("tier 2 restates the amount and reference; typing is only for bulk removal", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Keyboard, on desktop");
+    const lab = page.locator("section#confirmations");
+    await lab.getByRole("radio", { name: "0ms", exact: true }).click();
+
+    await lab.getByRole("button", { name: "Refund booking" }).click();
+    const refund = page.getByRole("alertdialog", {
+      name: "Refund this booking?",
+    });
+    await expect(refund).toContainText("$48.00 (USD)");
+    await expect(refund).toContainText("Jane Doe");
+    await expect(refund).toContainText("BK-2041");
+    await expect(refund.getByRole("textbox")).toHaveCount(0);
+    await expect(
+      refund.getByRole("button", { name: "Keep booking" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(refund).toBeHidden();
+
+    await lab.getByRole("button", { name: "Remove from group" }).click();
+    const remove = page.getByRole("alertdialog", {
+      name: "Remove 12 members from Juniors?",
+    });
+    const phrase = remove.getByRole("textbox");
+    await expect(phrase).toBeFocused();
+    const verb = remove.getByRole("button", { name: "Remove 12 members" });
+    await expect(verb).toBeDisabled();
+    await phrase.fill("Remove 12 Members");
+    await expect(verb).toBeEnabled();
+    await verb.click();
+    await expect(remove).toBeHidden();
+    await expect(
+      page.locator(".td-toast").filter({ hasText: "12 members removed" }),
+    ).toBeVisible();
+  });
+
+  test("inside a dialog the confirmation replaces its content, never two deep", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Keyboard, on desktop");
+    const lab = page.locator("section#confirmations");
+    await lab.getByRole("button", { name: "Edit practice" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit practice" });
+    await expect(dialog).toBeVisible();
+    const remove = dialog.getByRole("button", { name: "Delete practice" });
+    await remove.click();
+    await expect(
+      dialog.getByRole("heading", { name: "Delete this practice?" }),
+    ).toBeVisible();
+    // One modal on screen: the question did not open a second dialog.
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(dialog.getByRole("button", { name: "Keep it" })).toBeFocused();
+    await expect(
+      dialog.getByRole("button", { name: "Delete and notify 14" }),
+    ).toHaveAttribute("data-agent-confirm", /Deletes Tuesday practice/);
+    // Escape answers no and keeps the dialog.
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("textbox", { name: "Practice name" }),
+    ).toBeVisible();
+    await expect(remove).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  });
+
+  test("motion turns into a short fade under reduced motion", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    const section = page.locator("section#motion");
+    await section.getByRole("button", { name: "Play Rise" }).click();
+    const rise = section.locator(".td-rise").first();
+    const style = await rise.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        duration: computed.animationDuration,
+        travel: computed.getPropertyValue("--td-motion").trim(),
+      };
+    });
+    // Nothing travels; the token fade is at most 200 ms. (HQ's legacy global
+    // reduced-motion rule can shorten it further until F5a layers that CSS.)
+    expect(style.travel).toBe("0");
+    expect(Number.parseFloat(style.duration)).toBeLessThanOrEqual(0.2);
+    // Loaders rest instead of looping.
+    const crest = page.locator(".td-rallyloader__crest").first();
+    await expect(crest).toHaveCSS("animation-name", "none");
+  });
+
+  test("a number change moves only the changed digit", async ({ page }) => {
+    const score = page.locator("section#motion").getByTestId("score");
+    await page
+      .locator("section#motion")
+      .getByRole("button", { name: "Point to us" })
+      .click();
+    await expect(score).toContainText("15");
+    await expect(score.locator(".td-numchange__char--changed")).toHaveCount(1);
+  });
+});

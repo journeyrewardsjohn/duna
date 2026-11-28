@@ -167,6 +167,23 @@ describe("Tideline stylesheet rules", () => {
         "td-sweep",
         "td-shimmer",
         "td-tide-sweep",
+        // The brand loaders (loops with a resting state).
+        "td-crest-swell",
+        "td-crest-grow",
+        "td-cross-travel",
+        "td-cross-arc",
+        "td-serve-draw",
+        // The Undo window's line (once).
+        "td-toast-countdown",
+        // The motion verbs and the first open (once each).
+        "td-rise",
+        "td-cross",
+        "td-fade-out",
+        "td-digit",
+        "td-line-stand",
+        "td-crest-rise",
+        "td-draw",
+        "td-page-turn",
       ]),
     );
     const marker = "@media (prefers-reduced-motion: reduce)";
@@ -185,6 +202,11 @@ describe("Tideline stylesheet rules", () => {
       ["loaders", ".td-skel"],
       ["surfaces", ".td-chip--live::before"],
       ["progress", ".td-progress__fill[data-indeterminate]"],
+      ["loaders", ".td-rallyloader__crest"],
+      ["loaders", ".td-crossing__travel"],
+      ["loaders", ".td-serve__stroke"],
+      ["toast", ".td-toast__countdown"],
+      ["motion", ".td-firstopen"],
     ] as const) {
       expect(reduced(name), selector).toContain(selector);
     }

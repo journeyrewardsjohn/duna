@@ -5,6 +5,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { buttonClassName, type ButtonStyleOptions } from "./button-style";
 import { cx } from "../base/cx";
 import { useDelayedLoading } from "../interactions/interactions";
+import { MicroRally } from "../loaders/brand-loaders";
 
 type UiButtonProps = ComponentProps<typeof UiButton>;
 
@@ -29,9 +30,10 @@ export interface ButtonProps
   rel?: string;
 }
 
+/** The brand's in-button loader: the micro mark with its crest swelling. */
 const busy = (
   <span className="td-btn__busy">
-    <span aria-hidden="true" className="td-spinner td-spinner--sm" />
+    <MicroRally />
   </span>
 );
 
@@ -39,10 +41,10 @@ const busy = (
  * Runs an action, or navigates with `href`. Built on UI SDK's Button: pending
  * state, `aria-busy`, the delayed "Loading" announcement and disabled links.
  *
- * Loading blocks a second press at once, but the spinner only appears after
- * 250ms and then stays 400ms (`useDelayedLoading`), so quick saves do not
- * flicker. The button keeps its width and its label; the spinner takes the
- * icon's place.
+ * Loading blocks a second press at once, but the loader (the micro Rally)
+ * only appears after 250ms and then stays 400ms (`useDelayedLoading`), so
+ * quick saves do not flicker. The button keeps its width, colour and label;
+ * the loader takes the icon's place.
  */
 export function Button({
   variant,

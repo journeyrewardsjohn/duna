@@ -45,3 +45,7 @@
 @import "./loaders/loaders.css";
 @import "./command-palette/command-palette.css";
 @import "./booking/booking.css";
+@import "./motion/motion.css";
+@import "./confirm/confirm.css";
+@import "./states/states.css";
+@import "./form/form.css";
