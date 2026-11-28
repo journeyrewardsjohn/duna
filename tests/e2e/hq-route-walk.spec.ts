@@ -149,8 +149,6 @@ const knownFailures: Readonly<Record<string, string>> = {
     "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
   [extraPaths.adminSupport]:
     "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
-  [extraPaths.adminOrganization]:
-    "Unassigned (Super Admin; no package yet): needs a platform role and a connected organization record.",
 };
 
 /** One or more concrete paths per page template, plus the league filter. */
