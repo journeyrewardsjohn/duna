@@ -41,7 +41,14 @@ const VIEWS: readonly { readonly key: AgendaView; readonly label: string }[] = [
   { key: "coach", label: "By coach" },
 ];
 
-const TOOLS: readonly RouteKey[] = ["calendar", "checkin", "events"];
+const TOOLS: readonly RouteKey[] = [
+  "calendar",
+  "checkin",
+  "events",
+  "availability",
+  "timeAway",
+  "cover",
+];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 

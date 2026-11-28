@@ -29,6 +29,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { dunaHqUrl } from "../../mobile-api";
 import { useProRuntime } from "../../runtime";
+import { ROUTES } from "./router";
 import { useShell } from "./ShellContext";
 import { Card, Row, SectionHead, StatusChip, usePaneEdges } from "./ui";
 import { initialsOf } from "./TopBar";
@@ -138,6 +139,22 @@ export function AccountScreen() {
           title="Club tools"
         />
       </Card>
+
+      <View style={styles.block}>
+        <SectionHead title="Your work" />
+        <Card>
+          {(["availability", "timeAway", "cover"] as const).map((key) => (
+            <Row
+              icon={ROUTES[key].icon}
+              key={key}
+              onPress={() => shell.open(key)}
+              summary={ROUTES[key].summary}
+              testID={`account-${key}`}
+              title={ROUTES[key].title}
+            />
+          ))}
+        </Card>
+      </View>
 
       {failure ? (
         <ErrorState compact reference={failure} title="That didn't work" />
