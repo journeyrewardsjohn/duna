@@ -26,9 +26,14 @@
     "./website-provisioning": "./src/website-provisioning.ts"
   },
   "scripts": {
+    "knowledge:generate": "pnpm --workspace-root run knowledge:generate",
+    "prebuild": "pnpm --workspace-root run knowledge:generate",
     "build": "tsc -p tsconfig.build.json",
+    "prelint": "pnpm --workspace-root run knowledge:generate",
     "lint": "eslint src",
+    "pretypecheck": "pnpm --workspace-root run knowledge:generate",
     "typecheck": "tsc --noEmit",
+    "pretest": "pnpm --workspace-root run knowledge:generate",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:firecrawl-parity": "tsx scripts/verify-firecrawl-parity.ts"
