@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import {
   Tabs,
   type TabSelectedEvent,
@@ -8,6 +8,7 @@ import {
 } from "react-native-screens";
 import type { NativeSyntheticEvent } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { tabSymbolsSupported } from "./tab-symbols";
 
 export interface ChromeTab {
   readonly key: string;
@@ -49,6 +50,12 @@ export interface NavigationChromeProps {
 }
 
 const CENTER_KEY = "__duna_center_action";
+
+const SYMBOLS = tabSymbolsSupported({
+  os: Platform.OS,
+  isPad: Platform.OS === "ios" && Platform.isPad,
+  version: Platform.Version,
+});
 
 /** Where the centre action goes: the middle of the tab list. Pure; unit-tested. */
 export function chromeItems(
@@ -147,7 +154,11 @@ export function NavigationChrome({
         item.kind === "tab" ? (
           <Tabs.Screen
             badgeValue={item.tab.badge}
-            ios={{ icon: { type: "sfSymbol", name: item.tab.systemImage } }}
+            ios={
+              SYMBOLS
+                ? { icon: { type: "sfSymbol", name: item.tab.systemImage } }
+                : undefined
+            }
             key={item.tab.key}
             screenKey={item.tab.key}
             title={item.tab.title}
@@ -161,7 +172,11 @@ export function NavigationChrome({
           </Tabs.Screen>
         ) : (
           <Tabs.Screen
-            ios={{ icon: { type: "sfSymbol", name: item.action.systemImage } }}
+            ios={
+              SYMBOLS
+                ? { icon: { type: "sfSymbol", name: item.action.systemImage } }
+                : undefined
+            }
             key={item.key}
             preventNativeSelection
             screenKey={item.key}
