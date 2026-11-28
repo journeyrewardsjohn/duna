@@ -33,3 +33,4 @@ export { default as document } from "./document";
 export { default as score } from "./score";
 export { default as identity } from "./identity";
 export { default as wallet } from "./wallet";
+export { default as object } from "./object";

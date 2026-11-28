@@ -60,7 +60,11 @@ export const hq: SurfaceContract = {
     // The shell and rebuilt screens' components render only inside
     // app/(next), so they may not reach a legacy sheet either (the legacy
     // pages' AccessDenied wrapper and ThemedTideline load the bridge).
-    ...["apps/hq/components/shell", "apps/hq/components/today"].map((root) => ({
+    ...[
+      "apps/hq/components/shell",
+      "apps/hq/components/today",
+      "apps/hq/components/money",
+    ].map((root) => ({
       kind: "treeExcludes" as const,
       root,
       values: [...legacySheets, '"@/lib/access"', "themed-tideline"],

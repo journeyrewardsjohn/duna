@@ -28,6 +28,7 @@ import {
   organizationParticipants,
   organizationStaffInvitations,
   organizationStaffProfiles,
+  staffBlackouts,
   organizations,
   orders,
   people,
@@ -47,8 +48,14 @@ import {
   venues,
 } from "@duna/db";
 import { demoOrganization } from "@duna/core/demo";
+import { report } from "@duna/observability";
 import type { KobCompetitionConfig } from "@duna/core";
 import { and, asc, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
+import {
+  legacyAvailabilityView,
+  openCoverageForUnavailability,
+  saveFromLegacyEditor,
+} from "./services/team-availability";
 import { stableHash } from "./canonical";
 import {
   applyCourtScheduleChanges,
@@ -1632,6 +1639,21 @@ export async function loadOperatorWorkspace(
       .orderBy(desc(communicationUsagePeriods.periodStart))
       .limit(1),
   ]);
+  // B3a: availability comes from the named-schedule tables, shown in the
+  // legacy shape this workspace has always returned.
+  const staffAvailabilityView = await legacyAvailabilityView(
+    staffProfileRows.map((row) => ({
+      id: row.profile.id,
+      organizationId: row.profile.organizationId,
+      personId: row.profile.personId,
+      displayName: row.displayName,
+      staffRole: row.profile.staffRole,
+      active: row.profile.active,
+      createdAt: row.profile.createdAt,
+      legacyAvailability: row.profile.availability,
+    })),
+    organization.timezone,
+  );
 
   const activeOwnerPersonIds = new Set(
     (
@@ -2311,7 +2333,8 @@ export async function loadOperatorWorkspace(
         googlePlaceId: row.profile.googlePlaceId ?? undefined,
         latitude: row.profile.latitude ?? undefined,
         longitude: row.profile.longitude ?? undefined,
-        availability: row.profile.availability,
+        availability:
+          staffAvailabilityView.get(row.profile.id) ?? row.profile.availability,
         incomeGoalMinor: row.profile.incomeGoalMinor ?? undefined,
         incomeGoalPeriod:
           row.profile.incomeGoalPeriod === "week" ||
@@ -3765,23 +3788,37 @@ export async function updateStaffProfile(input: {
     googlePlaceId: input.googlePlaceId?.trim() || null,
     latitude: input.latitude,
     longitude: input.longitude,
-    availability: [
-      ...input.availability,
-      ...input.blackoutDates.map((block) => ({
-        kind: "blackout",
-        startsOn: block.startsOn,
-        startsAt: block.startsAt,
-        ...(block.endsOn ? { endsOn: block.endsOn } : {}),
-        endsAt: block.endsAt,
-      })),
-    ],
     incomeGoalMinor: input.incomeGoalMinor,
     incomeGoalPeriod: input.incomeGoalPeriod,
     active: input.active,
     updatedAt: input.now,
   };
   const tx = getTransactionalDatabase();
+  // B3a: availability and blackouts go to the named-schedule tables; the
+  // legacy `availability` column is no longer written.
+  const staffForAvailability = {
+    id: current.id,
+    organizationId,
+    personId: current.personId,
+    displayName,
+    staffRole: current.staffRole,
+    active: current.active,
+    createdAt: current.createdAt,
+    legacyAvailability: current.availability,
+  };
+  const organizationTimezoneName = (await organizationRow(organizationId))
+    .timezone;
+  let addedBlackoutIds: string[] = [];
   await tx.transaction(async (transaction) => {
+    ({ addedBlackoutIds } = await saveFromLegacyEditor(transaction, {
+      staff: staffForAvailability,
+      timezone: organizationTimezoneName,
+      windows: input.availability,
+      blackouts: input.blackoutDates,
+      actorPersonId: input.actor.personId,
+      requestId: input.requestId,
+      now: input.now,
+    }));
     await transaction
       .update(people)
       .set({ displayName, updatedAt: input.now })
@@ -3849,6 +3886,35 @@ export async function updateStaffProfile(input: {
       createdAt: input.now,
     });
   });
+  for (const blackoutId of addedBlackoutIds) {
+    const [blackout] = await getDatabase()
+      .select()
+      .from(staffBlackouts)
+      .where(eq(staffBlackouts.id, blackoutId));
+    if (!blackout) continue;
+    try {
+      await openCoverageForUnavailability(
+        {
+          actor: input.actor,
+          organizationId,
+          requestId: input.requestId,
+          now: input.now,
+        },
+        {
+          staff: staffForAvailability,
+          reason: "blackout",
+          blackoutId,
+          range: { startsAt: blackout.startsAt, endsAt: blackout.endsAt },
+        },
+      );
+    } catch (error) {
+      report(error, {
+        event: "team-availability.coverage.open-failed",
+        fields: { organizationId },
+        tags: { operation: "legacy-editor-blackout" },
+      });
+    }
+  }
   return {
     id: current.id,
     entity: "staff-profile",

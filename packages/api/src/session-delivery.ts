@@ -1,3 +1,11 @@
+import {
+  convertLegacyStaffAvailability,
+  isFreeThroughout,
+  legacyAvailabilityInputs,
+  type StaffAvailabilitySchedule,
+  type StaffBlackoutInput,
+  type StaffTimeOffInput,
+} from "@duna/scheduling";
 import { z } from "zod";
 import { venueWallTimeToUtc } from "./court-checkout";
 
@@ -92,7 +100,14 @@ export interface SessionCoachAvailability {
   readonly personId: string;
   readonly displayName: string;
   readonly email?: string;
+  /** Legacy jsonb, read only while the member has not been copied (B3a). */
   readonly availability: readonly Record<string, unknown>[];
+  /** Named schedules, blackouts and time off from the B3a tables. */
+  readonly staffAvailability?: {
+    readonly schedules: readonly StaffAvailabilitySchedule[];
+    readonly blackouts: readonly StaffBlackoutInput[];
+    readonly timeOff: readonly StaffTimeOffInput[];
+  };
   readonly busyRanges?: readonly {
     readonly startsAt: string;
     readonly endsAt: string;
@@ -170,73 +185,47 @@ function weekday(date: string): number {
   return new Date(`${date}T12:00:00.000Z`).getUTCDay();
 }
 
-function localMinute(value: string): number {
-  const [hour = 0, minute = 0] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-function overlaps(
-  startsAt: Date,
-  endsAt: Date,
-  range: { readonly startsAt: string; readonly endsAt: string },
-): boolean {
-  const rangeStart = new Date(range.startsAt);
-  const rangeEnd = new Date(range.endsAt);
-  return startsAt < rangeEnd && endsAt > rangeStart;
-}
-
+/**
+ * Whether a coach can take an occurrence: one call to the shared
+ * availabilityFor (@duna/scheduling). Coaches on the B3a tables use their
+ * schedules, blackouts and approved time off; a coach not copied yet uses
+ * the legacy jsonb read in the session's time zone, as before. Busy blocks
+ * from connected calendars are commitments either way.
+ */
 function coachAvailable(input: {
   readonly coach: SessionCoachAvailability;
-  readonly localDate: string;
-  readonly localTime: string;
-  readonly durationMinutes: number;
+  readonly timezone: string;
   readonly startsAt: Date;
   readonly endsAt: Date;
 }): boolean {
-  const occurrenceWeekday = weekday(input.localDate);
-  const occurrenceStartMinute = localMinute(input.localTime);
-  const occurrenceEndMinute = occurrenceStartMinute + input.durationMinutes;
-  const recurringWindows = input.coach.availability.filter(
-    (entry) =>
-      entry.kind !== "blackout" &&
-      Number(entry.weekday) === occurrenceWeekday &&
-      typeof entry.startsAt === "string" &&
-      typeof entry.endsAt === "string",
-  );
-  const insideRecurringWindow = recurringWindows.some(
-    (entry) =>
-      localMinute(String(entry.startsAt)) <= occurrenceStartMinute &&
-      localMinute(String(entry.endsAt)) >= occurrenceEndMinute,
-  );
-  if (!insideRecurringWindow) return false;
-
-  const blackedOut = input.coach.availability.some((entry) => {
-    if (entry.kind !== "blackout" || typeof entry.startsOn !== "string") {
-      return false;
-    }
-    const endsOn =
-      typeof entry.endsOn === "string" ? entry.endsOn : entry.startsOn;
-    if (input.localDate < entry.startsOn || input.localDate > endsOn) {
-      return false;
-    }
-    if (input.localDate > entry.startsOn && input.localDate < endsOn) {
-      return true;
-    }
-    const blackoutStart =
-      input.localDate === entry.startsOn && typeof entry.startsAt === "string"
-        ? localMinute(entry.startsAt)
-        : 0;
-    const blackoutEnd =
-      input.localDate === endsOn && typeof entry.endsAt === "string"
-        ? localMinute(entry.endsAt)
-        : 24 * 60;
-    return (
-      occurrenceStartMinute < blackoutEnd && occurrenceEndMinute > blackoutStart
-    );
-  });
-  if (blackedOut) return false;
-  return !(input.coach.busyRanges ?? []).some((range) =>
-    overlaps(input.startsAt, input.endsAt, range),
+  const absences = input.coach.staffAvailability ?? {
+    ...legacyAvailabilityInputs(
+      convertLegacyStaffAvailability({
+        entries: input.coach.availability,
+        timezone: input.timezone,
+        undatedEffectiveFrom: "1970-01-01",
+      }),
+      `legacy:${input.coach.personId}`,
+    ),
+    timeOff: [],
+  };
+  return isFreeThroughout(
+    { staffProfileId: input.coach.personId },
+    {
+      startsAt: input.startsAt.toISOString(),
+      endsAt: input.endsAt.toISOString(),
+    },
+    {
+      schedules: absences.schedules,
+      blackouts: absences.blackouts,
+      timeOff: absences.timeOff,
+      commitments: (input.coach.busyRanges ?? []).map((range, index) => ({
+        id: `busy:${index}`,
+        kind: "calendar" as const,
+        startsAt: range.startsAt,
+        endsAt: range.endsAt,
+      })),
+    },
   );
 }
 
@@ -301,9 +290,7 @@ export function generateBookableSessionOccurrences(input: {
     const availableCoaches = input.coaches.filter((coach) =>
       coachAvailable({
         coach,
-        localDate: candidate.date,
-        localTime: candidate.startsAt,
-        durationMinutes: input.configuration.durationMinutes,
+        timezone: schedule.timezone,
         startsAt,
         endsAt,
       }),

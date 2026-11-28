@@ -22,6 +22,17 @@ export const setupDemoIds = {
   cancelledRun: demoId("setup", 8),
 } as const;
 
+/** One failed run per failure reason (CS-States), for the setup screens. */
+export const setupDemoFailureReasons = [
+  "no-response",
+  "no-such-host",
+  "address-not-allowed",
+  "blocked-by-site",
+  "nothing-readable",
+  "too-large",
+  "timed-out",
+] as const;
+
 const page = (
   n: number,
   path: string,
@@ -161,6 +172,19 @@ export const setupDemoRuns = [
     startedAt: at("2026-11-26T12:00:00.000Z"),
     finishedAt: at("2026-11-26T12:00:40.000Z"),
   },
+  ...setupDemoFailureReasons
+    .filter((reason) => reason !== "no-response")
+    .map((reason, index) => ({
+      ...baseRun,
+      id: demoId("setup", 20 + index),
+      status: "failed" as const,
+      outcome: "site-unreachable" as const,
+      failureReason: reason,
+      pages: [page(0, "", "failed")],
+      pagesTotal: 1,
+      startedAt: at("2026-11-26T10:05:00.000Z"),
+      finishedAt: at("2026-11-26T10:05:20.000Z"),
+    })),
   {
     ...baseRun,
     id: setupDemoIds.cancelledRun,
