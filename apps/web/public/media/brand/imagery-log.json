@@ -477,6 +477,17 @@
         "outputNames": ["/site/indoor-huddle.webp"]
       },
       {
+        "name": "site/coach-portrait",
+        "createdAt": "2026-11-28",
+        "jobId": "39a4a29e-b427-4dfa-b3bd-df9361648690",
+        "model": "Higgsfield nano_banana_2_1 (2k)",
+        "intent": "Public site coaches page (docs/design/website.md §2.7, §5); a placeholder for the owner's own coach photographs.",
+        "promptIntent": "Male coach by a net pole with ball bag. Grade: warm sand highlights, deep blue-teal shadows, lifted blacks, muted, film grain. No text, no logos, no watermark.",
+        "sourceReferences": [],
+        "permissions": "Generated for duna.coach under the provider's terms; adults; fictional, non-identifiable people; no logos or text. An illustration of the sport, never a member, club or customer.",
+        "outputNames": ["/site/coach-portrait.webp"]
+      },
+      {
         "name": "site/watch-rest",
         "createdAt": "2026-11-28",
         "jobId": "5d7283de-093c-4e50-b100-187c67448123",

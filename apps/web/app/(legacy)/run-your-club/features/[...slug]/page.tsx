@@ -52,7 +52,7 @@ export default async function ClubFeatureRoute({
     isPartOf: {
       "@type": "WebPage",
       name: "Duna HQ features",
-      url: "https://duna.coach/run-your-club/features",
+      url: "https://duna.coach/run-your-club",
     },
     about: feature.capabilities.map((capability) => ({
       "@type": "Thing",

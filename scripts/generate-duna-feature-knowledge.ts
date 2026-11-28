@@ -1,14 +1,21 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { format } from "prettier";
 
-async function main() {
-  const root = resolve(import.meta.dirname, "..");
-  const outputPath = join(
-    root,
-    "packages/api/src/generated/duna-feature-knowledge.ts",
-  );
+// The manifest is generated on demand and is NOT committed (it is in
+// .gitignore): pull requests that add a procedure no longer conflict on it.
+// Plain run: write it (only when the content changed). `--check`: verify that
+// generation succeeds, is deterministic and well formed, and that nobody
+// committed the output again.
+async function render(root: string) {
   const surfaceDirectory = join(root, "docs/surfaces");
   const domainRouterDirectory = join(root, "packages/api/src/routers");
   // Domain sub-routers (R3 seams) are mounted from router.ts; read them too so
@@ -129,16 +136,62 @@ async function main() {
     { parser: "typescript" },
   );
 
+  return {
+    rendered,
+    counts: {
+      modules: modules.length,
+      apiCapabilities: apiCapabilities.length,
+      surfaceGuides: surfaceGuides.length,
+    },
+  };
+}
+
+async function main() {
+  const root = resolve(import.meta.dirname, "..");
+  const outputPath = join(
+    root,
+    "packages/api/src/generated/duna-feature-knowledge.ts",
+  );
+  const first = await render(root);
+
   if (process.argv.includes("--check")) {
-    const current = readFileSync(outputPath, "utf8");
-    if (current !== rendered) {
+    const problems: string[] = [];
+    const second = await render(root);
+    if (first.rendered !== second.rendered) {
+      problems.push("generating twice from the same sources differs");
+    }
+    for (const [name, count] of Object.entries(first.counts)) {
+      if (count === 0) problems.push(`the generated ${name} list is empty`);
+    }
+    try {
+      const tracked = execFileSync(
+        "git",
+        ["ls-files", "--", relative(root, outputPath)],
+        { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      ).trim();
+      if (tracked) {
+        problems.push(
+          "the generated manifest is committed; it is generated on demand and ignored by git (git rm --cached it)",
+        );
+      }
+    } catch {
+      // Not a git checkout (for example a source archive): nothing to check.
+    }
+    if (problems.length > 0) {
       console.error(
-        "Duna AI feature knowledge is stale. Run pnpm knowledge:generate and commit the generated manifest.",
+        `Duna AI feature knowledge check failed: ${problems.join("; ")}.`,
       );
       process.exitCode = 1;
     }
-  } else {
-    writeFileSync(outputPath, rendered);
+    return;
+  }
+
+  if (
+    !existsSync(outputPath) ||
+    readFileSync(outputPath, "utf8") !== first.rendered
+  ) {
+    mkdirSync(dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, first.rendered);
   }
 }
 

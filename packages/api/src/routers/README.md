@@ -55,11 +55,10 @@ the orchestrator; R3's owner adds the one mount line.
 4. Delete the placeholder `status` query once a real procedure exists, and
    update `routers/seams.test.ts` (that test is the proof the mount works;
    swap your `status` call for a real demo-mode call).
-5. Run `pnpm knowledge:generate` and commit
-   `packages/api/src/generated/duna-feature-knowledge.ts` (the generator
-   reads `routers/**`; procedures appear as `<domain>.<procedure>`, the
-   `status` placeholders are skipped). Never hand-merge that file; rerun it
-   after a rebase.
+5. Nothing to run for the Ask Duna knowledge manifest: it is generated on
+   demand (on install and before build, typecheck, lint, test and dev) and is
+   not committed. The generator reads `routers/**`; procedures appear as
+   `<domain>.<procedure>`, the `status` placeholders are skipped.
 
 ## Add a contract
 

@@ -25,6 +25,7 @@ const columns = [
     links: [
       { label: "Pro Tour", href: siteLinks.proTour },
       { label: "Events", href: siteLinks.events },
+      { label: "The Duna apps", href: siteLinks.apps },
       { label: "Duna for Apple Watch", href: siteLinks.appleWatch },
     ],
   },

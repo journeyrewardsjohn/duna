@@ -1,6 +1,7 @@
 import type { StaticImageData } from "next/image";
 import beachAttack from "@/public/site/beach-attack.webp";
 import coachMorning from "@/public/site/coach-morning.webp";
+import coachPortrait from "@/public/site/coach-portrait.webp";
 import courtsFirstLight from "@/public/site/courts-first-light.webp";
 import digSpray from "@/public/site/dig-spray.webp";
 import friendsWalk from "@/public/site/friends-walk.webp";
@@ -11,7 +12,7 @@ import partnersLowfive from "@/public/site/partners-lowfive.webp";
 import watchRest from "@/public/site/watch-rest.webp";
 
 /**
- * The home page's photographs (generated illustrations of adults; credits in
+ * The public site's photographs (generated illustrations of adults; credits in
  * `public/site/CREDITS.md`). They illustrate the sport: never captioned as
  * members, clubs or customers. Static imports give `next/image` the size and
  * a blur placeholder, and let it serve AVIF and WebP at each width.
@@ -73,5 +74,10 @@ export const sitePhotos = {
     image: indoorServe,
     alt: "A player jump-serves in a gym under warm lights.",
     focal: "50% 40%",
+  },
+  coachPortrait: {
+    image: coachPortrait,
+    alt: "A beach volleyball coach stands by a net post at sunset with a bag of balls on his shoulder.",
+    focal: "50% 22%",
   },
 } as const satisfies Record<string, SitePhoto>;

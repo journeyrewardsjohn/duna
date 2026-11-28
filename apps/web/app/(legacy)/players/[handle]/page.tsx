@@ -358,7 +358,7 @@ function WorldRankingPlayerProfile({
                 >
                   Back to rankings <ArrowRight aria-hidden size={17} />
                 </Link>
-                <Link href="/methodology">How Sand Rating works</Link>
+                <Link href="/sand-rating">How Sand Rating works</Link>
               </div>
             </div>
 
@@ -536,7 +536,7 @@ function WorldRankingPlayerProfile({
               appears here only after approved match evidence resolves to this
               athlete.
             </p>
-            <Link href="/methodology">
+            <Link href="/sand-rating">
               Explore the methodology <ArrowRight aria-hidden size={16} />
             </Link>
           </article>
@@ -1637,7 +1637,7 @@ export default async function PublicPlayerPage({
             every approved rating movement. Imported results are never silently
             accepted.
           </p>
-          <Link href="/methodology">
+          <Link href="/sand-rating">
             Read the methodology <ArrowRight aria-hidden size={16} />
           </Link>
         </section>
