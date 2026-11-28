@@ -88,6 +88,7 @@ test.describe("VI-2 Look around without an account", () => {
     await expect(
       page.getByRole("heading", { level: 2, name: "On this week" }),
     ).toBeVisible();
+  });
   test("VI-2.8 Booking from a club's offering asks the visitor to sign in and returns them to its checkout", async ({
     page,
   }) => {
