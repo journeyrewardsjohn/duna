@@ -68,13 +68,6 @@ const create: readonly ShellCommand[] = [
     keywords: ["message", "email", "announce"],
   },
   {
-    value: `go:${hqHref("trainingPracticePlanCreate")}`,
-    label: "Plan a practice",
-    group: "Create",
-    icon: "coach",
-    keywords: ["drill", "session"],
-  },
-  {
     value: `go:${hqHref("placeCreate")}`,
     label: "Add a place and courts",
     group: "Create",
@@ -285,6 +278,31 @@ const offerings: readonly ShellCommand[] = [
   },
 ];
 
+/** Training (H-TRAIN): programs, practice plans and drills by name. */
+const training: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("trainingProgramCreate")}`,
+    label: "New program",
+    group: "Training",
+    icon: "coach",
+    keywords: ["season", "team", "practices", "schedule", "camp"],
+  },
+  {
+    value: `go:${hqHref("trainingPracticePlanCreate")}`,
+    label: "Plan Thursday's practice",
+    group: "Training",
+    icon: "session",
+    keywords: ["practice plan", "plan a practice", "drills", "warm-up"],
+  },
+  {
+    value: `go:${hqHref("trainingDrills")}`,
+    label: "Find a drill",
+    group: "Training",
+    icon: "ball",
+    keywords: ["drill library", "store", "serve-receive", "exercise"],
+  },
+];
+
 /** Club setup (H-SETUP): Duna reading the club's website, and its identity. */
 const setup: readonly ShellCommand[] = [
   {
@@ -357,6 +375,7 @@ export const shellCommands: readonly ShellCommand[] = [
   ...people,
   ...team,
   ...offerings,
+  ...training,
   ...setup,
   ...run,
 ];
