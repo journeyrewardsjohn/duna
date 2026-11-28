@@ -648,13 +648,11 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
 }
 
 /* Sand Rating uses the sky family; rankings keeps its live-intelligence field. */
-.rating-methodology-page,
 .rankings-page {
   background: var(--duna-web-snow);
   color: var(--duna-web-charcoal);
 }
 
-.rating-methodology-hero,
 .rankings-hero {
   min-height: 560px;
   min-width: 0;
@@ -665,7 +663,6 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
   color: var(--duna-web-navy);
 }
 
-.rating-methodology-hero h1,
 .rankings-hero h1 {
   color: var(--duna-web-navy);
   font-size: clamp(3.75rem, 6vw, 5.75rem);
@@ -678,52 +675,15 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
   color: var(--duna-web-white);
 }
 
-.rating-methodology-hero p,
 .rankings-hero p {
   color: var(--duna-web-sky-ink);
 }
 
-.rating-methodology-hero__score {
-  border-left-color: var(--duna-web-sky-border);
-  min-width: 0;
-}
-
-.rating-methodology-hero__score .duna-numeric {
-  color: var(--duna-web-navy);
-  font-family: var(--font-display);
-  font-size: clamp(4rem, 9vw, 8rem);
-  font-weight: 900;
-}
-
-.rating-methodology-hero__score > span,
-.rating-methodology-hero__score small {
-  color: var(--duna-web-sky-ink);
-  font-family: var(--duna-web-font-mono);
-}
-
-.rating-methodology-hero__actions a:first-child {
-  background: var(--duna-web-navy);
-  color: var(--td-on-action);
-}
-
-.rating-methodology-hero__actions a:last-child {
-  color: var(--duna-web-navy);
-}
-
-.rating-lab-principles article,
-.rating-lab-panel,
-.rating-lab-split,
-.rating-methodology-copy,
-.rating-metric-notes,
 .rankings-explainer {
   border-color: var(--duna-web-hairline);
   border-radius: var(--duna-web-radius-card);
   background: var(--duna-web-white);
   box-shadow: var(--duna-web-shadow-card);
-}
-
-.rating-lab-principles svg {
-  color: var(--duna-web-navy-2);
 }
 
 /* Footer joins the final wash without a thin seam. */
@@ -807,7 +767,6 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
     margin-inline: 16px;
   }
 
-  .rating-methodology-hero,
   .rankings-hero {
     min-height: auto;
   }
@@ -969,17 +928,6 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
 
 .site-header .site-header__enter:hover {
   background: var(--duna-web-charcoal-press);
-}
-
-.pro-tour-page .pro-tour-hero {
-  min-height: clamp(32rem, 66vh, 40rem);
-  padding-top: clamp(5rem, 9vw, 7.5rem);
-  padding-bottom: clamp(4rem, 7vw, 6rem);
-}
-
-.pro-tour-page .pro-tour-hero h1 {
-  font-size: clamp(3.5rem, 5.6vw, 5.25rem);
-  line-height: 0.98;
 }
 
 .pro-event-page {

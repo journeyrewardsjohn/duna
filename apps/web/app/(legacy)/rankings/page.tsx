@@ -535,7 +535,7 @@ export default async function RankingsPage({
               composition, score margin, uncertainty, and evidence quality to
               estimate the form a player brings to the next match.
             </p>
-            <Link href="/methodology">
+            <Link href="/sand-rating">
               Read the backtest methodology <ArrowRight aria-hidden size={16} />
             </Link>
           </div>
