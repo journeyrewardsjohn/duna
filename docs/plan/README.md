@@ -14,6 +14,8 @@ and confirmation rules in [`AGENTS.md`](../../AGENTS.md) override both.
 | [`schema-requests/`](schema-requests/)               | One file per work package asking the schema steward for schema changes                                                                                      |
 | [`production-readiness.md`](production-readiness.md) | What the owner must set up for production: keep this file current when a package adds a provider, a webhook, a redirect address or an environment variable. |
 
+Before opening a PR, every package meets [`definition-of-done.md`](definition-of-done.md) and keeps its [`persona-journeys.md`](persona-journeys.md) steps passing (Q0).
+
 The three plan files are copied from the planners' reports; only Prettier
 whitespace was changed. Where a plan and this README disagree, this README and
 the contract win (for example the owner's flag decision below).
