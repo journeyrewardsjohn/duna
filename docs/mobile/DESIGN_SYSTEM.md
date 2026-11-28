@@ -145,6 +145,30 @@ Built on React Native's own `Animated` on the native driver (no Reanimated).
   selection, tier 1 medium impact, tier 2 success notification;
   `refused()` error; `pointScored()` light impact.
 
+## Motion never gates content
+
+Content visibility and touchability never depend on an `Animated` completion
+callback or on a value reaching its end state. The native driver can silently
+never finish (seen on an iOS 26.5 iPad simulator, where the whole app stayed
+behind the launch cover), so an app must be usable without the callback.
+
+- Use `runWithWatchdog(animation, { timeline, settle, onFinish })` from
+  `@duna/ui/native` (`motion/watchdog.ts`) for any animation that starts
+  content at opacity 0 or translated, or whose completion does something
+  (unmount, enable touches, dismiss). If the callback has not fired within
+  `timeline` (delay plus duration) plus one second, it stops the animation,
+  calls `settle()` (`settleValues([[value, end]])` sets the end state) and
+  runs `onFinish`, once. A late callback is ignored. It returns the cancel
+  function for the effect cleanup.
+- `Rise`, `Rally`, `Cross`, `SearchBar`, `LaunchSequence`, `CardArrival`, `CardFlip`, `WalletStack`, the set-by-set and
+  pull-to-refresh loaders use it. New motion parts must too.
+- Guard: `motion/motion-never-gates.test.ts` fails if a file in the native kit
+  or the two apps passes a completion callback to `.start(`, starts a
+  native-driver animation with a bare `.start()` (decorative files are listed
+  with a reason), or uses Reanimated `withTiming` / `withSpring`. The kit uses
+  React Native's `Animated` only. It cannot tell a decorative animation from
+  a gating one, so a new listed exception is a review item.
+
 ## Loaders and first open
 
 The eight loaders from the brand book grow from the line: `RallyLoader`
