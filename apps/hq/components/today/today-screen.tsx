@@ -39,7 +39,7 @@ export function TodayScreen({ session }: { readonly session: ShellSession }) {
       <PageHeader
         actions={
           <>
-            <Button href={hqModuleHref("schedule")} variant="secondary">
+            <Button href={hqHref("schedule")} variant="secondary">
               Open schedule
             </Button>
             <Button href={hqHref("eventCreate")} variant="primary">
@@ -64,7 +64,7 @@ export function TodayScreen({ session }: { readonly session: ShellSession }) {
         <div className="today-col today-col--main">
           <PageSection
             aside={
-              <Link className="today-link" href={hqModuleHref("schedule")}>
+              <Link className="today-link" href={hqHref("schedule")}>
                 Full schedule
               </Link>
             }

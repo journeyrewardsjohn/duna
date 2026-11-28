@@ -9,7 +9,7 @@ import {
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
 
-/** List pages served here: schedule, people, team, events, offerings, marketing, reports. */
+/** List pages served here: people, team, events, offerings, marketing, reports. */
 function servedModule(module: string) {
   return (hqOperatorModuleSlugs as readonly string[]).includes(module)
     ? operatorModules.find((entry) => entry.slug === module)
@@ -44,7 +44,7 @@ export default async function OperatorModulePage({
   const panel: OperatorPanel =
     item.slug === "events" && type === "league" ? "leagues" : item.slug;
   const caller = await getServerCaller();
-  const [dashboard, workspace, ticketApprovals, matches] = await Promise.all([
+  const [dashboard, workspace, ticketApprovals] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
     (async () => {
@@ -67,9 +67,6 @@ export default async function OperatorModulePage({
         throw error;
       }
     })(),
-    process.env.DATABASE_URL
-      ? caller.operator.scorableMatches()
-      : Promise.resolve([]),
   ]);
   const activeType =
     panel === "offerings"
@@ -90,7 +87,6 @@ export default async function OperatorModulePage({
         dashboard={dashboard}
         focusedDraftId={draft}
         module={panel}
-        matches={matches}
         ticketApprovals={ticketApprovals}
         workspace={workspace}
       />

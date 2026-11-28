@@ -112,7 +112,7 @@ test("compact Activities keeps every operational destination and accessible tabl
     .click();
   await expect(page).toHaveURL(`${base}/schedule`);
   await expect(
-    page.getByRole("link", { name: "New session", exact: true }),
+    page.getByRole("button", { name: "New booking", exact: true }),
   ).toHaveCount(1);
   await expect(
     page.getByRole("button", { name: "Block time", exact: true }),

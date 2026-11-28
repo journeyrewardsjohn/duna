@@ -19,8 +19,11 @@ export const hqRoutes = {
   /** Retired by the IA (its cards have homes); package B4 removes it. */
   activities: "/activities",
 
-  // People and play. People, Team, Events, Offerings, Schedule, Marketing and
-  // Reports lists are served by the generic module page; see hqModuleHref.
+  /** Schedule (H-SCHEDULE): the club calendar, its filters in the query string. */
+  schedule: "/schedule",
+
+  // People and play. People, Team, Events, Offerings, Marketing and Reports
+  // lists are served by the generic module page; see hqModuleHref.
   memberInvite: "/people/invite",
   member: "/people/[personId]",
   memberHealth: "/people/[personId]/health",
@@ -40,6 +43,7 @@ export const hqRoutes = {
   eventCreate: "/events/create",
   event: "/events/[sessionId]",
   eventDivision: "/events/[sessionId]/divisions/[divisionId]",
+  /** Opens the booking in Schedule's side panel (the old operations page). */
   eventCourtBooking: "/events/court-bookings/[activityId]",
   eventMatch: "/events/matches/[activityId]",
   /** Becomes an in-page filter of Events in package H9. */
@@ -141,7 +145,6 @@ export const hqOperatorModuleSlugs = [
   "offerings",
   "people",
   "reports",
-  "schedule",
   "team",
 ] as const;
 

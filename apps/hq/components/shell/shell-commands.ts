@@ -136,6 +136,38 @@ const money: readonly ShellCommand[] = [
   },
 ];
 
+/** Schedule (H-SCHEDULE): the calendar tasks the front desk asks for by name. */
+const schedule: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("schedule")}?intent=date`,
+    label: "Go to date…",
+    group: "Schedule",
+    icon: "schedule",
+    keywords: ["calendar", "day", "jump", "date"],
+  },
+  {
+    value: `go:${hqHref("schedule")}?intent=book`,
+    label: "Book a court",
+    group: "Schedule",
+    icon: "court",
+    keywords: ["booking", "reserve", "walk-in", "rental", "lesson"],
+  },
+  {
+    value: `go:${hqHref("schedule")}?intent=who`,
+    label: "Who is free at…",
+    group: "Schedule",
+    icon: "users",
+    keywords: ["coach", "available", "availability", "cover"],
+  },
+  {
+    value: `go:${hqHref("schedule")}?intent=close`,
+    label: "Close courts",
+    group: "Schedule",
+    icon: "block",
+    keywords: ["closure", "block", "maintenance", "weather", "stop play"],
+  },
+];
+
 /** Club setup (H-SETUP): Duna reading the club's website, and its identity. */
 const setup: readonly ShellCommand[] = [
   {
@@ -203,6 +235,7 @@ const run: readonly ShellCommand[] = [
 export const shellCommands: readonly ShellCommand[] = [
   ...places,
   ...create,
+  ...schedule,
   ...money,
   ...setup,
   ...run,

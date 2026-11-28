@@ -260,12 +260,13 @@ test.describe("CO-7 See a booking arrive", () => {
     page,
   }) => {
     await openHqArea(page, "Schedule");
-    await expect(page.getByRole("button", { name: "Courts" })).toBeVisible();
-    await page.getByRole("button", { name: "Coaches" }).click();
-    await expect(page.getByRole("button", { name: "Coaches" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(
+      page.getByRole("button", { name: "Courts", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Coaches", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Coaches", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
   test.fixme("CO-7.3 A new booking arrives as a notification and lands in Today without a reload [S1, H1]", async () => {});
 });

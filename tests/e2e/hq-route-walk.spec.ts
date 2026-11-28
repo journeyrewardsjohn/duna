@@ -61,7 +61,6 @@ const payout = "93000000-0000-4000-8000-000000000001";
 const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
   [hqRoutes.ask]: ["/ask", "/ask/history"],
   [hqRoutes.module]: [
-    "/schedule",
     "/people",
     "/team",
     "/events",
@@ -140,8 +139,6 @@ const knownFailures: Readonly<Record<string, string>> = {
     "H9: the demo catalog is empty, so no offering record resolves (404).",
   [extraPaths.teamMember]: "H5: the demo workspace has no staff records (404).",
   [extraPaths.eventDivision]: "H9: no demo event has an entry division (404).",
-  [extraPaths.eventCourtBooking]:
-    "H9: operator.activityDetail needs the connected database in demo mode.",
   [extraPaths.eventMatch]:
     "H9: operator.activityDetail needs the connected database in demo mode.",
   [extraPaths.memberHealth]:

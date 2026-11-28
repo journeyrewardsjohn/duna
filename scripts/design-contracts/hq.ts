@@ -18,7 +18,11 @@ const legacySheets = [
 export const hq: SurfaceContract = {
   surface: "hq",
   owners: "S1, S2, S3, S4, H1–H14, F5a–e",
-  migrated: [],
+  // Rebuilt screens on the design system (the Tideline guard checks them).
+  migrated: [
+    "apps/hq/app/(next)/(hq)/schedule/",
+    "apps/hq/components/schedule/",
+  ],
   checks: [
     { kind: "noFontPackages", app: "hq" },
     // HQ has two root layouts (docs/design/hq-shell.md): app/(next) for the
@@ -65,6 +69,7 @@ export const hq: SurfaceContract = {
       "apps/hq/components/today",
       "apps/hq/components/money",
       "apps/hq/components/setup",
+      "apps/hq/components/schedule",
     ].map((root) => ({
       kind: "treeExcludes" as const,
       root,

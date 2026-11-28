@@ -1128,20 +1128,17 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto(`${hqBaseUrl}/schedule`);
-  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
+  await page.goto(`${hqBaseUrl}/schedule?view=day`);
   await expect(
-    page.getByText("Championship Court", { exact: true }),
+    page.getByRole("heading", { name: "Schedule", level: 1 }),
+  ).toBeVisible();
+  const grid = page.getByTestId("schedule-grid");
+  await expect(
+    grid.getByText("Championship Court", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Community Court", { exact: true }),
+    grid.getByText("Community Court", { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "No matches ready to score" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: /Review sessions/ }),
-  ).toHaveAttribute("href", "/events");
   await expect(page.getByText("No courts yet")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 

@@ -53,7 +53,7 @@ export const operatorModules = [
   {
     slug: "schedule",
     label: "Schedule",
-    href: hqModuleHref("schedule"),
+    href: hqRoutes.schedule,
     icon: "schedule",
     group: "Run the day",
   },
