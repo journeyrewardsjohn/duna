@@ -8,6 +8,10 @@ import { clubJsonLd, serializeGraph } from "@/components/club/structured-data";
 import { clubThemeView, UNPUBLISHED_THEME } from "@/components/club/theme";
 import { pageViewer } from "@/components/club/viewer";
 import { siteOgImage } from "@/components/site/og";
+import {
+  DEFAULT_SEARCH,
+  discoveryHref,
+} from "@/components/site/search/search-query";
 import { getServerCaller, getServerContext } from "@/lib/api";
 import { absolutePublicUrl } from "@/lib/pro-seo";
 
@@ -91,9 +95,10 @@ export default async function ClubRoute({
     // Neither read worked: the site's error page, with the reference.
     throw new Error(`Club ${slug} did not load`);
   }
-  const [events, coaches] = await Promise.all([
+  const [events, coaches, venues] = await Promise.all([
     caller.public.events().catch(() => []),
     caller.public.coaches({ organizationSlug: slug }).catch(() => []),
+    caller.public.venues().catch(() => []),
   ]);
   const now = context.now;
   // Without a storefront (not set up, or it failed) the page still shows the
@@ -114,6 +119,28 @@ export default async function ClubRoute({
           venues: [],
         };
   const theme = clubThemeView(shop.theme);
+  // Open now, from the same public venue list the old page read.
+  const openNow = Object.fromEntries(
+    venues
+      .filter((venue) => shop.venues.some((own) => own.id === venue.id))
+      .map((venue) => [venue.id, venue.openNow]),
+  );
+  const anchor = shop.venues.find(
+    (venue) => venue.latitude !== undefined && venue.longitude !== undefined,
+  );
+  const nearbyHref = anchor
+    ? discoveryHref({
+        ...DEFAULT_SEARCH,
+        where: {
+          kind: "place",
+          label: anchor.name,
+          latitude: anchor.latitude!,
+          longitude: anchor.longitude!,
+          source: "duna",
+          venueId: anchor.id,
+        },
+      })
+    : undefined;
   const structured = clubJsonLd({
     storefront: shop,
     coaches,
@@ -133,7 +160,9 @@ export default async function ClubRoute({
         }
         coaches={coaches}
         events={events}
+        nearbyHref={nearbyHref}
         now={now}
+        openNow={openNow}
         storefront={shop}
         theme={theme}
         viewer={viewer}

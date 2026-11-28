@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   directionsHref,
   divisionRows,
+  entryDivisions,
+  startConditions,
   eventPhase,
   eventWhen,
   lowestEntry,
@@ -196,5 +198,64 @@ describe("directions", () => {
     ).toBe(
       "https://www.google.com/maps/search/?api=1&query=33.88%2C-118.41&query_place_id=abc",
     );
+  });
+});
+
+describe("the public entry list", () => {
+  it("seeds first, then the waitlist; a player without a public profile is never shown or named", () => {
+    const [open] = entryDivisions(tournament);
+    expect(open!.name).toBe("Open");
+    expect(open!.confirmed.map((team) => team.seed)).toEqual(["1", "2"]);
+    expect(open!.waitlisted.map((team) => team.seed)).toEqual(["W1"]);
+    const second = open!.confirmed[1]!;
+    expect(second.name).toBe("Seed 2");
+    expect(second.players.map((player) => player.name)).toEqual(["Sam Rivera"]);
+    expect(second.averageRating).toBeUndefined();
+    expect(JSON.stringify(open)).not.toContain("Junior Private");
+    expect(open!.confirmed[0]!.players[0]!.href).toBe("/players/theopark");
+  });
+
+  it("no entries, no list", () => {
+    expect(entryDivisions({ ...tournament, registrationTeams: [] })).toEqual(
+      [],
+    );
+  });
+});
+
+describe("conditions at the first serve", () => {
+  const startsAt = "2026-12-12T17:30:00.000Z";
+  it("uses the conditions service's hour that covers the start", () => {
+    const result = startConditions({
+      startsAt,
+      forecast: {
+        hours: [
+          { hourStartsAt: "2026-12-12T16:00:00.000Z", temperatureC: 10 },
+          {
+            hourStartsAt: "2026-12-12T17:00:00.000Z",
+            temperatureC: 14,
+            windSpeedKph: 12,
+            windDirectionDeg: 270,
+          },
+        ],
+        attribution: "Weather data credit",
+      },
+    })!;
+    expect(result.conditions.temperatureC).toBe(14);
+    expect(result.conditions.windFromDeg).toBe(270);
+    expect(result.attribution).toBe("Weather data credit");
+  });
+
+  it("is hidden when no forecast covers the start", () => {
+    expect(
+      startConditions({
+        startsAt,
+        forecast: {
+          hours: [
+            { hourStartsAt: "2026-12-12T12:00:00.000Z", temperatureC: 9 },
+          ],
+        },
+      }),
+    ).toBeUndefined();
+    expect(startConditions({ startsAt })).toBeUndefined();
   });
 });

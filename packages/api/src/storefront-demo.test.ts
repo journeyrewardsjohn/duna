@@ -2,8 +2,12 @@ import {
   demoOrganizationStorefront,
   demoStorefrontSlugs,
 } from "@duna/core/demo/storefront";
+import { demoTournamentCompetition } from "@duna/core/demo/tournament";
 import { describe, expect, it } from "vitest";
-import { publicOrganizationStorefrontSchema } from "./contracts";
+import {
+  publicOrganizationStorefrontSchema,
+  tournamentCompetitionSnapshotSchema,
+} from "./contracts";
 import { createApiContext } from "./context";
 import { createCaller } from "./router";
 
@@ -51,5 +55,12 @@ describe("demo club storefronts (SITE-5)", () => {
     } finally {
       if (previous !== undefined) process.env.DATABASE_URL = previous;
     }
+  });
+
+  it("the demo tournament's draw parses and names only public teams", () => {
+    const draw = demoTournamentCompetition("sunset-open-qualifier");
+    tournamentCompetitionSnapshotSchema.parse(draw);
+    expect(JSON.stringify(draw)).not.toContain("Junior Private");
+    expect(demoTournamentCompetition("other")).toBeUndefined();
   });
 });

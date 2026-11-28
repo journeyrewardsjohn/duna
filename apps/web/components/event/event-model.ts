@@ -260,3 +260,196 @@ export function directionsHref(input: {
     parameters.set("query_place_id", input.googlePlaceId);
   return `https://www.google.com/maps/search/?${parameters.toString()}`;
 }
+
+// ---------- Entries (the public field) ----------
+
+type RegistrationTeam = NonNullable<EventSummary["registrationTeams"]>[number];
+
+export interface EntryRow {
+  readonly id: string;
+  /** "1", "2" for seeds; "W1" for the first team on the waitlist. */
+  readonly seed: string;
+  readonly name: string;
+  readonly status: "confirmed" | "waitlisted";
+  /** Only players with a public profile (adults who chose it), linked. */
+  readonly players: readonly {
+    readonly name: string;
+    readonly href: string;
+    readonly initials: string;
+    readonly avatarUrl?: string;
+  }[];
+  readonly averageRating?: string;
+}
+
+export interface EntryDivision {
+  readonly id: string;
+  readonly name: string;
+  readonly confirmed: readonly EntryRow[];
+  readonly waitlisted: readonly EntryRow[];
+}
+
+/**
+ * The public entry list, by division, seeds first, then the waitlist. The
+ * server already lists only adults with a public profile (minors and
+ * private profiles are never sent); this applies the same rule again: a
+ * player without a public profile is never shown, and a team name that
+ * would name one becomes its seed.
+ */
+export function entryDivisions(
+  event: Pick<EventSummary, "divisions" | "registrationTeams">,
+): readonly EntryDivision[] {
+  const teams = event.registrationTeams ?? [];
+  const row = (
+    team: RegistrationTeam,
+    index: number,
+    status: EntryRow["status"],
+  ): EntryRow => {
+    const hidden = team.players.filter((player) => !player.publicPath);
+    const namesHidden = hidden.some(
+      (player) =>
+        player.displayName.trim() !== "" &&
+        team.name.includes(player.displayName.trim()),
+    );
+    const seed =
+      status === "waitlisted"
+        ? `W${index + 1}`
+        : team.seed !== undefined
+          ? String(team.seed)
+          : "–";
+    return {
+      id: team.id,
+      seed,
+      name: namesHidden
+        ? team.seed !== undefined
+          ? `Seed ${team.seed}`
+          : "Registered team"
+        : team.name,
+      status,
+      players: team.players.flatMap((player) =>
+        player.publicPath
+          ? [
+              {
+                name: player.displayName,
+                href: player.publicPath,
+                initials: player.initials,
+                ...(player.avatarUrl ? { avatarUrl: player.avatarUrl } : {}),
+              },
+            ]
+          : [],
+      ),
+      ...(team.averageRating !== undefined && hidden.length === 0
+        ? { averageRating: team.averageRating.toFixed(2) }
+        : {}),
+    };
+  };
+  return (event.divisions ?? []).flatMap((division) => {
+    const own = teams.filter((team) => team.divisionId === division.id);
+    if (own.length === 0) return [];
+    return [
+      {
+        id: division.id,
+        name: division.name,
+        confirmed: own
+          .filter((team) => team.status === "confirmed")
+          .map((team, index) => row(team, index, "confirmed")),
+        waitlisted: own
+          .filter((team) => team.status === "waitlisted")
+          .map((team, index) => row(team, index, "waitlisted")),
+      },
+    ];
+  });
+}
+
+// ---------- Conditions at the start ----------
+
+export interface StartConditions {
+  readonly conditions: {
+    readonly at: number;
+    readonly temperatureC?: number;
+    readonly windSpeedKph?: number;
+    readonly windGustKph?: number;
+    readonly windFromDeg?: number;
+    readonly precipChancePct?: number;
+    readonly uvIndex?: number;
+  };
+  readonly attribution?: string;
+}
+
+const HOUR = 3_600_000;
+
+/**
+ * The forecast hour that covers the event's first serve: from the
+ * conditions service first, then the event's own forecast. Undefined when
+ * neither covers the start (no forecast is shown rather than a guess).
+ */
+export function startConditions(input: {
+  readonly startsAt: string;
+  readonly forecast?: {
+    readonly hours: readonly {
+      readonly hourStartsAt: string;
+      readonly temperatureC?: number;
+      readonly windSpeedKph?: number;
+      readonly windGustKph?: number;
+      readonly windDirectionDeg?: number;
+      readonly precipitationProbability?: number;
+      readonly uvIndex?: number;
+    }[];
+    readonly attribution?: string;
+  };
+  readonly weather?: EventSummary["weather"];
+}): StartConditions | undefined {
+  const start = Date.parse(input.startsAt);
+  const covers = (at: string) => {
+    const hour = Date.parse(at);
+    return hour <= start && start < hour + HOUR;
+  };
+  const hour = input.forecast?.hours.find((entry) =>
+    covers(entry.hourStartsAt),
+  );
+  if (hour) {
+    return {
+      conditions: {
+        at: Date.parse(hour.hourStartsAt),
+        ...(hour.temperatureC !== undefined
+          ? { temperatureC: hour.temperatureC }
+          : {}),
+        ...(hour.windSpeedKph !== undefined
+          ? { windSpeedKph: hour.windSpeedKph }
+          : {}),
+        ...(hour.windGustKph !== undefined
+          ? { windGustKph: hour.windGustKph }
+          : {}),
+        ...(hour.windDirectionDeg !== undefined
+          ? { windFromDeg: hour.windDirectionDeg }
+          : {}),
+        ...(hour.precipitationProbability !== undefined
+          ? { precipChancePct: hour.precipitationProbability }
+          : {}),
+        ...(hour.uvIndex !== undefined ? { uvIndex: hour.uvIndex } : {}),
+      },
+      ...(input.forecast?.attribution
+        ? { attribution: input.forecast.attribution }
+        : {}),
+    };
+  }
+  const point = input.weather?.hourly.find((entry) => covers(entry.startsAt));
+  if (!point || input.weather?.source !== "tomorrow.io") return undefined;
+  return {
+    conditions: {
+      at: Date.parse(point.startsAt),
+      ...(point.temperatureC !== undefined
+        ? { temperatureC: point.temperatureC }
+        : {}),
+      ...(point.windSpeedKph !== undefined
+        ? { windSpeedKph: point.windSpeedKph }
+        : {}),
+      ...(point.windGustKph !== undefined
+        ? { windGustKph: point.windGustKph }
+        : {}),
+      ...(point.precipitationProbability !== undefined
+        ? { precipChancePct: point.precipitationProbability }
+        : {}),
+    },
+    attribution: `Weather: ${input.weather.provider}`,
+  };
+}

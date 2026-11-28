@@ -131,6 +131,14 @@ test.describe("Club, offering, event and coach pages", () => {
     await expect(
       page.locator("#places").getByRole("link", { name: /Directions/ }),
     ).toHaveAttribute("href", /^https:\/\/www\.google\.com\/maps\/search\//);
+    await expect(
+      page
+        .locator("#places")
+        .getByRole("link", { name: "More to play nearby" }),
+    ).toHaveAttribute("href", /^\/discover\/results\?where=place&/);
+    await expect(
+      page.locator("#places").getByText("Open now").first(),
+    ).toBeVisible();
     const types = await structuredTypes(page);
     expect(types).toContain("SportsClub");
     expect(types).toContain("SportsActivityLocation");
@@ -229,7 +237,27 @@ test.describe("Club, offering, event and coach pages", () => {
     await expect(
       page.locator("#divisions").getByRole("link", { name: "Register" }),
     ).toHaveCount(0);
-    await expect(page.getByText("Noa Williams")).toHaveCount(0);
+    // The public field: seeds, then the waitlist; nobody without a public profile.
+    const entries = page.locator("#entries");
+    await expect(entries.getByText("Theo Park / Noa Williams")).toBeVisible();
+    await expect(entries.getByText("Seed 2")).toBeVisible();
+    await expect(entries.getByText("W1")).toBeVisible();
+    await expect(page.getByText("Junior Private")).toHaveCount(0);
+    // Results, and the full desk for the bracket.
+    await expect(
+      page.locator("#results").getByText("Final").first(),
+    ).toBeVisible();
+    const desk = page.getByRole("link", { name: "Bracket and results" });
+    await expect(desk).toHaveAttribute(
+      "href",
+      "/events/sunset-open-qualifier/bracket",
+    );
+    await page.goto("/events/sunset-open-qualifier/bracket");
+    await expect(
+      page.getByRole("heading", { level: 1, name: /bracket and results/ }),
+    ).toBeVisible();
+    await expect(page.getByText("Junior Private")).toHaveCount(0);
+    await page.goto("/events/sunset-open-qualifier");
     expect(await structuredTypes(page)).toContain("SportsEvent");
     // No live state on a finished event: Solar appears only for live.
     await expect(page.locator(".td-chip--live")).toHaveCount(0);

@@ -3,7 +3,14 @@ import type {
   PublicProEvent,
   TournamentCompetitionSnapshot,
 } from "@duna/api";
-import { Chip, ClubMark, Icon, OfflineBanner, Rally } from "@duna/ui/tideline";
+import {
+  Chip,
+  ClubMark,
+  ConditionsLine,
+  Icon,
+  OfflineBanner,
+  Rally,
+} from "@duna/ui/tideline";
 import Link from "next/link";
 import { ArrowLink, LinkButton } from "@/components/site/link-button";
 import { ActionBar, type PageAction } from "../club/action-bar";
@@ -13,13 +20,32 @@ import { ClubWords, PlaceMap, Section } from "../club/parts";
 import { actionHref } from "../club/viewer";
 import {
   divisionRows,
+  entryDivisions,
   eventPhase,
   eventWhen,
   lowestEntry,
   PHASE_WORDS,
   scheduleRows,
   type EventPhase,
+  type StartConditions,
 } from "./event-model";
+
+export interface EventExtras {
+  /** Published videos of the event (title and state only; the watch page guards the rest). */
+  readonly videos?: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly live: boolean;
+  }[];
+  /** How many prediction markets the event has (they live on the desk). */
+  readonly predictionCount?: number;
+  /** A draw or results exist: the full desk is worth a link. */
+  readonly hasDraw?: boolean;
+  /** Conditions at the first serve, when a forecast covers it. */
+  readonly conditions?: StartConditions;
+  /** `/discover` around the event's place. */
+  readonly nearbyHref?: string;
+}
 
 const PHASE_TONE: Readonly<
   Record<EventPhase, "live" | "warning" | "positive" | "danger" | "neutral">
@@ -61,13 +87,23 @@ export function EventPage({
   competition,
   viewer,
   organiserColor = null,
+  extras = {},
 }: {
   readonly event: EventSummary;
   readonly competition?: TournamentCompetitionSnapshot;
   readonly viewer: { readonly signedIn: boolean };
   /** The organiser's published colour, for its mark. */
   readonly organiserColor?: string | null;
+  readonly extras?: EventExtras;
 }) {
+  const entries = entryDivisions(event);
+  const guests = (event.features ?? []).filter(
+    (feature) => feature.kind === "guest",
+  );
+  const highlights = (event.features ?? []).filter(
+    (feature) => feature.kind !== "guest",
+  );
+  const desk = `/events/${event.slug}/bracket`;
   const phase = eventPhase(event);
   const when = eventWhen(event);
   const divisions = divisionRows(event);
@@ -186,6 +222,20 @@ export function EventPage({
           {allInNote(entry.price) ? (
             <p className="site-meta">{allInNote(entry.price)}</p>
           ) : null}
+          {extras.conditions && phase !== "final" && phase !== "cancelled" ? (
+            <div className="event-conditions">
+              <span className="site-label">At first serve</span>
+              <ConditionsLine
+                conditions={extras.conditions.conditions}
+                timeZone={event.timezone}
+              />
+              {extras.conditions.attribution ? (
+                <span className="site-meta">
+                  {extras.conditions.attribution}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           {action ? (
             <div className="site-actions">
               <LinkButton href={action.href} size="lg" variant="primary">
@@ -300,6 +350,81 @@ export function EventPage({
               </article>
             ))}
           </Rally>
+        </Section>
+      ) : null}
+
+      {extras.hasDraw || extras.predictionCount ? (
+        <nav aria-label="Tournament desk" className="site-wrap event-desk">
+          {extras.hasDraw ? (
+            <ArrowLink href={desk}>Bracket and results</ArrowLink>
+          ) : null}
+          {extras.predictionCount ? (
+            <ArrowLink href={`${desk}#predictions`}>
+              {`Predictions (${extras.predictionCount})`}
+            </ArrowLink>
+          ) : null}
+        </nav>
+      ) : null}
+
+      {entries.length > 0 ? (
+        <Section
+          id="entries"
+          label="Entries"
+          lead="Confirmed teams in seed order, then the waitlist. A player shows only with a public adult profile; juniors and private profiles never appear."
+          title="The field"
+        >
+          <div className="event-entries">
+            {entries.map((division) => (
+              <section
+                aria-label={`${division.name} entries`}
+                className="club-card event-entries__division"
+                key={division.id}
+              >
+                <h3 className="club-card__title">{division.name}</h3>
+                <ol className="event-entries__list">
+                  {[...division.confirmed, ...division.waitlisted].map(
+                    (team) => (
+                      <li className="event-entry" key={team.id}>
+                        <span className="club-num event-entry__seed">
+                          {team.seed}
+                        </span>
+                        <span className="event-entry__team">
+                          <strong>{team.name}</strong>
+                          {team.players.length ? (
+                            <span className="site-meta">
+                              {team.players.map((player, index) => (
+                                <span key={player.href}>
+                                  {index > 0 ? " · " : ""}
+                                  <Link href={player.href}>{player.name}</Link>
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
+                        </span>
+                        {team.averageRating ? (
+                          <span className="club-num site-meta">
+                            {team.averageRating}
+                          </span>
+                        ) : null}
+                        <Chip
+                          kind="status"
+                          tone={
+                            team.status === "waitlisted"
+                              ? "warning"
+                              : "positive"
+                          }
+                        >
+                          {team.status === "waitlisted"
+                            ? "Waitlist"
+                            : "Confirmed"}
+                        </Chip>
+                      </li>
+                    ),
+                  )}
+                </ol>
+              </section>
+            ))}
+          </div>
         </Section>
       ) : null}
 
@@ -443,6 +568,61 @@ export function EventPage({
         </Section>
       ) : null}
 
+      {guests.length > 0 || highlights.length > 0 ? (
+        <Section id="guests" label="Highlights" title="More than the matches">
+          <Rally className="club-grid">
+            {guests.map((guest) => (
+              <article className="club-card club-offering" key={guest.id}>
+                <span className="site-label">Featured guest</span>
+                <h3 className="club-card__title">
+                  {guest.personName ?? guest.title}
+                </h3>
+                {guest.personName && guest.title !== guest.personName ? (
+                  <p className="site-meta">{guest.title}</p>
+                ) : null}
+                {guest.description ? (
+                  <p className="site-body">{guest.description}</p>
+                ) : null}
+                {guest.personPublicPath ? (
+                  <ArrowLink href={guest.personPublicPath}>Profile</ArrowLink>
+                ) : null}
+              </article>
+            ))}
+            {highlights.map((feature) => (
+              <article className="club-card club-offering" key={feature.id}>
+                <span className="site-label">
+                  {feature.kind === "sponsor" ? "Sponsor" : "Activity"}
+                </span>
+                <h3 className="club-card__title">{feature.title}</h3>
+                {feature.description ? (
+                  <p className="site-body">{feature.description}</p>
+                ) : null}
+              </article>
+            ))}
+          </Rally>
+        </Section>
+      ) : null}
+
+      {extras.videos?.length ? (
+        <Section id="watch" label="Watch" title="Watch the event">
+          <ul className="event-matches" aria-label="Videos">
+            {extras.videos.map((video) => (
+              <li key={video.id}>
+                <Link className="event-match" href={`/watch/${video.id}`}>
+                  <Chip kind="status" tone={video.live ? "live" : "neutral"}>
+                    {video.live ? "Live" : "Replay"}
+                  </Chip>
+                  <span>
+                    <strong>{video.title}</strong>
+                  </span>
+                  <Icon name="chevron-right" size="inline" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
       {location?.mode !== "online" ? (
         <Section id="place" label="Place" title={venueName}>
           <PlaceMap
@@ -456,6 +636,9 @@ export function EventPage({
             <p className="site-meta">
               Courts: {location.courtNames.join(", ")}
             </p>
+          ) : null}
+          {extras.nearbyHref ? (
+            <ArrowLink href={extras.nearbyHref}>More to play nearby</ArrowLink>
           ) : null}
         </Section>
       ) : null}

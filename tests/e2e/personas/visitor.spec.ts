@@ -95,6 +95,22 @@ test.describe("VI-2 Look around without an account", () => {
       `/sign-in/start?returnTo=${encodeURIComponent(returnTo)}`,
     );
   });
+  test("VI-2.7 A tournament's entry list shows public adults only, and leads to the bracket", async ({
+    page,
+  }) => {
+    await page.goto("/events/sunset-open-qualifier");
+    await expectPageReady(page, "Sunset Open — Qualifier");
+    const entries = page.getByRole("region", { name: "Open entries" });
+    await expect(
+      entries.getByRole("link", { name: "Theo Park" }),
+    ).toHaveAttribute("href", "/players/theopark");
+    // A minor or private entrant never appears to a signed-out visitor.
+    await expect(page.getByText("Junior Private")).toHaveCount(0);
+    await expect(entries.getByText("Seed 2")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Bracket and results" }),
+    ).toHaveAttribute("href", "/events/sunset-open-qualifier/bracket");
+  });
   test("VI-2.6 A club's membership is shown as its card, and Join leads to the offer", async ({
     page,
   }) => {

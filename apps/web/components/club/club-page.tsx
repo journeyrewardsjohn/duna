@@ -64,6 +64,10 @@ export interface ClubPageProps {
   readonly coaches: readonly PublicCoach[];
   readonly viewer: { readonly signedIn: boolean; readonly name?: string };
   readonly now: Date;
+  /** Whether each venue is open right now (public venues), by venue id. */
+  readonly openNow?: Readonly<Record<string, boolean>>;
+  /** `/discover` around the club's main place. */
+  readonly nearbyHref?: string;
   /** The catalog could not be read (its reference is shown). */
   readonly catalogError?: string;
 }
@@ -132,6 +136,8 @@ export function ClubPage({
   viewer,
   now,
   catalogError,
+  openNow = {},
+  nearbyHref,
 }: ClubPageProps) {
   const name = theme.displayName ?? storefront.name;
   const slug = storefront.slug;
@@ -620,35 +626,50 @@ export function ClubPage({
               longitude={storefront.venues[0]!.longitude}
               name={storefront.venues[0]!.name}
             />
-            <ul className="club-venues">
-              {storefront.venues.map((venue) => (
-                <li className="club-venue" key={venue.id}>
-                  <Icon name="pin" size="control" />
-                  <span>
-                    <strong>{venue.name}</strong>
-                    <span className="site-meta">
-                      {[
-                        addressLine(venue),
-                        venue.courtCount
-                          ? `${venue.courtCount} court${venue.courtCount === 1 ? "" : "s"}`
-                          : undefined,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                    {venue.amenities.length ? (
-                      <span className="club-venue__tags">
-                        {venue.amenities.slice(0, 4).map((amenity) => (
-                          <Chip key={amenity} kind="taxonomy">
-                            {amenity}
-                          </Chip>
-                        ))}
+            <div className="club-places__list">
+              <ul className="club-venues">
+                {storefront.venues.map((venue) => (
+                  <li className="club-venue" key={venue.id}>
+                    <Icon name="pin" size="control" />
+                    <span>
+                      <strong>{venue.name}</strong>
+                      <span className="site-meta">
+                        {[
+                          addressLine(venue),
+                          venue.courtCount
+                            ? `${venue.courtCount} court${venue.courtCount === 1 ? "" : "s"}`
+                            : undefined,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </span>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                      {openNow[venue.id] !== undefined ? (
+                        <Chip
+                          kind="status"
+                          tone={openNow[venue.id] ? "positive" : "neutral"}
+                        >
+                          {openNow[venue.id] ? "Open now" : "Closed now"}
+                        </Chip>
+                      ) : null}
+                      {venue.amenities.length ? (
+                        <span className="club-venue__tags">
+                          {venue.amenities.slice(0, 4).map((amenity) => (
+                            <Chip key={amenity} kind="taxonomy">
+                              {amenity}
+                            </Chip>
+                          ))}
+                        </span>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {nearbyHref ? (
+                <ArrowLink className="club-nearby" href={nearbyHref}>
+                  More to play nearby
+                </ArrowLink>
+              ) : null}
+            </div>
           </div>
         </Section>
       ) : null}

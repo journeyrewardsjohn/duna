@@ -309,6 +309,7 @@ club, and signs up without losing their place.
 | VI-2.4 | Reads the rankings                                                                                                                                       | Web     | P2         | Main   |
 | VI-2.5 | Books from a club's offering → signs in and returns to that offering's checkout                                                                          | Web     | SITE-5     | Main   |
 | VI-2.6 | Sees a club's membership as its card ("Your name") and Join leads to the offer                                                                           | Web     | SITE-5     | Main   |
+| VI-2.7 | Sees a tournament's entry list (public adults only; juniors and private profiles never) and the link to its bracket                                      | Web     | SITE-5     | Main   |
 | VI-3.1 | Opens a public checkout → what happens next is explained                                                                                                 | Web     | P5         | Main   |
 | VI-3.2 | Booking asks them to sign in and returns them to the same place                                                                                          | Web     | P1         | Main   |
 | VI-4.1 | Opens sign-up → a secure account hand-off                                                                                                                | Web     | P2         | Main   |

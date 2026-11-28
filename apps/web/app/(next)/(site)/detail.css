@@ -818,6 +818,65 @@
       }
     }
 
+    .club-places__list {
+      display: grid;
+      gap: var(--td-space-4);
+      align-content: start;
+      justify-items: start;
+    }
+
+    .event-conditions {
+      display: grid;
+      gap: var(--td-space-1);
+    }
+
+    .event-desk {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-6);
+      padding-block: var(--td-space-2);
+    }
+
+    .event-entries {
+      display: grid;
+      gap: var(--td-space-4);
+
+      @media (min-width: 900px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .event-entries__division {
+      display: grid;
+      gap: var(--td-space-3);
+      padding: var(--td-space-5);
+    }
+
+    .event-entries__list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .event-entry {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) auto auto;
+      gap: var(--td-space-3);
+      align-items: center;
+      min-height: 52px;
+      border-top: 1px solid var(--td-line);
+    }
+
+    .event-entry__team {
+      display: grid;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .event-entry__seed {
+      color: var(--td-text-2);
+    }
+
     .club-venues {
       display: grid;
       gap: 0;

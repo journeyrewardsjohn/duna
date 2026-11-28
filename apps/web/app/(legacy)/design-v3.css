@@ -2661,6 +2661,12 @@ body {
   text-align: right;
 }
 
+.event-public__section > header h2 {
+  color: var(--text-1);
+  font-family: var(--font-body);
+  font-weight: 800;
+}
+
 .event-public__booking > a:not(.secondary) {
   color: var(--btn-primary-fg);
   border-color: var(--btn-primary-bg);
@@ -4522,6 +4528,12 @@ body {
   grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem);
   max-width: 90rem;
   padding: clamp(2.5rem, 5vw, 5rem) clamp(1rem, 3vw, 2rem) 7rem;
+}
+
+.event-public__section > header p {
+  color: var(--text-2);
+  font-size: 1rem;
+  line-height: 1.7;
 }
 
 .event-public__booking {
