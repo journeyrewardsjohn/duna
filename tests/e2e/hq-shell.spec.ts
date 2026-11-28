@@ -79,15 +79,18 @@ test("the shell renders with its landmarks at desktop and phone width", async ({
   await expect(sidebar).toBeHidden();
   const phoneBar = page.getByRole("navigation", { name: "Quick navigation" });
   await expect(phoneBar).toBeVisible();
+  // The page itself fits the phone width (checked before a sheet opens).
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    )
+    .toBe(true);
   await phoneBar.getByRole("button", { name: "More" }).click();
   const more = page.getByRole("dialog", { name: "Duna HQ" });
   await expect(more.getByRole("link", { name: "Reports" })).toBeVisible();
   await expect(more.getByRole("button", { name: "Ask Duna" })).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth + 1,
-    ),
-  ).toBe(true);
 });
 
 test("the sidebar remembers being collapsed", async ({ page }) => {

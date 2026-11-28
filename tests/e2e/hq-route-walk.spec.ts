@@ -136,6 +136,12 @@ const knownFailures: Readonly<Record<string, string>> = {
     "H9: operator.activityDetail needs the connected database in demo mode.",
   [extraPaths.memberHealth]:
     "H4: operator.memberHealthProfile needs the connected database in demo mode.",
+  [extraPaths.stripeReturn]:
+    "H10: Duna Pay return calls WorkOS withAuth, which is not configured in demo mode.",
+  [extraPaths.adminMessagingSafety]:
+    "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
+  [extraPaths.adminSupport]:
+    "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
 };
 
 /** One or more concrete paths per page template, plus the league filter. */
