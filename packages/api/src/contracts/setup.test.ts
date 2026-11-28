@@ -1,4 +1,12 @@
-import { setupDemo } from "@duna/core/demo/setup";
+import {
+  setupDemo,
+  setupDemoFailureReasons,
+  setupDemoIds,
+} from "@duna/core/demo/setup";
+import {
+  setupFailureMessages,
+  setupFailureReasons,
+} from "../services/setup/failure-reasons";
 import {
   setupProposalCategories,
   setupProposalDecisions,
@@ -85,12 +93,57 @@ describe("operator.setup in demo mode and connected mode (W3-0 stubs)", () => {
     await expect(setup.readiness()).resolves.toMatchObject({ total: 9 });
   });
 
-  it("says 'not implemented yet' outside demo mode", async () => {
+  it("demo mode covers the procedures added by B1 (cancel, bulk keep)", async () => {
+    const setup = caller();
+    const reading = await setup.cancelRun({ runId: setupDemoIds.readingRun });
+    expect(setupRunSchema.parse(reading).status).toBe("cancelled");
+    const review = await setup.cancelRun({ runId: setupDemoIds.reviewRun });
+    expect(review.status).toBe("review");
+    const { proposals } = await setup.decideGroup({
+      runId: setupDemoIds.reviewRun,
+      category: "contact",
+      decision: "kept",
+    });
+    // A conflicting phone is never bulk-kept: the person picks one.
+    expect(
+      proposals.find((p) => p.fieldKey === "contact.phone")?.decision,
+    ).toBe("pending");
+  });
+
+  it("outside demo mode, a website read without keys is honestly not configured", async () => {
     dataSource.demo = false;
+    vi.stubEnv("FIRECRAWL_API_KEY", "");
+    vi.stubEnv("FIRECRAWL_API", "");
+    vi.stubEnv("AI_GATEWAY_API_KEY", "");
+    vi.stubEnv("VERCEL_AI_GATEWAY_API_KEY", "");
+    vi.stubEnv("VERCEL_OIDC_TOKEN", "");
     const error = await caller()
-      .profile()
+      .startRun({
+        sourceKind: "website",
+        sourceUrl: "https://club-fixture.club",
+      })
       .catch((caught: unknown) => caught);
     expect(error).toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(isNotImplementedYet(error)).toBe(true);
+    expect(isNotImplementedYet(error)).toBe(false);
+  });
+});
+
+describe("every failure a person can act on has a fixture and plain words", () => {
+  it("one failed demo run per failure reason", () => {
+    expect([...setupDemoFailureReasons].sort()).toEqual(
+      [...setupFailureReasons].sort(),
+    );
+    expectCoverage(
+      setupFailureReasons,
+      setupDemo.runs.flatMap((r) =>
+        "failureReason" in r && r.failureReason ? [r.failureReason] : [],
+      ),
+    );
+    for (const reason of setupFailureReasons) {
+      expect(setupFailureMessages[reason]).toMatch(/^[A-Z].+\.$/);
+      expect(setupFailureMessages[reason]).not.toMatch(
+        /firecrawl|vercel|neon|openai/i,
+      );
+    }
   });
 });

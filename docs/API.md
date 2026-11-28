@@ -234,6 +234,32 @@ Errors: `FORBIDDEN` (not yours and not a manager), `NOT_FOUND` (outside the
 caller's club), `CONFLICT` (state machine or the substitute is no longer
 free), `BAD_REQUEST` (invalid time zone or window).
 
+## Club setup (`operator.setup`, owner B1)
+
+Shapes are frozen in `packages/api/src/contracts/setup.ts`; how it works, the
+limits and what is never done automatically are in
+[`docs/product/club-setup.md`](product/club-setup.md). Reads need
+`sessions:read`, writes `sessions:write`. In demo mode every procedure returns
+its fixture from `@duna/core/demo/setup` (one failed run per failure reason).
+
+| Procedure        | Status | Notes                                                                                                                                                                                                                                                                                       |
+| ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile`        | live   | The club's facts and their provenance; works with no website and no provider                                                                                                                                                                                                                |
+| `updateProfile`  | live   | Partial update by hand; marks each field `person`, confirmed; `confirmFields` clears "From your website"; `BAD_REQUEST` for a non-public website or a closing time before opening                                                                                                           |
+| `startRun`       | live   | `website` or `description`; `google-listing` is not configured yet. Without the reader / AI gateway: `PRECONDITION_FAILED` (not configured), no outbound call. Unsafe address: `BAD_REQUEST`; a read already running for another source: `CONFLICT`; more than 6 a day: `TOO_MANY_REQUESTS` |
+| `run`            | live   | The run with its pages; polling it resumes a stalled read                                                                                                                                                                                                                                   |
+| `latestRun`      | live   | The newest run or `null`                                                                                                                                                                                                                                                                    |
+| `cancelRun`      | live   | `{ runId }` → `setupRunSchema`. Added by B1 on existing shapes; stops a queued or reading run and discards what it found; idempotent                                                                                                                                                        |
+| `proposals`      | live   | Everything a run found; `payload` carries the value plus `confidence` (`stated` / `inferred`), `quotes` (page + short text) and, on a re-read, `before`                                                                                                                                     |
+| `decideProposal` | live   | Keep / Edit / Skip; Keep and Edit pass the same rules (phone, email, links, hours, colours, prices in minor units); `CONFLICT` while reading or once applied                                                                                                                                |
+| `decideGroup`    | live   | `{ runId, category, decision: kept \| skipped }` → `setupProposalsSchema`. Added by B1 on existing shapes; bulk Keep leaves conflicts and invalid values pending                                                                                                                            |
+| `applyProposals` | live   | Writes kept and edited items, one transaction per group, each audited (`setup.proposal.applied`); replaying the idempotency key returns the first report                                                                                                                                    |
+| `readiness`      | live   | Computed from the club's records: nine sections, `bookingsOpen` once places, hours, an offering and Duna Pay are ready                                                                                                                                                                      |
+
+Service functions with no procedure yet: `processPendingSetupRuns` (advance
+waiting or stalled reads, for a cron) and `purgeExpiredSetupRunData` (the
+proposed 180-day retention), both in `packages/api/src/services/setup`.
+
 ## Safety invariants
 
 - Only complete doubles teams with four distinct people enter the backtest.
