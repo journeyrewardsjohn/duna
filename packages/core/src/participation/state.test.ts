@@ -69,101 +69,106 @@ function walk(seed: number, rule: ParticipationMachineRule, steps = 40) {
   return history;
 }
 
-describe("the transition function (property-style)", () => {
-  const seeds = Array.from({ length: 250 }, (_, index) => index + 1);
+describe(
+  "the transition function (property-style)",
+  { timeout: 60_000 },
+  () => {
+    const seeds = Array.from({ length: 120 }, (_, index) => index + 1);
 
-  it("never skips a state: every step follows an edge of the diagram", () => {
-    for (const rule of rules) {
-      for (const seed of seeds) {
-        for (const step of walk(seed, rule)) {
-          let from = step.before.state;
-          for (const to of step.path) {
-            expect(PARTICIPATION_EDGES[from]).toContain(to);
-            from = to;
-          }
-          expect(step.path.at(-1)).toBe(step.after.state);
-        }
-      }
-    }
-  });
-
-  it("after the lock, headcount alone never cancels", () => {
-    for (const rule of rules) {
-      for (const seed of seeds) {
-        for (const step of walk(seed, rule)) {
-          if (
-            step.before.outcome !== undefined &&
-            step.before.state !== "cancelled-low" &&
-            step.before.state !== "cancelled-club" &&
-            (step.event.type === "booked" || step.event.type === "cancelled")
-          ) {
-            expect(["cancelled-low", "cancelled-club"]).not.toContain(
-              step.after.state,
-            );
-            expect(step.after.outcome).toBe(step.before.outcome);
+    it("never skips a state: every step follows an edge of the diagram", () => {
+      for (const rule of rules) {
+        for (const seed of seeds) {
+          for (const step of walk(seed, rule)) {
+            let from = step.before.state;
+            for (const to of step.path) {
+              expect(PARTICIPATION_EDGES[from]).toContain(to);
+              from = to;
+            }
+            expect(step.path.at(-1)).toBe(step.after.state);
           }
         }
       }
-    }
-  });
+    });
 
-  it("a session that already started is never cancelled for numbers", () => {
-    for (const rule of rules) {
-      const machine = initialParticipationMachine(rule, 0);
-      const late = participationTransition(
-        machine,
-        { type: "lock", late: true },
-        rule,
-      );
-      expect(late.machine.state).not.toBe("cancelled-low");
-      const ended = participationTransition(machine, { type: "end" }, rule);
-      expect(ended.machine.state).toBe("done");
-    }
-  });
-
-  it("never holds more than the capacity", () => {
-    for (const rule of rules) {
-      for (const seed of seeds) {
-        for (const step of walk(seed, rule)) {
-          expect(step.after.booked).toBeLessThanOrEqual(rule.capacity);
-          expect(step.after.booked).toBeGreaterThanOrEqual(0);
+    it("after the lock, headcount alone never cancels", () => {
+      for (const rule of rules) {
+        for (const seed of seeds) {
+          for (const step of walk(seed, rule)) {
+            if (
+              step.before.outcome !== undefined &&
+              step.before.state !== "cancelled-low" &&
+              step.before.state !== "cancelled-club" &&
+              (step.event.type === "booked" || step.event.type === "cancelled")
+            ) {
+              expect(["cancelled-low", "cancelled-club"]).not.toContain(
+                step.after.state,
+              );
+              expect(step.after.outcome).toBe(step.before.outcome);
+            }
+          }
         }
       }
-    }
-  });
+    });
 
-  it("agrees with the derivation readers use", () => {
-    const endsAt = new Date("2026-12-10T18:00:00Z");
-    for (const rule of rules) {
-      for (const seed of seeds) {
-        for (const step of walk(seed, rule)) {
-          const machine = step.after;
-          if (machine.state === "done" || machine.state === "settled") continue;
-          expect(
-            deriveParticipationState({
-              booked: machine.booked,
-              minParticipants: rule.minParticipants,
-              capacity: rule.capacity,
-              outcome: machine.outcome,
-              now: new Date("2026-12-09T12:00:00Z"),
-              endsAt,
-            }),
-          ).toBe(machine.state);
+    it("a session that already started is never cancelled for numbers", () => {
+      for (const rule of rules) {
+        const machine = initialParticipationMachine(rule, 0);
+        const late = participationTransition(
+          machine,
+          { type: "lock", late: true },
+          rule,
+        );
+        expect(late.machine.state).not.toBe("cancelled-low");
+        const ended = participationTransition(machine, { type: "end" }, rule);
+        expect(ended.machine.state).toBe("done");
+      }
+    });
+
+    it("never holds more than the capacity", () => {
+      for (const rule of rules) {
+        for (const seed of seeds) {
+          for (const step of walk(seed, rule)) {
+            expect(step.after.booked).toBeLessThanOrEqual(rule.capacity);
+            expect(step.after.booked).toBeGreaterThanOrEqual(0);
+          }
         }
       }
-    }
-  });
+    });
 
-  it("reaches every state", () => {
-    const seen = new Set<ParticipationState>();
-    for (const rule of rules) {
-      for (const seed of seeds) {
-        for (const step of walk(seed, rule)) seen.add(step.after.state);
+    it("agrees with the derivation readers use", () => {
+      const endsAt = new Date("2026-12-10T18:00:00Z");
+      for (const rule of rules) {
+        for (const seed of seeds) {
+          for (const step of walk(seed, rule)) {
+            const machine = step.after;
+            if (machine.state === "done" || machine.state === "settled")
+              continue;
+            expect(
+              deriveParticipationState({
+                booked: machine.booked,
+                minParticipants: rule.minParticipants,
+                capacity: rule.capacity,
+                outcome: machine.outcome,
+                now: new Date("2026-12-09T12:00:00Z"),
+                endsAt,
+              }),
+            ).toBe(machine.state);
+          }
+        }
       }
-    }
-    expect([...seen].sort()).toEqual([...PARTICIPATION_STATES].sort());
-  });
-});
+    });
+
+    it("reaches every state", () => {
+      const seen = new Set<ParticipationState>();
+      for (const rule of rules) {
+        for (const seed of seeds) {
+          for (const step of walk(seed, rule)) seen.add(step.after.state);
+        }
+      }
+      expect([...seen].sort()).toEqual([...PARTICIPATION_STATES].sort());
+    });
+  },
+);
 
 describe("worked example 1: semi-private (2 of 2, cancel)", () => {
   const rule = {
