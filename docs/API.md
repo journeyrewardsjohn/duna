@@ -304,6 +304,35 @@ and pays nobody here.
 `operator.teamPayouts.*` (B3c) stays "not implemented yet" by design; see
 [`docs/money/contractor-payouts.md`](money/contractor-payouts.md).
 
+## HQ People (`operator.people`, PEOPLE-API)
+
+Rules, merge rules and the screen switches: [`docs/product/people.md`](product/people.md).
+
+| Procedure                       | Scope           | Input → output                                                                                                                                                   |
+| ------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `notes.list`                    | `members:read`  | `{ personId }` → `{ notes[{ id, body, author, createdAt, editedAt? }] }`                                                                                         |
+| `notes.add` / `edit` / `remove` | `members:write` | `{ personId \| noteId, body?, idempotencyKey }` → note / `{ noteId, removed }`                                                                                   |
+| `tags.list`                     | `members:read`  | `{ personId? }` → `{ tags[{ tag, count }], personTags? }`                                                                                                        |
+| `tags.set`                      | `members:write` | `{ personIds (≤200), add, remove, idempotencyKey }` → `{ people, added, removed }`                                                                               |
+| `household`                     | `members:read`  | `{ personId }` → `{ guardians, juniors (consent), payer?, contact? }`                                                                                            |
+| `inviteGuardian`                | `members:write` | `{ juniorPersonId, guardianName, relationship, email? \| phoneE164?, confirmed, idempotencyKey }` → `{ invitationId, inviteUrl, expiresAt, draft, sent: false }` |
+| `linkGuardian`                  | `members:write` | `{ juniorPersonId, guardianPersonId, relationship, confirmed, idempotencyKey }` → `{ reviewStatus: "pending", consent: "not-recorded" }`                         |
+| `documents`                     | `members:read`  | `{ personId }` → `{ documents[{ title, kind, versionSigned, currentVersion, signedAt, signedBy, status }] }`                                                     |
+| `requestSignature`              | `members:write` | `{ personId, waiverDocumentId, idempotencyKey }` → `{ draftId, recipientPersonId, signUrl, sent: false }`                                                        |
+| `importPreview`                 | `members:write` | `{ rows (≤1,000), mapping }` → `{ previewId, expiresAt, counts, rows[{ row, action, matchPersonId?, problems }] }`                                               |
+| `import`                        | `members:write` | `{ previewId, confirmed, idempotencyKey }` → `{ status, processed, total, created, updated, skipped, guardiansLinked, messagesSent: 0 }`                         |
+| `mergePreview`                  | `members:write` | `{ keepId, mergeId }` → `{ previewId, canMerge, kept, moves, blockers }`                                                                                         |
+| `merge`                         | `members:write` | `{ previewId, confirmed, idempotencyKey }` → `{ mergeId, personId, moved }`                                                                                      |
+| `planChangePreview`             | `members:read`  | `{ personId, membershipId, toTierId, timing }` → `{ previewId, status, reason?, from, to, chargeNowMinor, creditNowMinor, nextCharge?, wording }`                |
+| `changePlan`                    | `members:write` | the same plus `{ previewId, confirmed, idempotencyKey }` → `{ status: "changed" \| "unavailable", reason?, tierId }`                                             |
+
+Coaches read only the people they coach and never money fields; another
+club's ids answer `NOT_FOUND`. Rate limits: imports 10 per club (2 a
+minute), merges 10 (2 a minute), bulk tags and plan changes 20 (6 a minute),
+notes 60 (30 a minute). Nothing here sends a message.
+`operator.memberProfile.sessions[].groupState` carries the shared
+`participationDisplay` words (additive).
+
 ## Safety invariants
 
 - Only complete doubles teams with four distinct people enter the backtest.

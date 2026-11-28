@@ -848,6 +848,13 @@
       "when": 1795850889604,
       "tag": "0120_add_score_drafts_venue_candidates",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1795866209544,
+      "tag": "0122_people_api",
+      "breakpoints": true
     }
   ]
 }

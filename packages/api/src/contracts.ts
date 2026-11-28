@@ -5007,6 +5007,18 @@ export const operatorMemberProfileSchema = z.object({
           .optional(),
         orderId: z.string().uuid().optional(),
         noteCount: z.number().int().nonnegative(),
+        /**
+         * The shared group-state words (participationDisplay from
+         * @duna/core, the same model every surface uses). Additive.
+         */
+        groupState: z
+          .object({
+            state: z.string(),
+            tone: z.enum(["neutral", "positive", "caution", "critical"]),
+            words: z.string(),
+            staffWords: z.string(),
+          })
+          .optional(),
       }),
     )
     .readonly(),

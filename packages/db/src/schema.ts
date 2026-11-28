@@ -13287,3 +13287,4 @@ export * from "./schema/households";
 export * from "./schema/legal";
 export * from "./schema/participation";
 export * from "./schema/add-score";
+export * from "./schema/people";
