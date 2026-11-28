@@ -352,7 +352,7 @@ test("old addresses keep resolving", async ({ page }) => {
   await page.goto(hq("/training?view=drills"));
   await expect(page).toHaveURL(/\/training\/drills$/);
   await page.goto(hq("/training/drills/create/advanced"));
-  await expect(page).toHaveURL(/\/training\/drills\/create$/);
+  await expect(page).toHaveURL(/\/training\/drills\/classic\/advanced$/);
   await page.goto(hq("/activities"));
   await expect(page).toHaveURL(/\/offerings$/);
 });

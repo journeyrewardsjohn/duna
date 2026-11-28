@@ -1,7 +1,7 @@
 import { hqHref } from "@duna/core/hq-routes";
 import { redirect } from "next/navigation";
 
-/** The old advanced drill editor address: opens New drill. */
+/** The old advanced editor address: opens the classic court editor. */
 export default function AdvancedDrillEditorPage(): never {
-  redirect(hqHref("trainingDrillCreate"));
+  redirect(hqHref("trainingDrillClassicAdvanced"));
 }
