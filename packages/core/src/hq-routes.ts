@@ -16,7 +16,7 @@ export const hqRoutes = {
   inbox: "/inbox",
   inboxCreate: "/inbox/create",
   ask: "/ask/[[...conversation]]",
-  /** Retired by the IA (its cards have homes); package B4 removes it. */
+  /** Old address, retired by the IA (its cards have homes): opens Offerings. */
   activities: "/activities",
 
   // People and play. People, Events, Schedule, Marketing and
@@ -35,16 +35,27 @@ export const hqRoutes = {
   teamMemberSessions: "/team/[personId]/sessions",
   teamMemberPay: "/team/[personId]/pay",
   teamMemberAccess: "/team/[personId]/access",
+  /** Training (H-TRAIN): Programs, Practice plans, Drill library. Opens on Programs. */
   training: "/training",
-  trainingDrillCreate: "/training/drills/create",
-  trainingDrillCreateAdvanced: "/training/drills/create/advanced",
+  trainingProgramCreate: "/training/programs/create",
+  trainingProgram: "/training/programs/[programId]",
+  trainingProgramCalendar: "/training/programs/[programId]/calendar",
+  trainingProgramAthletes: "/training/programs/[programId]/athletes",
+  trainingProgramPlans: "/training/programs/[programId]/plans",
+  trainingProgramSettings: "/training/programs/[programId]/settings",
+  /** One practice or event: coaches, plan or focus, cancel, after practice. */
+  trainingPractice: "/training/practices/[eventId]",
+  trainingPracticePlans: "/training/practice-plans",
   trainingPracticePlanCreate: "/training/practice-plans/create",
   trainingPracticePlan: "/training/practice-plans/[planId]",
   trainingPracticePlanPrint: "/training/practice-plans/[planId]/print",
-  trainingPractice: "/training/practices/[eventId]",
-  trainingProgramCreate: "/training/programs/create",
-  trainingProgram: "/training/programs/[programId]",
-  /** Dropped by the IA in favour of Training › Programs; package B4 removes it. */
+  trainingDrills: "/training/drills",
+  trainingDrillCreate: "/training/drills/create",
+  /** Old advanced editor address: opens New drill. */
+  trainingDrillCreateAdvanced: "/training/drills/create/advanced",
+  trainingDrill: "/training/drills/[drillId]",
+  trainingDrillEdit: "/training/drills/[drillId]/edit",
+  /** Old address: opens Training › Programs. */
   programs: "/programs",
   eventCreate: "/events/create",
   event: "/events/[sessionId]",

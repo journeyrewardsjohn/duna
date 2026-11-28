@@ -6,7 +6,6 @@ const legacySheets = [
   "@duna/ui/hq-workspace.css",
   "globals.css",
   "design-v3.css",
-  "training.css",
   "work-focus.css",
   "ask-duna.css",
   "forms.css",
@@ -19,7 +18,12 @@ export const hq: SurfaceContract = {
   surface: "hq",
   owners: "S1, S2, S3, S4, H1–H14, F5a–e",
   // Rebuilt screens on the design system (the Tideline guard checks them).
-  migrated: ["apps/hq/app/(next)/(hq)/team/", "apps/hq/components/team/"],
+  migrated: [
+    "apps/hq/app/(next)/(hq)/team/",
+    "apps/hq/components/team/",
+    "apps/hq/app/(next)/(hq)/training/",
+    "apps/hq/components/training/",
+  ],
   checks: [
     { kind: "noFontPackages", app: "hq" },
     // HQ has two root layouts (docs/design/hq-shell.md): app/(next) for the
@@ -66,6 +70,7 @@ export const hq: SurfaceContract = {
       "apps/hq/components/today",
       "apps/hq/components/money",
       "apps/hq/components/team",
+      "apps/hq/components/training",
       "apps/hq/components/offerings",
       "apps/hq/components/participation",
       "apps/hq/components/setup",

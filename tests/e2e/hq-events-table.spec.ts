@@ -44,10 +44,8 @@ async function fixture(page: Page) {
     await route.fulfill({ response, body });
   });
   // In-app navigation yields the RSC props; fixture changes no server records.
-  await page.goto(`${base}/activities`);
-  await page
-    .getByRole("link", { name: "Open play & clinics", exact: true })
-    .click();
+  await page.goto(`${base}/schedule`);
+  await page.getByRole("link", { name: "Events", exact: true }).first().click();
 }
 
 test.beforeEach(async ({ page }) => {
