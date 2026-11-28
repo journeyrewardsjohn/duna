@@ -4,7 +4,12 @@ import { createCursorSyncEngine } from "@duna/messaging-client/delivery";
 import { useRouter } from "next/navigation";
 import { startTransition, useEffect } from "react";
 
-export function MessagingLiveRefresh({
+/**
+ * Keeps the Inbox current: one live stream attempt, then a quiet 15 s poll
+ * of the messaging cursor; any change refreshes the page (debounced). Never
+ * runs while the tab is hidden.
+ */
+export function InboxLiveRefresh({
   conversationId,
 }: {
   readonly conversationId?: string;

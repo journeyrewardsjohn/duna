@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+/** The old "new message" address (other screens link here with a recipient). */
 export default async function CreateMessagePage({
   searchParams,
 }: {

@@ -334,10 +334,53 @@ test.describe("CO-8 Message the roster", () => {
       page.getByRole("searchbox", { name: "Search conversations" }),
     ).toBeVisible();
   });
-  test.fixme("CO-8.2 Write to a session's roster from the Send card, choosing channels per person [H3, B7]", async () => {});
-  test.fixme("CO-8.3 Confirm 'Send to N people' and see each person's delivery [H3]", async () => {
-    // Expected: tier 1 confirm restating the count; single-flight send with a
-    // clientMessageId; per-person delivery rows.
+  test("CO-8.2 Write to a session's roster from the Send card, seeing each person's channel [H3, B7]", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Inbox");
+    await page
+      .getByRole("link", { name: /Saturday clinic · Beginners/ })
+      .click();
+    await page
+      .getByRole("textbox", { name: "Message", exact: true })
+      .fill("Courts 3 and 4 are dry again: clinic is back on at 4 PM.");
+    await page.getByRole("button", { name: "Review", exact: true }).click();
+    const review = page.getByRole("region", { name: "Send review" });
+    await expect(review).toBeVisible();
+    const who = review.getByRole("list", { name: "Who gets it" });
+    // One channel per person, and who can't be reached says why.
+    await expect(who.getByText("Duna app")).toBeVisible();
+    await expect(who.getByText("WhatsApp")).toBeVisible();
+    await expect(
+      who.getByText("Has no Duna account they can sign in to yet"),
+    ).toBeVisible();
+    // Reviewing sent nothing.
+    await expect(
+      page.getByRole("list", { name: "Each person's delivery" }),
+    ).toHaveCount(0);
+  });
+  test("CO-8.3 Confirm 'Send to N people' and see each person's delivery [H3]", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Inbox");
+    await page
+      .getByRole("link", { name: /Saturday clinic · Beginners/ })
+      .click();
+    await page
+      .getByRole("textbox", { name: "Message", exact: true })
+      .fill("Courts 3 and 4 are dry again: clinic is back on at 4 PM.");
+    await page.getByRole("button", { name: "Review", exact: true }).click();
+    await pressAndConfirm(
+      page,
+      page
+        .getByRole("region", { name: "Send review" })
+        .getByRole("button", { name: "Send to 2 people" }),
+      "confirm",
+      { confirmButton: "Send to 2 people" },
+    );
+    await expect(
+      page.getByRole("list", { name: "Each person's delivery" }),
+    ).toBeVisible();
   });
 });
 
