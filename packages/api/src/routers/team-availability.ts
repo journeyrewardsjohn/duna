@@ -5,12 +5,14 @@
  *
  * Mounted once in ../router.ts as `operator.teamAvailability`
  * (organizationProcedure: signed in, scope checked, organisation resolved
- * server-side). Reads need "members:read"; writes "members:write".
+ * server-side). Reads need "members:read". A member edits their own
+ * availability and asks for time off with "members:read" (the service
+ * checks it is their own profile); editing someone else, deciding time off
+ * and acting on coverage need "members:write".
  *
  * Every procedure returns its fixture from
- * @duna/core/demo/team-availability in demo mode and throws
- * `notImplementedYet` otherwise until B3a lands the service in
- * ../services/team-availability/. Read ./README.md first.
+ * @duna/core/demo/team-availability in demo mode and calls the B3a service
+ * in ../services/team-availability/ otherwise.
  */
 import {
   teamAvailabilityDemo,
@@ -42,12 +44,30 @@ import {
   teamAvailabilityUpsertScheduleInputSchema,
 } from "../contracts/team-availability";
 import { usesDemoData } from "../services/data-source";
-import { notImplementedYet } from "./not-implemented";
+import * as service from "../services/team-availability";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
 
 const DOMAIN = "team-availability";
 const read = organizationProcedure("members:read");
+/** Self-service writes: the service allows the member or a manager. */
+const selfOrManager = organizationProcedure("members:read");
 const write = organizationProcedure("members:write");
+
+function teamContext(ctx: {
+  readonly actor: Parameters<typeof service.staffAvailabilityPage>[0]["actor"];
+  readonly organizationId: string;
+  readonly requestId: string;
+  readonly now: Date;
+  readonly ipAddress?: string;
+}): service.TeamActor {
+  return {
+    actor: ctx.actor,
+    organizationId: ctx.organizationId,
+    requestId: ctx.requestId,
+    now: ctx.now,
+    ...(ctx.ipAddress ? { ipAddress: ctx.ipAddress } : {}),
+  };
+}
 const DEMO_NOW = "2026-11-27T18:00:00.000Z";
 
 function find<T extends { id: string }>(rows: readonly T[], id: string): T {
@@ -65,7 +85,7 @@ export const teamAvailabilityOperatorRouter = router({
   staff: read
     .input(teamAvailabilityStaffInputSchema)
     .output(teamAvailabilityStaffSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const page = teamAvailabilityDemo.staff;
         return {
@@ -81,14 +101,17 @@ export const teamAvailabilityOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "staff");
+      return service.staffAvailabilityPage(
+        teamContext(ctx),
+        input.staffProfileId,
+      );
     }),
 
   /** Create or replace a named schedule and its windows (stays draft). */
-  upsertSchedule: write
+  upsertSchedule: selfOrManager
     .input(teamAvailabilityUpsertScheduleInputSchema)
     .output(teamAvailabilityScheduleSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const base = input.scheduleId
           ? find(teamAvailabilityDemoSchedules, input.scheduleId)
@@ -108,14 +131,14 @@ export const teamAvailabilityOperatorRouter = router({
           updatedAt: DEMO_NOW,
         };
       }
-      return notImplementedYet(DOMAIN, "upsertSchedule");
+      return service.upsertSchedule(teamContext(ctx), input);
     }),
 
   /** draft → active | fallback; active | fallback → archived. */
-  transitionSchedule: write
+  transitionSchedule: selfOrManager
     .input(teamAvailabilityScheduleTransitionInputSchema)
     .output(teamAvailabilityScheduleSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...find(teamAvailabilityDemoSchedules, input.scheduleId),
@@ -123,34 +146,34 @@ export const teamAvailabilityOperatorRouter = router({
           updatedAt: DEMO_NOW,
         };
       }
-      return notImplementedYet(DOMAIN, "transitionSchedule");
+      return service.transitionSchedule(teamContext(ctx), input);
     }),
 
-  addBlackout: write
+  addBlackout: selfOrManager
     .input(teamAvailabilityAddBlackoutInputSchema)
     .output(teamAvailabilityBlackoutSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return { ...teamAvailabilityDemoBlackouts[0]!, ...input };
       }
-      return notImplementedYet(DOMAIN, "addBlackout");
+      return service.addBlackout(teamContext(ctx), input);
     }),
 
-  removeBlackout: write
+  removeBlackout: selfOrManager
     .input(teamAvailabilityRemoveBlackoutInputSchema)
     .output(z.object({ removed: z.boolean() }))
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         find(teamAvailabilityDemoBlackouts, input.blackoutId);
         return { removed: true };
       }
-      return notImplementedYet(DOMAIN, "removeBlackout");
+      return service.removeBlackout(teamContext(ctx), input.blackoutId);
     }),
 
-  requestTimeOff: write
+  requestTimeOff: selfOrManager
     .input(teamAvailabilityRequestTimeOffInputSchema)
     .output(teamAvailabilityTimeOffSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...teamAvailabilityDemoTimeOff[1]!,
@@ -158,14 +181,14 @@ export const teamAvailabilityOperatorRouter = router({
           requestedAt: DEMO_NOW,
         };
       }
-      return notImplementedYet(DOMAIN, "requestTimeOff");
+      return service.requestTimeOff(teamContext(ctx), input);
     }),
 
-  /** requested → approved | declined | cancelled (cancel also by the requester). */
-  decideTimeOff: write
+  /** requested → approved | declined (a manager) | cancelled (the requester or a manager). */
+  decideTimeOff: selfOrManager
     .input(teamAvailabilityDecideTimeOffInputSchema)
     .output(teamAvailabilityTimeOffSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const row = find(teamAvailabilityDemoTimeOff, input.timeOffId);
         return {
@@ -175,28 +198,28 @@ export const teamAvailabilityOperatorRouter = router({
           ...(input.note ? { decisionNote: input.note } : {}),
         };
       }
-      return notImplementedYet(DOMAIN, "decideTimeOff");
+      return service.decideTimeOff(teamContext(ctx), input);
     }),
 
   /** Hour × weekday: sessions against coaches free (TM-Coverage). */
   coverageGrid: read
     .input(teamAvailabilityCoverageGridInputSchema)
     .output(teamAvailabilityCoverageGridSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...teamAvailabilityDemo.coverageGrid,
           weekStartsOn: input.weekStartsOn,
         };
       }
-      return notImplementedYet(DOMAIN, "coverageGrid");
+      return service.coverageGrid(teamContext(ctx), input.weekStartsOn);
     }),
 
   /** Sessions that need cover, with ranked substitutes. */
   coverageRequests: read
     .input(teamAvailabilityCoverageRequestsInputSchema)
     .output(teamAvailabilityCoverageRequestsSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           requests: teamAvailabilityDemoCoverageRequests.filter(
@@ -204,14 +227,14 @@ export const teamAvailabilityOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "coverageRequests");
+      return service.coverageRequests(teamContext(ctx), input);
     }),
 
   /** suggest | ask | assign | decline | cancel on one coverage request. */
   coverageAction: write
     .input(teamAvailabilityCoverageActionInputSchema)
     .output(teamAvailabilityCoverageRequestSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const request = find(
           teamAvailabilityDemoCoverageRequests,
@@ -240,6 +263,6 @@ export const teamAvailabilityOperatorRouter = router({
         }
         return request;
       }
-      return notImplementedYet(DOMAIN, "coverageAction");
+      return service.coverageAction(teamContext(ctx), input);
     }),
 });

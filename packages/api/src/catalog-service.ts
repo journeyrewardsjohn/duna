@@ -114,6 +114,10 @@ import {
   virtualDeliveryConfigurationSchema,
   type SessionCoachAvailability,
 } from "./session-delivery";
+import {
+  legacyAvailabilityView,
+  loadBookingAvailability,
+} from "./services/team-availability";
 import { resolveCatalogTaxCode } from "./tax-policy";
 
 type CatalogItemType = OperatorWorkspace["catalog"][number]["type"];
@@ -1967,6 +1971,16 @@ export async function loadPublicOrganizationStorefront(
       )
       .limit(10_000),
   ]);
+  // B3a: schedules, blackouts and approved time off from the new tables.
+  const storefrontNow = new Date();
+  const staffAvailability = await loadBookingAvailability({
+    organizationId: organization.id,
+    personIds: staffRows.map((coach) => coach.personId),
+    range: {
+      startsAt: storefrontNow,
+      endsAt: new Date(storefrontNow.getTime() + 731 * 86_400_000),
+    },
+  });
   const itemIds = itemRows.map((item) => item.id);
   const variantRows =
     itemIds.length === 0
@@ -2176,6 +2190,7 @@ export async function loadPublicOrganizationStorefront(
           displayName: coach.displayName,
           email: coach.email ?? undefined,
           availability: coach.availability,
+          staffAvailability: staffAvailability.get(coach.personId),
           busyRanges: coachBusyRows
             .filter((range) => range.personId === coach.personId)
             .map((range) => ({
@@ -2810,6 +2825,7 @@ export async function loadPublicCoaches(
       organizationId: organizations.id,
       organizationSlug: organizations.slug,
       organizationName: organizations.name,
+      organizationTimezone: organizations.timezone,
     })
     .from(organizationStaffProfiles)
     .innerJoin(people, eq(organizationStaffProfiles.personId, people.id))
@@ -2852,6 +2868,28 @@ export async function loadPublicCoaches(
         row.profileClaimStatus === "claim-pending"),
   );
   if (visibleRows.length === 0) return [];
+  // B3a: weekly hours come from the named-schedule tables.
+  const availabilityByProfile = new Map<string, Record<string, unknown>[]>();
+  for (const timezone of new Set(
+    visibleRows.map((row) => row.organizationTimezone),
+  )) {
+    const view = await legacyAvailabilityView(
+      visibleRows
+        .filter((row) => row.organizationTimezone === timezone)
+        .map((row) => ({
+          id: row.profile.id,
+          organizationId: row.profile.organizationId,
+          personId: row.profile.personId,
+          displayName: row.displayName,
+          staffRole: row.profile.staffRole,
+          active: row.profile.active,
+          createdAt: row.profile.createdAt,
+          legacyAvailability: row.profile.availability,
+        })),
+      timezone,
+    );
+    for (const [id, entries] of view) availabilityByProfile.set(id, entries);
+  }
 
   const storefrontByOrganization = new Map<
     string,
@@ -2923,7 +2961,8 @@ export async function loadPublicCoaches(
         ? (row.playingExperience as PublicCoach["playingExperience"])
         : undefined,
       yearsPlaying: row.yearsPlaying ?? undefined,
-      availability: row.profile.availability,
+      availability:
+        availabilityByProfile.get(row.profile.id) ?? row.profile.availability,
       services: (storefront?.catalog ?? []).filter(
         (item) =>
           item.visibility === "public" &&
@@ -3816,6 +3855,15 @@ export async function createCatalogItem(
           ),
         ),
       );
+    // B3a: schedules, blackouts and approved time off from the new tables.
+    const staffAvailability = await loadBookingAvailability({
+      organizationId,
+      personIds: coachRows.map((coach) => coach.personId),
+      range: {
+        startsAt: input.now,
+        endsAt: new Date(input.now.getTime() + 731 * 86_400_000),
+      },
+    });
     const occurrences = generateBookableSessionOccurrences({
       configuration: deliveryConfiguration,
       coaches: coachRows.map((coach) => ({
@@ -3823,6 +3871,7 @@ export async function createCatalogItem(
         displayName: coach.displayName,
         email: coach.email ?? undefined,
         availability: coach.availability,
+        staffAvailability: staffAvailability.get(coach.personId),
       })),
       now: input.now,
       horizonDays: 730,

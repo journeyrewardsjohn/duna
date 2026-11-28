@@ -212,6 +212,28 @@ Payouts are created only by the hourly `/api/cron/money-payouts` job and the
 existing owner-confirmed manual payout, and only from releasable tranches
 (settled, delivered, not held).
 
+## Team availability (`operator.teamAvailability`, owner B3a)
+
+Shapes are frozen in `packages/api/src/contracts/team-availability.ts`; the
+product rules are in [`docs/product/team.md`](product/team.md). Every
+procedure is live and returns its fixture from
+`@duna/core/demo/team-availability` in demo mode. "Is this coach free" is
+`availabilityFor` in `@duna/scheduling` (pure); session booking
+(`session-delivery.ts`), coverage and the grid all call it.
+
+| Procedure                                                                                 | Scope                                                                                             | Notes                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `staff`                                                                                   | `members:read`                                                                                    | Schedules (newest first), blackouts, time off, each with derived `sessionsNeedingCover`; copies legacy availability on first view                                  |
+| `upsertSchedule`, `transitionSchedule`, `addBlackout`, `removeBlackout`, `requestTimeOff` | `members:read` + the member themselves, or `members:write`                                        | Overnight windows are stored as two rows and returned whole; activating a schedule ends an open-ended predecessor the day before                                   |
+| `decideTimeOff`                                                                           | approve/decline: `members:write`, not your own (owner may); cancel: the member or `members:write` | Approval opens coverage requests for the affected sessions                                                                                                         |
+| `coverageGrid`                                                                            | `members:read`                                                                                    | Club time zone; a coach teaching a session counts as available for it                                                                                              |
+| `coverageRequests`                                                                        | `members:read`                                                                                    | Filter by status and time                                                                                                                                          |
+| `coverageAction`                                                                          | `members:write`                                                                                   | `suggest` re-ranks; `ask` records the ask (Concierge sends); `assign` re-checks the substitute, reassigns the session and writes an audit row; `decline`; `cancel` |
+
+Errors: `FORBIDDEN` (not yours and not a manager), `NOT_FOUND` (outside the
+caller's club), `CONFLICT` (state machine or the substitute is no longer
+free), `BAD_REQUEST` (invalid time zone or window).
+
 ## Club setup (`operator.setup`, owner B1)
 
 Shapes are frozen in `packages/api/src/contracts/setup.ts`; how it works, the
