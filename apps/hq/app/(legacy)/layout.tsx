@@ -2,9 +2,9 @@ import "@duna/ui/styles.css";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./globals.css";
 import "./design-v3.css";
-import "./training.css";
 import "@duna/ui/hq-workspace.css";
 import "./work-focus.css";
+import "./training.css";
 import "./ask-duna.css";
 import "./forms.css";
 

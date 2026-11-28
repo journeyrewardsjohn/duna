@@ -80,6 +80,7 @@ import {
   addScorePlayerRouter,
   addScorePublicRouter,
 } from "./routers/add-score";
+import { invitesPlayerRouter } from "./routers/invites";
 import { healthPlayerRouter } from "./routers/health";
 import {
   conditionsOperatorRouter,
@@ -8574,6 +8575,8 @@ const playerRouter = router({
   participation: participationPlayerRouter,
   // SITE-3: claim an anonymous score draft after sign-in.
   addScore: addScorePlayerRouter,
+  // INVITE-SMS: invitations by text message (preview, send, status).
+  invites: invitesPlayerRouter,
 });
 
 const operatorRouter = router({

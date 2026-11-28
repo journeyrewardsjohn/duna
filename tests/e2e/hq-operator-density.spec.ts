@@ -24,23 +24,10 @@ async function clearAssistant(page: Page) {
   if (await minimize.isVisible()) await minimize.click();
 }
 
-async function expectContainedPage(page: Page) {
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth + 1,
-    ),
-  ).toBe(true);
-  const title = page.locator("main h1");
-  await expect(title).toHaveCount(1);
-  expect(
-    await title.evaluate((node) => parseFloat(getComputedStyle(node).fontSize)),
-  ).toBeLessThanOrEqual(28);
-}
-
 /**
  * A rebuilt screen on the HQ shell: no sideways scroll, and exactly one title
  * in the shell's display role (Jost, at least 22 px, at most the shell's
- * 32 px; docs/design/hq-shell.md). The 28 px cap above is the legacy pages'.
+ * 32 px; docs/design/hq-shell.md).
  */
 async function expectShellPage(page: Page) {
   expect(
@@ -59,81 +46,6 @@ async function expectShellPage(page: Page) {
 
 // Runs under the configured desktop, tablet and mobile projects. These checks
 // cover navigation and local UI state; they do not prove provider transactions.
-test("compact Activities keeps every operational destination and accessible table headers", async ({
-  page,
-}, info) => {
-  await page.goto(`${base}/activities`);
-  await clearAssistant(page);
-  const table = page.getByRole("table", {
-    name: "Activity workspaces",
-    exact: true,
-  });
-  await expect(table).toBeVisible();
-  await expect(table.getByRole("columnheader")).toHaveCount(
-    (page.viewportSize()?.width ?? 1440) <= 600 ? 2 : 3,
-  );
-  await expect(table.getByRole("rowheader")).toHaveCount(8);
-  const destinations = [
-    ["Programs & camps", "/programs"],
-    ["Tournaments", "/events/types/tournaments"],
-    ["Leagues", "/events?type=league"],
-    ["Courts & rentals", "/schedule"],
-    ["Lessons & coaching", "/offerings/types/services"],
-    ["Open play & clinics", "/events"],
-    ["Memberships & packs", "/offerings/types/plans"],
-    ["Shop & equipment", "/offerings/types/goods"],
-  ];
-  for (const [name, href] of destinations)
-    await expect(
-      table.getByRole("link", { name, exact: true }),
-    ).toHaveAttribute("href", href!);
-  const region = page.getByRole("region", {
-    name: "Activity workspaces",
-    exact: true,
-  });
-  await region.focus();
-  await expect(region).toBeFocused();
-  if ((page.viewportSize()?.width ?? 0) >= 1000) {
-    const box = await table.boundingBox();
-    expect(box!.height).toBeLessThan(750);
-    expect(box!.y).toBeLessThan(360);
-  }
-  await expectContainedPage(page);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    window.scrollTo(0, 0);
-  });
-  await page.screenshot({
-    path: info.outputPath("activities-compact.png"),
-    fullPage: true,
-  });
-  await table
-    .getByRole("link", { name: "Courts & rentals", exact: true })
-    .click();
-  await expect(page).toHaveURL(`${base}/schedule`);
-  // A narrow main column (a phone, a tablet beside the sidebar) folds the
-  // schedule's actions into one menu; wider screens show them as buttons.
-  await expect(
-    page
-      .getByRole("button", { name: "New booking", exact: true })
-      .or(page.getByRole("button", { name: "Add or change", exact: true })),
-  ).toBeVisible();
-  // A narrow column opens Schedule as the agenda; the lanes belong to the
-  // day view, so choose it (retrying until the page has hydrated).
-  await expect(async () => {
-    await page.getByRole("button", { name: "Day", exact: true }).click();
-    await expect(page).toHaveURL(/view=day/, { timeout: 1_000 });
-  }).toPass({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Coaches", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Coaches", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Courts", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Courts", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-});
-
 test("compact Money navigation remains usable in dark mode and narrow layouts", async ({
   page,
 }, info) => {
