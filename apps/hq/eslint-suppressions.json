@@ -8,10 +8,5 @@
     "no-console": {
       "count": 1
     }
-  },
-  "components/money-page.tsx": {
-    "no-console": {
-      "count": 1
-    }
   }
 }
