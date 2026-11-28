@@ -188,7 +188,7 @@ Operator moves before the lock: **Extend lock** (stays in its state, new lock ti
 
 - Credits are whole numbers; tiers are per player, so there is nothing to split. Money tiers are whole minor units per player.
 - "Split the court": per-player share rounded up; the remainder is shown on the host's receipt ("Court 60.00 · 4 players · 15.00 each").
-- Service Fee: computed on the final price, rounded half up per order (as `priceConsumerOrder` does today).
+- Service Fee: computed on the final price with the existing pricing rules (`packages/pricing/src/index.ts` rounds with `Math.round` per order).
 - Tiers must not increase per player (decision 3); total-revenue drops are warnings with a suggested fix.
 
 ### 5.4 Payout: delivery releases, a cancelled session releases nothing
