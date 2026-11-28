@@ -719,7 +719,7 @@ button.money-movement-card {
 }
 
 .money-movement-card > small {
-  color: #a58958;
+  color: var(--td-text-3);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   letter-spacing: 0.1em;
@@ -819,7 +819,7 @@ button.money-movement-card {
 
 .money-reconciliation-banner--attention > span {
   background: color-mix(in srgb, var(--color-sand) 16%, transparent);
-  color: var(--color-sand);
+  color: var(--td-warning);
 }
 
 .money-ledger-layout {
@@ -3278,8 +3278,8 @@ button.money-movement-card {
 
 .money-rail-warning {
   align-items: flex-start;
-  background: rgb(223 169 76 / 10%);
-  border: 1px solid rgb(223 169 76 / 25%);
+  background: var(--td-warning-wash);
+  border: 1px solid color-mix(in srgb, var(--td-warning) 25%, transparent);
   border-radius: 13px;
   color: var(--color-warning);
   display: flex;
@@ -3615,7 +3615,7 @@ button.money-movement-card {
 
 .money-dispute-list__icon {
   align-items: center;
-  background: rgb(223 169 76 / 10%);
+  background: var(--td-warning-wash);
   border-radius: 11px;
   color: var(--color-warning);
   display: flex;
@@ -4050,7 +4050,7 @@ button {
 }
 
 .hq-search--trigger > span {
-  color: rgb(var(--muted-rgb) / 62%);
+  color: var(--td-text-3);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4078,7 +4078,7 @@ button {
 }
 
 .hq-search input::placeholder {
-  color: rgb(var(--muted-rgb) / 50%);
+  color: var(--td-text-3);
 }
 
 .hq-search kbd {
@@ -4126,7 +4126,7 @@ button {
 }
 
 .icon-button i {
-  background: var(--color-flare);
+  background: var(--td-attention);
   border: 2px solid var(--color-ink);
   border-radius: 50%;
   height: 8px;
@@ -4693,8 +4693,8 @@ button {
 }
 
 .today-list article > i.live {
-  background: var(--color-flare);
-  box-shadow: 0 0 0 5px rgb(255 106 61 / 10%);
+  background: var(--td-live);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--td-live) 14%, transparent);
 }
 
 .today-list article > div {
@@ -5617,7 +5617,7 @@ button {
 }
 
 .calendar-session--flare {
-  background: rgb(255 106 61 / 12%);
+  background: var(--td-energy-wash);
   border-color: var(--color-flare);
 }
 
@@ -5627,7 +5627,7 @@ button {
 }
 
 .calendar-now {
-  background: var(--color-flare);
+  background: var(--td-action);
   grid-column: 1 / -1;
   grid-row: 5;
   height: 1px;
@@ -5637,7 +5637,7 @@ button {
 }
 
 .calendar-now::before {
-  background: var(--color-flare);
+  background: var(--td-action);
   border-radius: 50%;
   content: "";
   height: 7px;
@@ -5933,9 +5933,9 @@ button {
 
 .event-table__icon {
   align-items: center;
-  background: rgb(255 106 61 / 10%);
+  background: var(--td-energy-wash);
   border-radius: 9px;
-  color: var(--color-flare);
+  color: var(--td-energy-ink);
   display: flex;
   height: 34px;
   justify-content: center;
@@ -10138,7 +10138,7 @@ button {
   background: var(--color-aqua-deep);
   border: 0;
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   font-weight: 750;
   padding: 0.55rem 0.7rem;
 }
@@ -10475,7 +10475,7 @@ button {
 .people-filter-row button.active,
 .event-history-workspace__filters button.active {
   background: var(--color-aqua-deep);
-  color: var(--color-white);
+  color: var(--td-on-action);
 }
 
 .people-directory__result-count {
@@ -10782,7 +10782,7 @@ button {
   border: 4px solid var(--color-depth);
   border-radius: 22px;
   box-shadow: 0 10px 32px rgb(var(--overlay-rgb) / 12%);
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   font-family: var(--font-display);
   font-size: 1.35rem;
@@ -10988,7 +10988,7 @@ button {
 }
 
 .event-live-arrivals__grid > article[data-status="running-late"] {
-  border-color: rgb(235 112 91 / 34%);
+  border-color: color-mix(in srgb, var(--td-warning) 34%, transparent);
 }
 
 .event-live-arrivals__grid > article[data-status="leave-now"] {
@@ -11183,7 +11183,7 @@ button {
 .event-player-sheet > header {
   align-items: flex-start;
   background: var(--hq-deep);
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   gap: 1rem;
   justify-content: space-between;
@@ -11836,7 +11836,7 @@ button {
   background-position: center;
   background-size: cover;
   border-radius: 9px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   height: 48px;
   justify-content: center;
@@ -13664,7 +13664,7 @@ button {
   background: var(--hq-deep);
   border: 1px solid var(--hq-deep);
   border-radius: 10px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   cursor: pointer;
   font: inherit;
   font-size: 0.9rem;
@@ -13735,7 +13735,7 @@ button {
   align-items: center;
   background: var(--hq-deep);
   border-radius: 12px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   height: 44px;
   justify-content: center;
@@ -14534,7 +14534,7 @@ button {
   background: var(--color-aqua-deep);
   border: 0;
   border-radius: 9px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   font-size: 0.75rem;
   font-weight: 800;
@@ -14607,7 +14607,7 @@ button {
   background-position: center;
   background-size: cover;
   border-radius: 8px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   height: 42px;
   justify-content: center;
@@ -16607,12 +16607,12 @@ body {
 }
 
 .hq-sidebar nav a.active {
-  background: color-mix(in srgb, #b5ccd3 20%, transparent);
+  background: var(--td-hq-nav-selected-wash);
   color: var(--text-1);
 }
 
 .hq-sidebar nav a.active::before {
-  background: #22343b;
+  background: var(--td-action);
   border-radius: 999px;
   content: "";
   height: 18px;
@@ -17058,7 +17058,7 @@ body {
   background: var(--color-aqua-deep);
   border: 1px solid var(--color-aqua-deep);
   border-radius: 999px;
-  color: #fff;
+  color: var(--td-on-action);
   display: inline-flex;
   font-size: max(0.75rem, 12px);
   font-weight: 780;
@@ -17813,13 +17813,13 @@ body {
 .event-builder__steps button.active > span {
   background: var(--color-aqua);
   border-color: var(--color-aqua);
-  color: var(--color-white);
+  color: var(--td-on-action);
 }
 
 .event-builder__steps button.complete > span {
   background: var(--color-aqua-deep);
   border-color: var(--color-aqua-deep);
-  color: var(--color-white);
+  color: var(--td-on-action);
 }
 
 .event-builder__canvas {
@@ -18293,7 +18293,7 @@ body {
   align-items: center;
   background: var(--color-aqua);
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: inline-flex;
   font-size: 0.75rem;
   font-weight: 800;
@@ -18548,7 +18548,7 @@ body {
 .weekday-picker button.active {
   background: var(--color-aqua);
   border-color: var(--color-aqua);
-  color: var(--color-white);
+  color: var(--td-on-action);
 }
 
 .recurring-day-list {
@@ -19559,7 +19559,7 @@ body {
   align-items: center;
   background: var(--color-aqua-deep);
   border-radius: 17px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   gap: 0.8rem;
   margin-top: 0.8rem;
@@ -20530,7 +20530,7 @@ body {
 
 .workspace-billing-picker label:has(input:checked) > span {
   background: var(--hq-deep);
-  color: var(--hq-text-on-deep, var(--color-white));
+  color: var(--td-on-action);
 }
 
 .workspace-billing-picker label:has(input:checked) > span b {
@@ -20613,7 +20613,7 @@ body {
 .workspace-plan-card:has(input:checked) .workspace-plan-card__check {
   background: var(--hq-deep);
   border-color: var(--hq-deep);
-  color: var(--hq-text-on-deep, var(--color-white));
+  color: var(--td-on-action);
 }
 
 .workspace-plan-card > header {
@@ -20748,7 +20748,7 @@ body {
   align-items: center;
   background: var(--hq-deep);
   border-radius: 999px;
-  color: var(--hq-text-on-deep, var(--color-white));
+  color: var(--td-on-action);
   display: flex;
   font-size: 0.875rem;
   font-weight: 700;
@@ -22677,7 +22677,7 @@ body {
 }
 
 .hq-shell:not(.admin-shell) .hq-sidebar nav a.active {
-  background: #e9f1f8;
+  background: var(--td-hq-nav-selected-wash);
   color: var(--color-aqua);
 }
 
@@ -27034,10 +27034,10 @@ body {
   background: #b99a60;
 }
 .team-calendar-day--needed {
-  background: #f7ddd3;
+  background: var(--td-attention-wash);
 }
 .team-calendar-day--needed i {
-  background: #cc7045;
+  background: var(--td-attention);
 }
 .team-calendar-day--blackout {
   background: #312e2b;
@@ -27095,7 +27095,7 @@ body {
   background: #b99a60;
 }
 .team-calendar-legend__needed {
-  background: #cc7045;
+  background: var(--td-attention);
 }
 .team-calendar-legend__blackout {
   background: #312e2b;
@@ -27319,7 +27319,7 @@ body {
 
 .duna-date-time-picker__days button[aria-pressed="true"] {
   background: var(--color-aqua);
-  color: white;
+  color: var(--td-on-action);
   font-weight: 850;
 }
 
@@ -29430,19 +29430,23 @@ body {
 
 .settings-center__nav button.active {
   background:
-    radial-gradient(circle at 100% 0, rgb(66 149 217 / 28%), transparent 42%),
-    #102b49;
-  color: white;
+    radial-gradient(
+      circle at 100% 0,
+      color-mix(in srgb, var(--td-on-action) 10%, transparent),
+      transparent 42%
+    ),
+    var(--td-action);
+  color: var(--td-on-action);
   transform: translateX(2px);
 }
 
 .settings-center__nav button.active > svg:first-child {
-  background: rgb(255 255 255 / 12%);
-  border-color: rgb(255 255 255 / 20%);
+  background: color-mix(in srgb, var(--td-on-action) 12%, transparent);
+  border-color: color-mix(in srgb, var(--td-on-action) 24%, transparent);
 }
 
 .settings-center__nav button.active small {
-  color: rgb(255 255 255 / 66%);
+  color: color-mix(in srgb, var(--td-on-action) 76%, transparent);
 }
 
 .settings-center__content,
@@ -29461,7 +29465,11 @@ body {
   align-items: center;
   background:
     radial-gradient(circle at 85% 15%, rgb(54 137 208 / 34%), transparent 31%),
-    linear-gradient(135deg, #0a1d34, #153b60);
+    linear-gradient(
+      135deg,
+      var(--td-mesh-night-court-base),
+      var(--td-mesh-night-court-b)
+    );
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 26px;
   box-shadow: 0 22px 56px rgb(5 19 34 / 17%);
@@ -29491,7 +29499,7 @@ body {
 }
 
 .settings-readiness__score::before {
-  background: #102b49;
+  background: var(--td-mesh-night-court-base);
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: inherit;
   content: "";
@@ -29548,7 +29556,7 @@ body {
 
 .settings-readiness .hq-button {
   background: white;
-  color: #102b49;
+  color: var(--td-brand-night-court);
   justify-self: start;
   margin-top: 0.3rem;
 }
@@ -30244,7 +30252,7 @@ body {
   align-items: center;
   background: var(--color-aqua);
   border-radius: 999px;
-  color: white;
+  color: var(--td-on-action);
   display: inline-flex;
   font-size: max(0.75rem, 12px);
   font-weight: 800;
@@ -32168,7 +32176,7 @@ body {
 
 .admin-org-plan-card--selected .admin-org-plan-card__check {
   background: var(--color-aqua);
-  color: white;
+  color: var(--td-on-action);
 }
 
 .admin-org-plan-card > strong {
@@ -39162,8 +39170,8 @@ body {
 }
 
 .venue-match-operations__list > article[data-state="live"] {
-  border-color: rgb(var(--flare-rgb) / 44%);
-  box-shadow: inset 4px 0 0 var(--color-flare);
+  border-color: color-mix(in srgb, var(--td-live) 44%, transparent);
+  box-shadow: inset 4px 0 0 var(--td-live);
 }
 
 .venue-match-operations__court {
@@ -40302,8 +40310,12 @@ body {
 }
 
 .duna-ai-workspace__intro {
-  background: linear-gradient(155deg, #123e54, #0d2738);
-  color: #fff;
+  background: linear-gradient(
+    155deg,
+    var(--td-mesh-night-court-a),
+    var(--td-mesh-night-court-base)
+  );
+  color: var(--td-brand-salt);
   display: grid;
   align-content: start;
   gap: 1rem;
@@ -40427,8 +40439,8 @@ body {
 }
 
 .duna-ai-workspace__turn--user > p {
-  background: #123e54;
-  color: #fff;
+  background: var(--td-action);
+  color: var(--td-on-action);
   justify-self: end;
 }
 
@@ -40448,7 +40460,7 @@ body {
 }
 
 .duna-ai-workspace__card > span {
-  color: #16817f;
+  color: var(--td-text-2);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.07em;
@@ -40466,21 +40478,21 @@ body {
   max-width: 92%;
 }
 .duna-ai-workspace__card > svg {
-  color: #16817f;
+  color: var(--td-text-2);
   position: absolute;
   right: 0.65rem;
   top: 0.65rem;
 }
 
 .duna-ai-workspace__card--approval {
-  border-color: #79c7c3;
+  border-color: var(--td-line-strong);
 }
 .duna-ai-workspace__card--approval button {
   align-items: center;
-  background: #123e54;
+  background: var(--td-action);
   border: 0;
   border-radius: 8px;
-  color: #fff;
+  color: var(--td-on-action);
   display: inline-flex;
   font-size: 0.75rem;
   font-weight: 800;
@@ -40521,7 +40533,7 @@ body {
 }
 
 .duna-ai-workspace__metric-card > span {
-  color: #16817f;
+  color: var(--td-text-2);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.07em;
@@ -40620,10 +40632,10 @@ body {
 
 .duna-ai-workspace__chat > form button {
   align-items: center;
-  background: #16817f;
+  background: var(--td-action);
   border: 0;
   border-radius: 9px;
-  color: #fff;
+  color: var(--td-on-action);
   display: inline-flex;
   justify-content: center;
   min-width: 42px;
@@ -41037,117 +41049,101 @@ body {
   }
 }
 
-/* Product builder commerce palette: navy, sand, blush, powder blue, and ivory. */
+/* Product builder: HQ roles (F2b retired its navy / ivory / blush palette). */
 .guided-product-builder {
-  --accent-rgb: 20 61 107;
-  --depth-rgb: 250 246 242;
-  --ink-rgb: 20 61 107;
-  --overlay-rgb: 20 61 107;
-  --positive-rgb: 20 61 107;
-  --color-aqua: #143d6b;
-  --color-bone: #172536;
-  --color-bone-muted: #657283;
-  --color-canvas: #faf6f2;
-  --color-canvas-soft: #f8fafc;
-  --color-depth: #fff;
-  --color-flare: #e6b48c;
-  --color-line: rgb(20 61 107 / 12%);
-  --color-line-strong: rgb(20 61 107 / 26%);
-  --color-on-primary: #fff;
-  --color-positive: #143d6b;
-  background:
-    radial-gradient(
-      circle at 92% 0%,
-      rgb(211 227 240 / 72%),
-      transparent 32rem
-    ),
-    #faf6f2;
-  border-color: rgb(20 61 107 / 14%);
+  --color-flare: var(--td-energy);
+  background: var(--hq-ground);
+  border-color: var(--hq-line);
 }
 
 .guided-product-builder__header {
-  background: linear-gradient(125deg, #faf6f2, rgb(255 255 255 / 92%));
+  background: var(--hq-ground);
 }
 
 .guided-product-builder .guided-event-link {
-  background: linear-gradient(135deg, rgb(255 207 192 / 64%), #fff);
-  border-color: rgb(20 61 107 / 15%);
+  background: var(--hq-soft);
+  border-color: var(--hq-line);
 }
 
 .guided-product-builder .guided-product-type-row > button:nth-child(1) {
-  background: color-mix(in srgb, #e6b48c 38%, white);
+  background: var(--td-energy-wash);
 }
 
 .guided-product-builder .guided-product-type-row > button:nth-child(2) {
-  background: color-mix(in srgb, #ffcfc0 42%, white);
+  background: var(--td-attention-wash);
 }
 
 .guided-product-builder .guided-product-type-row > button:nth-child(3) {
-  background: color-mix(in srgb, #d3e3f0 60%, white);
+  background: var(--td-info-wash);
 }
 
 .guided-product-builder .guided-product-type-row > button.active {
-  border-color: #143d6b;
+  border-color: var(--td-action);
   box-shadow:
-    inset 0 0 0 1px #143d6b,
-    0 12px 30px rgb(20 61 107 / 10%);
+    inset 0 0 0 1px var(--td-action),
+    0 12px 30px color-mix(in srgb, var(--hq-shadow-color) 10%, transparent);
 }
 
 .guided-product-builder .guided-product-form {
   background:
-    linear-gradient(rgb(20 61 107 / 2%) 1px, transparent 1px), #f6f8fb;
+    linear-gradient(
+      color-mix(in srgb, var(--hq-text) 2%, transparent) 1px,
+      transparent 1px
+    ),
+    var(--hq-soft);
   background-size: 100% 80px;
 }
 
 .guided-product-builder .guided-product-guide,
 .guided-product-builder .guided-product-stage,
 .guided-product-builder .guided-offer-preview__card {
-  background-color: #fff;
-  border-color: rgb(20 61 107 / 13%);
-  box-shadow: 0 16px 42px rgb(20 61 107 / 6%);
+  background-color: var(--hq-surface);
+  border-color: var(--hq-line);
+  box-shadow: 0 16px 42px
+    color-mix(in srgb, var(--hq-shadow-color) 6%, transparent);
 }
 
 .guided-product-builder .guided-product-steps > button.active,
 .guided-product-builder .guided-choice.active {
-  background-color: rgb(211 227 240 / 64%);
-  border-color: #143d6b;
+  background-color: var(--td-selected);
+  border-color: var(--td-action);
 }
 
 .guided-product-builder .guided-product-assist {
-  background: #143d6b;
-  border-color: #143d6b;
+  background: var(--td-action);
+  border-color: var(--td-action);
 }
 
 .guided-product-builder .guided-product-assist svg,
 .guided-product-builder .guided-product-assist strong,
 .guided-product-builder .guided-product-assist small {
-  color: #fff;
+  color: var(--td-on-action);
 }
 
 .guided-product-builder .guided-offer-preview__price {
-  background: #143d6b;
-  border-color: #143d6b;
+  background: var(--td-action);
+  border-color: var(--td-action);
 }
 
 .guided-product-builder .guided-offer-preview__price svg,
 .guided-product-builder .guided-offer-preview__price small,
 .guided-product-builder .guided-offer-preview__price strong {
-  color: #fff;
+  color: var(--td-on-action);
 }
 
 .guided-product-builder .guided-product-footer {
-  background: rgb(250 246 242 / 94%);
-  border-color: rgb(20 61 107 / 12%);
+  background: color-mix(in srgb, var(--hq-surface) 94%, transparent);
+  border-color: var(--hq-line);
 }
 
 .guided-product-builder .hq-button--primary {
-  background: #143d6b;
-  border-color: #143d6b;
-  color: #fff;
+  background: var(--td-action);
+  border-color: var(--td-action);
+  color: var(--td-on-action);
 }
 
 .guided-product-builder .operator-money-input small {
-  color: #143d6b;
+  color: var(--hq-text);
   font-size: 0.95rem;
   font-weight: 850;
   left: 0.95rem;

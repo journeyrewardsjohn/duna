@@ -12,6 +12,7 @@ and confirmation rules in [`AGENTS.md`](../../AGENTS.md) override both.
 | [`mobile.md`](mobile.md)                             | Player and Pro native plan (work packages G, F, N, C, P, R, K, X)                                                                                           |
 | [`ios27-research.md`](ios27-research.md)             | iOS 27, iPhone Duo and iPadOS 27 research brief                                                                                                             |
 | [`schema-requests/`](schema-requests/)               | One file per work package asking the schema steward for schema changes                                                                                      |
+| [`participation.md`](participation.md)               | Group sessions: player minimums, group-size pricing, waitlist and notices across HQ, web, Player and Pro (work packages PART-1 … PART-12)                   |
 | [`production-readiness.md`](production-readiness.md) | What the owner must set up for production: keep this file current when a package adds a provider, a webhook, a redirect address or an environment variable. |
 
 Before opening a PR, every package meets [`definition-of-done.md`](definition-of-done.md) and keeps its [`persona-journeys.md`](persona-journeys.md) steps passing (Q0).

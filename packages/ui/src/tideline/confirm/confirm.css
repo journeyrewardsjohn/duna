@@ -1,0 +1,238 @@
+/* Tideline confirmations (three tiers) and ProposalCard. Rules: see styles.css, docs/design/tideline-components.md and docs/design/interaction-kit.md. */
+@layer tideline {
+  .td {
+    /* ---------- Confirmation ---------- */
+
+    /* The dialog presentation is a .td-dialog; these add the confirm parts. */
+
+    .td-confirm {
+      gap: var(--td-space-4);
+    }
+
+    /* An inline question's host: no box of its own; hidden while it asks. */
+
+    .td-confirm-slot {
+      display: contents;
+
+      &[hidden] {
+        display: none;
+      }
+    }
+
+    .td-confirm--inline {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .td-confirm__title {
+      color: var(--td-text);
+    }
+
+    .td-confirm__description {
+      color: var(--td-text-2);
+    }
+
+    /* Tier 2 restates what is at stake as plain facts. */
+
+    .td-confirm__facts {
+      display: grid;
+      gap: var(--td-space-2);
+      margin: 0;
+      padding: var(--td-space-4);
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface-sunken);
+    }
+
+    .td-confirm__fact {
+      display: grid;
+      grid-template-columns: minmax(88px, auto) 1fr;
+      gap: var(--td-space-3);
+      align-items: baseline;
+
+      dt {
+        color: var(--td-text-2);
+        font: var(--td-type-meta);
+      }
+
+      dd {
+        margin: 0;
+        color: var(--td-text);
+        font: var(--td-type-label);
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+      }
+    }
+
+    .td-confirm__code,
+    .td-proposal__code {
+      font: var(--td-type-code);
+      overflow-wrap: anywhere;
+    }
+
+    .td-confirm__consequence {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: flex-start;
+      color: var(--td-text);
+      font: var(--td-type-label);
+
+      .td-icon {
+        flex: none;
+        margin-block-start: 2px;
+        color: var(--td-danger);
+      }
+    }
+
+    .td-confirm__phrase {
+      font: var(--td-type-code);
+      font-weight: 600;
+    }
+
+    .td-confirm__error {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: flex-start;
+      padding: var(--td-space-3);
+      border-radius: var(--td-radius-md);
+      background: var(--td-danger-wash);
+      color: var(--td-text);
+      font: var(--td-type-body);
+
+      .td-icon {
+        flex: none;
+        margin-block-start: 2px;
+        color: var(--td-danger);
+      }
+    }
+
+    .td-confirm__reference {
+      margin-block-start: var(--td-space-1);
+      font: var(--td-type-meta);
+    }
+
+    .td-confirm__actions {
+      justify-content: flex-end;
+    }
+
+    /* ---------- ProposalCard: before and after ---------- */
+
+    .td-proposal {
+      display: grid;
+      gap: var(--td-space-4);
+      padding: var(--td-space-5);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface);
+      box-shadow: var(--td-shadow-surface);
+      color: var(--td-text);
+    }
+
+    .td-proposal__header {
+      display: grid;
+      gap: var(--td-space-1);
+    }
+
+    .td-proposal__source {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: center;
+      color: var(--td-text-2);
+      font: var(--td-type-micro);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .td-proposal__status {
+      padding: 2px var(--td-space-2);
+      border-radius: var(--td-radius-pill);
+      background: var(--td-surface-sunken);
+      color: var(--td-text-2);
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .td-proposal[data-status="applied"] .td-proposal__status {
+      background: var(--td-positive-wash);
+      color: var(--td-text);
+    }
+
+    .td-proposal__title {
+      font: var(--td-type-heading-18);
+      letter-spacing: var(--td-type-heading-18-tracking);
+    }
+
+    .td-proposal__reason {
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .td-proposal__changes {
+      width: 100%;
+      border-collapse: collapse;
+      font: var(--td-type-body);
+      font-variant-numeric: tabular-nums;
+
+      th,
+      td {
+        padding: var(--td-space-2) var(--td-space-2) var(--td-space-2) 0;
+        text-align: start;
+        vertical-align: baseline;
+      }
+
+      thead th {
+        color: var(--td-text-2);
+        font: var(--td-type-meta);
+      }
+
+      tbody tr {
+        box-shadow: inset 0 1px 0 var(--td-line);
+      }
+    }
+
+    .td-proposal__label {
+      color: var(--td-text-2);
+      font: var(--td-type-label);
+    }
+
+    .td-proposal__before {
+      color: var(--td-text-2);
+      text-decoration: line-through;
+      text-decoration-color: var(--td-line-strong);
+    }
+
+    .td-proposal__after {
+      color: var(--td-text);
+      font-weight: 600;
+    }
+
+    .td-proposal__empty {
+      color: var(--td-text-3);
+      font-style: normal;
+      text-decoration: none;
+    }
+
+    .td-proposal__arrowcell {
+      width: var(--td-space-6);
+      color: var(--td-text-3);
+    }
+
+    .td-proposal__meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2) var(--td-space-4);
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    .td-proposal__reference {
+      display: inline-flex;
+      gap: var(--td-space-1);
+    }
+
+    .td-proposal__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      justify-content: flex-end;
+    }
+  }
+}

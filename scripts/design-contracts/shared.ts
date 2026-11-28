@@ -145,8 +145,6 @@ export const shared: SurfaceContract = {
         '--font-data: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
         "--td-font-display: var(--td-font-ui)",
         "--td-font-numeric: var(--td-font-ui)",
-        "--signal-text: #52630f",
-        "--signal-text: #c9e265",
         "clamp(4.5rem, 8vw, 8.75rem)",
         "clamp(7.5rem, 12vw, 12.5rem)",
         "clamp(2.5rem, 4vw, 3.5rem)",

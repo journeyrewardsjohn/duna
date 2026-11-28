@@ -31,7 +31,9 @@ environment store.
 
 `pnpm verify` is the required web release gate. It checks formatting, lint,
 types, unit and property suites, production builds, and responsive browser
-journeys across desktop, tablet, and phone.
+journeys across desktop, tablet, and phone. It also holds the HQ global
+stylesheets to their recorded line counts; see
+[HQ visual regression](#hq-visual-regression).
 
 `pnpm verify:live-repository` is the connected Neon smoke. It validates typed
 reads, tenant scope, atomic pickup/audit writes, idempotent replay, persistent AI
@@ -66,11 +68,166 @@ separate release gates.
 
 GitHub Actions repeats both gates on pushes and pull requests.
 
+## Production deploys
+
+Vercel deploys `main` to production for `duna-hq` (root `apps/hq`) and
+`duna-web` (root `apps/web`) on every merge. **These deploys are not gated by
+GitHub CI**: a merge with green checks can still fail on Vercel, and production
+then keeps serving the last good build without any visible alarm. HQ did this
+for a dozen merges after the Expo SDK 58 upgrade.
+
+After every merge to `main`, check both deploys for the merge commit:
+
+```bash
+gh api repos/journeyrewardsjohn/duna/commits/<sha>/status \
+  --jq '.statuses[] | "\(.context) \(.state) \(.target_url)"'
+```
+
+Both `Vercel – duna-hq` and `Vercel – duna-web` must be `success`. On
+`failure`, read the log from a folder outside the repository with
+`vercel inspect <deployment id> --logs --scope suttonx` (read-only).
+
+How Vercel builds differ from CI, and what covers each difference:
+
+- Vercel installs with plain `pnpm install` on top of a `node_modules` restored
+  from the last successful deploy; CI installs fresh with `--frozen-lockfile`.
+  Which copy of a package pnpm hoists can therefore differ. Type declarations
+  that import `react` without depending on `@types/react` (Next's own) take the
+  hoisted copy, so two `@types/react` versions in the workspace made HQ fail on
+  Vercel only. The workspace pins one version with an `overrides` entry in
+  `pnpm-workspace.yaml`, and `pnpm verify:single-react-types` (part of
+  `pnpm verify` and the `static-checks` job) fails when a second version
+  appears. Choose the version that matches the React the apps run: Next 16.2
+  runs its vendored React 19.3 for the app router, the iOS apps run React 19.3.
+- Vercel builds from the app folder: HQ runs `pnpm build` (just `next build`,
+  after the production-only migration), web runs `turbo run build`. The
+  `static-checks` job runs both the same way ("Build HQ as Vercel does",
+  "Build web as Vercel does"), without the migration.
+
+HQ preview deploys currently fail before the build with "Resource provisioning
+failed"; that is a project setting for the owner, not a code failure.
+
 The production previews must use `DUNA_DATA_SOURCE=database`. Do not mistake
 the local demo adapter for connected evidence. During the current QA period,
 the only permitted production-like Demo records are the clearly labelled,
 Super-Admin-controlled Beach Elite Academy dataset described below; it is
 stored in the connected database and is not a fallback data source.
+
+## HQ visual regression
+
+`tests/e2e/hq-visual/` screenshots every HQ route that renders in demo mode,
+in light and dark, at the three release-gate viewports. It exists so that
+structural HQ CSS work (splitting sheets, tokens, layers, shell changes) can
+prove it changed no pixel. It has its own config,
+`playwright.hq-visual.config.ts`, and is **not** part of `pnpm verify` or
+`pnpm test:e2e`.
+
+```bash
+pnpm test:visual:hq
+```
+
+The command builds HQ in demo mode itself, starts it on port `3210`, and
+compares against baselines. It never reads `apps/hq/.env.local` values for
+the database or WorkOS: the config blanks them.
+
+`tests/e2e/hq-visual/routes.ts` is the route matrix. A new route in the central
+HQ route map (`packages/core/src/hq-routes.ts`, `@duna/core/hq-routes`) must be
+added to `visualRoutes`, or to `skippedPages` with the reason it cannot render
+in demo mode; `route-manifest.spec.ts` fails otherwise. Development-only
+surfaces (`hqDevOnlyRoutePrefixes`, today the Tideline gallery) are excluded.
+
+### Where baselines come from
+
+Screenshots depend on the operating system, CPU architecture, and browser
+build, so the committed baselines in
+`tests/e2e/hq-visual/__screenshots__/` have exactly one source: the
+`HQ visual regression` workflow, which runs the official Playwright container
+(`mcr.microsoft.com/playwright:v<locked version>-noble`) on a GitHub x86-64
+runner. The workflow reads the Playwright version from `pnpm-lock.yaml`, so
+upgrading Playwright changes the container and requires new baselines in the
+same pull request.
+
+To regenerate baselines after an intended visual change:
+
+1. Add the `hq-visual:update-baselines` label to the pull request. (After the
+   workflow exists on `main`, `gh workflow run hq-visual.yml --ref <branch> -f update=true`
+   also works.)
+2. When the run finishes, replace the folder with its artifact and commit:
+
+   ```bash
+   rm -rf tests/e2e/hq-visual/__screenshots__
+   gh run download <run-id> --name hq-visual-baselines --dir tests/e2e/hq-visual/__screenshots__
+   git add tests/e2e/hq-visual/__screenshots__
+   ```
+
+3. Remove the label. Review the changed PNGs in the pull request like code;
+   an unexplained image change is a regression.
+
+On a pull request without the label, the same workflow compares and uploads
+`hq-visual-report` (actual, expected, and diff images) when anything differs.
+
+Do not commit baselines rendered anywhere else. A Linux `arm64` container on
+an Apple Silicon Mac rasterizes text differently from the CI runner; if you
+must reproduce CI locally, force the platform:
+
+```bash
+docker run --rm --platform linux/amd64 --ipc=host -v "$PWD":/work -w /work \
+  mcr.microsoft.com/playwright:v<locked version>-noble \
+  bash -lc "corepack enable && pnpm install --frozen-lockfile && pnpm test:visual:hq"
+```
+
+### Before-and-after on your own machine
+
+On macOS or Windows the suite keeps a separate, git-ignored baseline set in
+`tests/e2e/hq-visual/.local-baselines/`, which is the fast loop for a
+refactor:
+
+```bash
+git switch main && pnpm test:visual:hq --update-snapshots   # record
+git switch <branch> && pnpm test:visual:hq                  # compare
+```
+
+Diff images land in `test-results/hq-visual/`. Local results never replace
+the CI comparison.
+
+### What keeps it deterministic
+
+- The demo adapter generates records relative to "now", so both clocks are
+  pinned to `2026-07-30T16:30:00Z` in `America/Los_Angeles`: the browser
+  through Playwright, the server through
+  `tests/e2e/hq-visual/pinned-clock.cjs`. That preload also advances the
+  pinned minute a fixed step per request so the in-memory rate limiter keeps
+  refilling; without it the shared demo actor is throttled mid-run and pages
+  silently lose data.
+- Third-party requests are blocked except Fontshare, and a screenshot is
+  refused if Satoshi did not load.
+- The viewport grows to the full page so workspaces that scroll inside the
+  shell are captured whole; animation is disabled; canvases, video, and
+  iframes are masked.
+
+A new flaky region is fixed at its cause or masked for that route in
+`routes.ts` with a comment. Do not raise the pixel tolerance.
+
+### HQ CSS usage and the line ratchet
+
+```bash
+pnpm css:usage:hq       # static: rules whose classes no HQ source names
+pnpm css:coverage:hq    # static + Chromium CSS coverage over the same matrix
+pnpm verify:hq-css-ratchet
+```
+
+Reports are written to the ignored `reports/hq-css-usage/` folder.
+`static.json` lists unmatched rules by file and line. `runtime.json` adds
+which rules the route matrix never applied. Delete a rule only when it is
+both statically unmatched and unexercised, and the visual suite still passes;
+hover, focus, dialog, and error states, and the routes demo mode cannot
+render, are outside the matrix.
+
+`pnpm verify:hq-css-ratchet` is part of `pnpm verify` and of the
+`static-checks` job in `verify.yml`. It fails when any HQ
+global stylesheet has more lines than `scripts/hq-css-ratchet.json` records.
+After deleting or splitting CSS, run it with `--update` and commit the lower
+numbers.
 
 ## Professional tour data
 

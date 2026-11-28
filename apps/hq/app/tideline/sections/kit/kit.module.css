@@ -1,0 +1,117 @@
+/* Layout for the interaction kit's gallery demos only. Values come from Tideline tokens. */
+.stack {
+  display: grid;
+  gap: var(--td-space-3);
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-2);
+  align-items: center;
+}
+
+/* A small stage for an entrance: a hairline is the line things grow from. */
+.stage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--td-space-3);
+  min-height: 112px;
+  padding: var(--td-space-3);
+  border-radius: var(--td-radius-md);
+  background: var(--td-surface-sunken);
+}
+
+.tile {
+  display: grid;
+  place-items: center;
+  min-height: 72px;
+  padding: var(--td-space-2);
+  border-radius: var(--td-radius-md);
+  background: var(--td-surface);
+  box-shadow: var(--td-shadow-surface);
+  color: var(--td-text-2);
+  font: var(--td-type-meta);
+}
+
+.pane {
+  display: grid;
+  gap: var(--td-space-2);
+  min-height: 120px;
+  padding: var(--td-space-4);
+  overflow: hidden;
+  border-radius: var(--td-radius-md);
+  background: var(--td-surface-sunken);
+}
+
+.row3 {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--td-space-3);
+  align-items: center;
+}
+
+.score {
+  font: var(--td-type-figure);
+}
+
+.preview {
+  position: relative;
+  height: 320px;
+  overflow: hidden;
+  border-radius: var(--td-radius-lg);
+  background: var(--td-surface-sunken);
+}
+
+.home {
+  display: grid;
+  gap: var(--td-space-2);
+  padding: var(--td-space-6);
+}
+
+.pad {
+  display: grid;
+  place-items: center;
+  height: 120px;
+  border-radius: var(--td-radius-md);
+  background: var(--td-surface-sunken);
+  color: var(--td-text-2);
+  font: var(--td-type-meta);
+  touch-action: none;
+}
+
+.scroller {
+  height: 220px;
+}
+
+.list {
+  display: grid;
+  overflow: hidden;
+  border-radius: var(--td-radius-md);
+  background: var(--td-surface);
+  box-shadow: var(--td-shadow-surface);
+}
+
+.item {
+  display: flex;
+  gap: var(--td-space-3);
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--td-row);
+  padding: var(--td-space-2) var(--td-space-3);
+
+  & + & {
+    box-shadow: inset 0 1px 0 var(--td-line);
+  }
+}
+
+.form {
+  display: grid;
+  gap: var(--td-space-4);
+}
+
+.meta {
+  color: var(--td-text-2);
+  font: var(--td-type-meta);
+}

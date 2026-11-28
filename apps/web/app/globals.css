@@ -1075,10 +1075,10 @@
 .discover-v2,
 .discover-v2-map-page,
 .discover-v2-results-page {
-  --discover-ink: #071b2d;
-  --discover-blue: #173a63;
+  --discover-ink: var(--td-brand-night-court);
+  --discover-blue: var(--td-brand-night-court);
   --discover-aqua: #35c8bd;
-  --discover-coral: #ec8064;
+  --discover-coral: var(--td-dusk-500);
   --discover-sand: #f2c46d;
   width: min(100%, 1480px);
   margin: 0 auto;
@@ -1115,7 +1115,7 @@
     ),
     radial-gradient(
       circle at 8% 110%,
-      rgba(236, 128, 100, 0.2),
+      color-mix(in srgb, var(--td-energy) 20%, transparent),
       transparent 34%
     ),
     linear-gradient(135deg, #071827 0%, #102c4a 58%, #0f4b5b 100%);
@@ -1869,7 +1869,7 @@
 .discover-search-selector small,
 .discover-search-dialog > header span,
 .discover-place-results > span {
-  color: #768599;
+  color: var(--td-haze-500);
   font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.11em;
@@ -1884,7 +1884,7 @@
 
 .discover-search-selector em {
   overflow: hidden;
-  color: #758397;
+  color: var(--td-haze-500);
   font-size: 0.75rem;
   font-style: normal;
   text-overflow: ellipsis;
@@ -1964,7 +1964,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #6c7884;
+  color: var(--td-haze-500);
   font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.1em;
@@ -1976,7 +1976,7 @@
 }
 
 .discover-pro-callout > div:first-child small {
-  color: #667584;
+  color: var(--td-haze-500);
   font-size: 0.76rem;
 }
 
@@ -4538,12 +4538,12 @@ body {
 }
 
 .rating-trend-chart__line {
-  stroke: var(--flare);
+  stroke: var(--td-action);
   stroke-width: 3.5;
 }
 
 .rating-trend-chart__point {
-  stroke: var(--flare);
+  stroke: var(--td-action);
 }
 
 .rating-trend-chart__area {
@@ -4793,8 +4793,8 @@ body {
 }
 
 .vision-remote__status--recording svg {
-  color: #ff6a3d;
-  fill: #ff6a3d;
+  color: var(--td-live);
+  fill: var(--td-live);
 }
 
 .vision-remote__status--expired,
@@ -4855,7 +4855,7 @@ body {
 }
 
 .vision-remote__hero > button.is-ending {
-  background: #ff8a65;
+  background: var(--td-danger);
 }
 
 .vision-remote button:disabled {
@@ -4974,7 +4974,7 @@ body {
 }
 
 .vision-remote__court line.is-antenna {
-  stroke: #ff765f;
+  stroke: var(--td-energy);
   stroke-dasharray: none;
   stroke-width: 1.7;
 }
@@ -5013,7 +5013,7 @@ body {
 }
 
 .vision-remote__corner--antenna {
-  background: #ff765f;
+  background: var(--td-energy);
   color: #fff;
   font-size: 12px;
 }
@@ -5171,7 +5171,7 @@ body {
 }
 
 .vision-remote__error {
-  background: rgba(255, 106, 61, 0.12);
+  background: var(--td-danger-wash);
   color: #ffae96;
 }
 
@@ -5613,9 +5613,9 @@ a.professional-match-card:hover {
 }
 
 .professional-match-card__sets > span.is-current {
-  background: var(--flare-fill);
-  box-shadow: inset 0 -3px var(--flare);
-  color: var(--flare-text);
+  background: var(--td-live-wash);
+  box-shadow: inset 0 -3px var(--td-live);
+  color: var(--td-live-ink);
 }
 
 .professional-match-card__sets small,
@@ -7871,7 +7871,11 @@ a.professional-match-card:hover {
   align-items: center;
   background:
     radial-gradient(circle at 76% 18%, rgb(70 176 212 / 32%), transparent 30%),
-    radial-gradient(circle at 6% 100%, rgb(238 148 109 / 25%), transparent 36%),
+    radial-gradient(
+      circle at 6% 100%,
+      color-mix(in srgb, var(--td-energy) 25%, transparent),
+      transparent 36%
+    ),
     linear-gradient(135deg, #0c1418 0%, #10242b 58%, #122e38 100%);
   color: var(--color-white);
   display: grid;
@@ -8378,7 +8382,7 @@ a.professional-match-card:hover {
 }
 
 .division-explorer__results > article > header strong.is-low {
-  color: var(--flare-text);
+  color: var(--td-warning);
 }
 
 .division-explorer__title {
@@ -10126,7 +10130,7 @@ a.professional-match-card:hover {
   background: var(--color-aqua);
   border: 0;
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -10303,7 +10307,7 @@ a.professional-match-card:hover {
 .pro-event-map-dialog footer a {
   background: var(--color-aqua);
   border-color: var(--color-aqua);
-  color: #fff;
+  color: var(--td-on-action);
 }
 
 .pro-event-venue__actions button:hover,
@@ -10586,7 +10590,7 @@ a.professional-match-card:hover {
 
 .calendar-picker__dots > i[data-tone="event"],
 .calendar-dialog__legend i[data-tone="event"] {
-  background: var(--color-flare);
+  background: var(--td-energy-ink);
 }
 
 .calendar-picker__pill[aria-current="date"]
@@ -10800,7 +10804,7 @@ a.professional-match-card:hover {
 
 .calendar-month__markers > span[data-tone="event"] {
   background: #faece6;
-  color: #934124;
+  color: var(--td-energy-ink);
 }
 
 .calendar-month__markers i {
@@ -13139,7 +13143,7 @@ a.play-day__booking {
 
 .checkout-layout--event .checkout-section__heading > span:not(.duna-badge) {
   background: var(--color-aqua);
-  color: var(--color-white);
+  color: var(--td-on-action);
 }
 
 .checkout-layout--event .checkout-section__heading h2 {
@@ -13397,7 +13401,7 @@ a.play-day__booking {
 
 .checkout-roster__slot > header button.active {
   background: var(--color-aqua);
-  color: var(--color-white);
+  color: var(--td-on-action);
 }
 
 .checkout-roster__slot > label {
@@ -13621,7 +13625,7 @@ a.play-day__booking {
 
 .checkout-layout--event .checkout-summary__pay {
   background: var(--color-aqua);
-  color: var(--color-white);
+  color: var(--td-on-action);
   min-height: 48px;
 }
 
@@ -13704,7 +13708,7 @@ a.play-day__booking {
   background: var(--color-aqua);
   border: 0;
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   font-size: 0.75rem;
   font-weight: 800;
@@ -13801,7 +13805,7 @@ a.play-day__booking {
 }
 
 .team-claim-confetti i:nth-child(3) {
-  background: #e97851;
+  background: var(--td-energy);
   left: 29%;
   top: 35px;
   transform: rotate(42deg);
@@ -13829,7 +13833,7 @@ a.play-day__booking {
 }
 
 .team-claim-confetti i:nth-child(7) {
-  background: #e97851;
+  background: var(--td-energy);
   left: 76%;
   top: 28px;
   transform: rotate(-44deg);
@@ -13864,7 +13868,7 @@ a.play-day__booking {
 }
 
 .team-claim-confetti i:nth-child(12) {
-  background: #e97851;
+  background: var(--td-energy);
   left: 4%;
   top: 98px;
   transform: rotate(56deg);
@@ -14253,7 +14257,7 @@ a.play-day__booking {
   background: var(--color-aqua);
   border: 0;
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   font-size: 0.75rem;
   font-weight: 800;
@@ -14581,7 +14585,7 @@ a.play-day__booking {
   background: var(--color-aqua);
   border: 0;
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   font-size: 0.75rem;
   font-weight: 800;
@@ -14629,7 +14633,7 @@ a.play-day__booking {
 
 .operator-callout__actions > a:first-child {
   background: var(--color-aqua);
-  color: var(--color-white);
+  color: var(--td-on-action);
 }
 
 .operator-callout__actions > a:last-child {
@@ -15009,7 +15013,11 @@ a.play-day__booking {
 
 .chemistry-card {
   background:
-    radial-gradient(circle at 90% 0, rgb(238 148 109 / 13%), transparent 35%),
+    radial-gradient(
+      circle at 90% 0,
+      color-mix(in srgb, var(--td-energy) 13%, transparent),
+      transparent 35%
+    ),
     var(--color-navy);
 }
 
@@ -15431,7 +15439,7 @@ a.play-day__booking {
     linear-gradient(
       155deg,
       transparent 52%,
-      rgb(238 148 109 / 45%) 52% 62%,
+      color-mix(in srgb, var(--td-energy) 45%, transparent) 52% 62%,
       transparent 62%
     ),
     linear-gradient(175deg, var(--color-navy-lift), var(--color-aqua-deep));
@@ -15734,7 +15742,7 @@ a.play-day__booking {
     linear-gradient(
       130deg,
       transparent 55%,
-      rgb(238 148 109 / 55%) 55% 64%,
+      color-mix(in srgb, var(--td-energy) 55%, transparent) 55% 64%,
       transparent 64%
     ),
     var(--color-aqua-deep);
@@ -16021,7 +16029,7 @@ a.play-day__booking {
 }
 
 .membership-confirm {
-  background: rgb(255 106 61 / 7%);
+  background: color-mix(in srgb, var(--td-energy) 7%, transparent);
   border: 1px solid rgb(255 155 146 / 25%);
   border-radius: 14px;
   margin-top: 0.7rem;
@@ -16060,7 +16068,7 @@ a.play-day__booking {
 }
 
 .deletion-confirm {
-  background: rgb(255 106 61 / 5%);
+  background: var(--td-danger-wash);
   display: grid;
   gap: 1rem;
 }
@@ -16072,7 +16080,7 @@ a.play-day__booking {
 }
 
 .deletion-confirm__heading > svg {
-  color: var(--color-flare);
+  color: var(--td-danger);
   flex: 0 0 auto;
 }
 
@@ -18165,7 +18173,7 @@ a.play-day__booking {
 }
 
 .match-confirmation--disputed > svg {
-  color: var(--color-flare);
+  color: var(--td-warning);
 }
 
 .match-confirmation--verified > span,
@@ -18385,7 +18393,11 @@ a.play-day__booking {
 
 .score-team--b {
   background:
-    radial-gradient(circle at 80% 20%, rgb(238 148 109 / 10%), transparent 35%),
+    radial-gradient(
+      circle at 80% 20%,
+      color-mix(in srgb, var(--td-energy) 10%, transparent),
+      transparent 35%
+    ),
     var(--color-navy);
 }
 
@@ -18582,7 +18594,7 @@ a.play-day__booking {
     ),
     radial-gradient(
       ellipse at 10% 125%,
-      rgb(238 148 109 / 12%) 0 30%,
+      color-mix(in srgb, var(--td-energy) 12%, transparent) 0 30%,
       transparent 30.4%
     );
   inset: 0;
@@ -18689,7 +18701,7 @@ a.play-day__booking {
     linear-gradient(
       150deg,
       transparent 52%,
-      rgb(238 148 109 / 48%) 52% 61%,
+      color-mix(in srgb, var(--td-energy) 48%, transparent) 52% 61%,
       transparent 61%
     ),
     radial-gradient(
@@ -18862,7 +18874,11 @@ a.play-day__booking {
 .event-detail-hero__art {
   background:
     linear-gradient(180deg, transparent 40%, var(--color-ink)),
-    radial-gradient(circle at 80% 15%, rgb(238 148 109 / 30%), transparent 25%),
+    radial-gradient(
+      circle at 80% 15%,
+      color-mix(in srgb, var(--td-energy) 30%, transparent),
+      transparent 25%
+    ),
     var(--color-aqua-deep);
   inset: 94px 0 0;
   overflow: hidden;
@@ -20208,7 +20224,7 @@ a.play-day__booking {
 }
 
 .pro-schedule-calendar > footer i[data-tone="event"] {
-  background: var(--color-flare);
+  background: var(--td-energy-ink);
 }
 
 .pro-schedule-calendar > footer small {
@@ -23223,8 +23239,8 @@ a.play-day__booking {
 }
 
 .pro-live-scoreboard__status--live {
-  background: var(--flare-fill);
-  color: var(--flare-text);
+  background: var(--td-live-wash);
+  color: var(--td-live-ink);
 }
 
 .pro-live-scoreboard__status--completed {
@@ -23255,8 +23271,8 @@ a.play-day__booking {
 
 .pro-live-scoreboard__now {
   align-items: center;
-  background: var(--flare-fill);
-  border-bottom: 1px solid var(--flare-border);
+  background: var(--td-live-wash);
+  border-bottom: 1px solid color-mix(in srgb, var(--td-live) 40%, transparent);
   display: flex;
   justify-content: space-between;
   padding: 0.8rem clamp(1rem, 2.8vw, 2rem);
@@ -23264,7 +23280,7 @@ a.play-day__booking {
 
 .pro-live-scoreboard__now > span {
   align-items: center;
-  color: var(--flare-text);
+  color: var(--td-live-ink);
   display: inline-flex;
   font-size: 0.8rem;
   font-weight: 750;
@@ -23274,7 +23290,7 @@ a.play-day__booking {
 
 .pro-live-scoreboard__now > span i {
   animation: pro-live-pulse 1.8s ease-in-out infinite;
-  background: var(--flare);
+  background: var(--td-live);
   border-radius: 50%;
   height: 8px;
   width: 8px;
@@ -23431,9 +23447,9 @@ a.play-day__booking {
 }
 
 .pro-live-scoreboard__set.is-current {
-  background: var(--flare-fill);
-  box-shadow: inset 0 -3px var(--flare);
-  color: var(--flare-text);
+  background: var(--td-live-wash);
+  box-shadow: inset 0 -3px var(--td-live);
+  color: var(--td-live-ink);
 }
 
 .pro-live-scoreboard__match-points {
@@ -25169,7 +25185,7 @@ html {
   align-items: center;
   background: var(--color-aqua);
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   font-size: 0.75rem;
   font-weight: 800;
@@ -25419,7 +25435,11 @@ html {
 .public-registration {
   background:
     radial-gradient(circle at 84% 0%, rgb(55 171 166 / 12%), transparent 29%),
-    radial-gradient(circle at 12% 16%, rgb(222 174 102 / 12%), transparent 24%),
+    radial-gradient(
+      circle at 12% 16%,
+      color-mix(in srgb, var(--td-energy) 12%, transparent),
+      transparent 24%
+    ),
     var(--color-canvas);
   color: var(--color-bone);
   min-height: calc(100vh - 70px);
@@ -25661,7 +25681,11 @@ html {
 
 .public-registration__identity {
   background:
-    radial-gradient(circle at 92% 0%, rgb(222 174 102 / 22%), transparent 35%),
+    radial-gradient(
+      circle at 92% 0%,
+      color-mix(in srgb, var(--td-energy) 22%, transparent),
+      transparent 35%
+    ),
     linear-gradient(145deg, #102d43, #174b5c);
   color: #fff;
   padding: clamp(1.25rem, 3vw, 1.8rem);
@@ -25940,7 +25964,7 @@ html {
   align-items: center;
   background: var(--color-aqua-deep);
   border-radius: 50%;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   font-size: 0.75rem;
   font-weight: 850;
@@ -25962,7 +25986,7 @@ html {
   background: var(--color-aqua-deep);
   border: 1px solid var(--color-aqua-deep);
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: inline-flex;
   font-size: 0.75rem;
   font-weight: 850;
@@ -26332,7 +26356,7 @@ html {
   background: var(--color-aqua);
   border: 1px solid var(--color-aqua);
   border-radius: 999px;
-  color: var(--color-white);
+  color: var(--td-on-action);
   display: flex;
   font-size: 0.75rem;
   font-weight: 800;
@@ -27172,10 +27196,10 @@ html {
 }
 
 .source-import-status__error {
-  background: color-mix(in srgb, var(--color-flare) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-flare) 34%, transparent);
+  background: var(--td-danger-wash);
+  border: 1px solid color-mix(in srgb, var(--td-danger) 34%, transparent);
   border-radius: 10px;
-  color: var(--color-flare) !important;
+  color: var(--td-danger) !important;
   line-height: 1.45;
   margin-top: 0.25rem;
   padding: 0.6rem 0.7rem;
@@ -28247,11 +28271,16 @@ html {
 
 .auth-entry__eyebrow,
 .auth-entry__card-kicker {
-  color: #d9bd8f;
+  color: var(--td-brand-dune);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.17em;
+}
+
+/* The card is a constant white plane: Dune alone fails as text there. */
+.auth-entry__card-kicker {
+  color: var(--td-dune-700);
 }
 
 .auth-entry__story h1 {
@@ -28287,6 +28316,7 @@ html {
   align-items: center;
   backdrop-filter: blur(18px);
   background: rgb(255 255 255 / 9%);
+  color: var(--td-brand-salt);
   border: 1px solid rgb(255 255 255 / 16%);
   border-radius: 999px;
   display: inline-flex;
@@ -28317,7 +28347,7 @@ html {
 }
 
 .auth-entry__card > p:not(.auth-entry__alternate) {
-  color: #657083;
+  color: var(--td-haze-600);
   font-size: 0.92rem;
   line-height: 1.55;
   margin: 0;
@@ -28325,9 +28355,9 @@ html {
 
 .auth-entry__primary {
   align-items: center;
-  background: #2367a8;
+  background: var(--td-brand-night-court);
   border-radius: 15px;
-  color: #fff;
+  color: var(--td-brand-salt);
   display: flex;
   font-size: 0.9rem;
   font-weight: 850;
@@ -28342,13 +28372,13 @@ html {
 }
 
 .auth-entry__primary:hover {
-  background: #174f86;
+  background: var(--td-mesh-night-court-b);
   transform: translateY(-2px);
 }
 
 .auth-entry__secure {
   align-items: center;
-  color: #748094;
+  color: var(--td-haze-500);
   display: flex;
   font-size: 0.75rem;
   gap: 0.45rem;
@@ -28358,7 +28388,7 @@ html {
 
 .auth-entry__alternate {
   border-top: 1px solid #e5e9ee;
-  color: #657083;
+  color: var(--td-haze-600);
   font-size: 0.8rem;
   margin: 1.75rem 0 0;
   padding-top: 1.35rem;
@@ -28366,7 +28396,7 @@ html {
 }
 
 .auth-entry__alternate a {
-  color: #2367a8;
+  color: var(--td-tideblue-600);
   font-weight: 850;
   text-decoration: none;
 }
@@ -29618,7 +29648,7 @@ html {
   align-items: center;
   background: #fff;
   border-radius: 999px;
-  color: #a86f18;
+  color: var(--td-energy-ink);
   display: flex;
   height: 38px;
   justify-content: center;
@@ -32122,7 +32152,7 @@ a {
 .hero-court__sun {
   background: var(--color-flare);
   border-radius: 50%;
-  box-shadow: 0 0 80px rgb(255 106 61 / 36%);
+  box-shadow: 0 0 80px color-mix(in srgb, var(--td-energy) 36%, transparent);
   height: 80px;
   position: absolute;
   right: 14%;
@@ -33023,7 +33053,7 @@ a {
 .final-cta__sun {
   background: var(--color-flare);
   border-radius: 50%;
-  box-shadow: 0 0 100px rgb(255 106 61 / 34%);
+  box-shadow: 0 0 100px color-mix(in srgb, var(--td-energy) 34%, transparent);
   height: 130px;
   position: absolute;
   right: 12%;
@@ -33834,7 +33864,7 @@ a {
 }
 
 .player-sidebar__profile small {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
 }
 
@@ -33874,7 +33904,7 @@ a {
 }
 
 .player-topbar__market span {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
   text-transform: uppercase;
 }
@@ -33903,7 +33933,7 @@ a {
 }
 
 .notification-dot {
-  background: var(--color-flare);
+  background: var(--td-attention);
   border: 2px solid var(--color-ink);
   border-radius: 50%;
   height: 8px;
@@ -33992,7 +34022,7 @@ a {
 }
 
 .player-account-menu > div button {
-  color: var(--color-flare);
+  color: var(--td-danger);
 }
 
 .player-content {
@@ -34072,7 +34102,7 @@ a {
 
 .primary-action {
   background: var(--color-aqua);
-  color: #fff;
+  color: var(--td-on-action);
 }
 
 .secondary-action {
@@ -34295,7 +34325,11 @@ a {
 
 .next-up-panel {
   background:
-    radial-gradient(circle at 80% 10%, rgb(255 106 61 / 15%), transparent 32%),
+    radial-gradient(
+      circle at 80% 10%,
+      color-mix(in srgb, var(--td-energy) 15%, transparent),
+      transparent 32%
+    ),
     var(--color-depth);
   display: flex;
   flex-direction: column;
@@ -34336,7 +34370,7 @@ a {
 }
 
 .next-up-panel__time small {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   margin-left: auto;
 }
 
@@ -34366,7 +34400,7 @@ a {
 }
 
 .next-up-panel__place small {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
 }
 
@@ -34530,7 +34564,7 @@ a {
 }
 
 .match-card__date small {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
   margin-top: 0.25rem;
 }
@@ -34755,7 +34789,7 @@ a {
 }
 
 .ask-duna__header small {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
 }
 
@@ -35525,7 +35559,7 @@ a {
 }
 
 .discover-filters label svg {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
 }
 
 .discover-filters input {
@@ -35778,7 +35812,7 @@ a {
 }
 
 .play-calendar__days > div > span {
-  background: var(--color-flare);
+  background: var(--td-energy-ink);
   border-radius: 50%;
   bottom: 6px;
   height: 4px;
@@ -35804,7 +35838,11 @@ a {
 
 .pickup-prompt {
   background:
-    radial-gradient(circle at 90% 12%, rgb(255 106 61 / 16%), transparent 34%),
+    radial-gradient(
+      circle at 90% 12%,
+      color-mix(in srgb, var(--td-energy) 16%, transparent),
+      transparent 34%
+    ),
     var(--color-depth);
   display: flex;
   flex-direction: column;
@@ -35920,7 +35958,7 @@ a {
 }
 
 .pickup-list__spots small {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
 }
 
@@ -35998,7 +36036,7 @@ a {
 }
 
 .partner-card > div > span:nth-child(2) p {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
   margin: 0.2rem 0 0;
 }
@@ -36140,7 +36178,7 @@ a {
   background: var(--color-ink);
   border: 0;
   border-radius: 999px;
-  color: #fff;
+  color: var(--td-text-inverse);
   display: flex;
   font-size: 0.75rem;
   font-weight: 700;
@@ -36150,7 +36188,7 @@ a {
 }
 
 .wallet-balance-card__actions button:disabled {
-  color: #fff;
+  color: var(--td-text-inverse);
   opacity: 0.74;
 }
 
@@ -36196,7 +36234,7 @@ a {
 }
 
 .wallet-side-cards small {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
 }
 
@@ -36328,8 +36366,8 @@ a {
 }
 
 .wallet-activity__icon--prize {
-  background: rgb(255 106 61 / 11%);
-  color: #ff9472;
+  background: var(--td-energy-wash);
+  color: var(--td-energy-ink);
 }
 
 .wallet-activity__icon--refund {
@@ -36347,7 +36385,7 @@ a {
 }
 
 .wallet-activity small {
-  color: rgb(var(--muted-rgb) / 48%);
+  color: var(--td-text-3);
   font-size: 0.75rem;
 }
 
@@ -36872,7 +36910,7 @@ a {
 .hero__primary:hover,
 .final-cta > a:hover {
   background: var(--color-aqua-deep);
-  color: #fff;
+  color: var(--td-on-action);
 }
 
 .site-header__avatar {
@@ -37173,7 +37211,7 @@ a {
 }
 
 .play-date-strip > div > i {
-  background: var(--color-flare);
+  background: var(--td-energy-ink);
   border: 2px solid var(--color-surface);
   border-radius: 50%;
   height: 8px;
@@ -39423,7 +39461,11 @@ button.selected > .choice-radio {
 .athlete-hero::before {
   background:
     radial-gradient(circle at 76% 24%, rgb(50 180 211 / 32%), transparent 28%),
-    radial-gradient(circle at 18% 94%, rgb(238 148 109 / 24%), transparent 30%);
+    radial-gradient(
+      circle at 18% 94%,
+      color-mix(in srgb, var(--td-energy) 24%, transparent),
+      transparent 30%
+    );
   content: "";
   inset: 0;
   pointer-events: none;
@@ -40617,7 +40659,11 @@ button.selected > .choice-radio {
 .athlete-stage > .athlete-hero::before {
   background:
     radial-gradient(circle at 57% 34%, rgb(71 188 214 / 28%), transparent 29%),
-    radial-gradient(circle at 20% 92%, rgb(238 148 109 / 24%), transparent 31%),
+    radial-gradient(
+      circle at 20% 92%,
+      color-mix(in srgb, var(--td-energy) 24%, transparent),
+      transparent 31%
+    ),
     linear-gradient(180deg, rgb(255 255 255 / 3%), transparent 26%);
 }
 

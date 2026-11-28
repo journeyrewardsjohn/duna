@@ -204,6 +204,246 @@
       font: var(--td-type-body);
     }
 
+    /* ---------- The brand loaders: they grow from the line ---------- */
+
+    /*
+     * Crests sit in translate(33 0) and start at x = 0, so scaling X grows
+     * them out of the line. The loop is the wave duration (1.4 s); crests
+     * swell 150 ms apart (PROMOTE: --td-stagger-loader).
+     */
+    .td-rallyloader,
+    .td-microrally {
+      --td-loader-stagger: 150ms;
+      display: inline-flex;
+    }
+
+    .td-rallyloader {
+      color: var(--td-ink);
+    }
+
+    /* In a button it takes the label's colour, so it keeps the button's look. */
+
+    .td-microrally {
+      color: inherit;
+    }
+
+    .td-rallyloader__mark,
+    .td-microrally__mark,
+    .td-setbyset__mark {
+      display: block;
+      fill: currentColor;
+      overflow: visible;
+    }
+
+    .td-rallyloader--sm .td-rallyloader__mark {
+      height: 16px;
+    }
+
+    .td-rallyloader--md .td-rallyloader__mark {
+      height: 24px;
+    }
+
+    .td-rallyloader--lg .td-rallyloader__mark {
+      height: 40px;
+    }
+
+    .td-rallyloader__crest,
+    .td-microrally__crest {
+      transform-box: fill-box;
+      transform-origin: left center;
+      animation: td-crest-swell var(--td-duration-wave) var(--td-ease-rise)
+        infinite;
+      animation-delay: calc(var(--td-loader-stagger) * var(--td-crest-i, 0));
+    }
+
+    .td-microrally__mark {
+      height: 16px;
+    }
+
+    /* Crossing: a ball arcs over the net, back and forth like a rally. */
+
+    .td-crossing {
+      display: inline-grid;
+      gap: var(--td-space-2);
+      justify-items: center;
+      color: var(--td-ink);
+    }
+
+    .td-crossing__art {
+      width: 48px;
+      height: 32px;
+      overflow: visible;
+    }
+
+    .td-crossing__ground {
+      fill: none;
+      stroke: var(--td-line-strong);
+      stroke-width: 1.5;
+    }
+
+    .td-crossing__net {
+      fill: currentColor;
+    }
+
+    .td-crossing__ball {
+      fill: currentColor;
+    }
+
+    .td-crossing__travel {
+      animation: td-cross-travel var(--td-duration-wave) linear infinite
+        alternate;
+    }
+
+    .td-crossing__arc {
+      animation: td-cross-arc var(--td-duration-wave) infinite;
+    }
+
+    /* Set by set: one crest fills per completed step. */
+
+    .td-setbyset {
+      display: grid;
+      gap: var(--td-space-2);
+      justify-items: center;
+      text-align: center;
+    }
+
+    .td-setbyset__crests {
+      display: flex;
+      gap: var(--td-space-3);
+    }
+
+    .td-setbyset__mark {
+      height: 24px;
+    }
+
+    .td-setbyset__line {
+      fill: var(--td-ink);
+    }
+
+    .td-setbyset__crest {
+      fill: var(--td-line-strong);
+      transform-box: fill-box;
+      transform-origin: left center;
+    }
+
+    .td-setbyset__step[data-done] .td-setbyset__crest {
+      fill: var(--td-ink);
+      animation: td-crest-grow var(--td-duration-rise) var(--td-ease-rise) both;
+    }
+
+    .td-setbyset__label {
+      color: var(--td-ink);
+      font: var(--td-type-label);
+    }
+
+    .td-setbyset__caption {
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+    }
+
+    /* Serve: the wordmark draws on, rests, and draws off. */
+
+    .td-serve {
+      display: grid;
+      gap: var(--td-space-4);
+      place-content: center;
+      justify-items: center;
+      min-height: 320px;
+      padding: var(--td-space-8);
+      color: var(--td-ink);
+    }
+
+    .td-serve--fixed {
+      position: fixed;
+      inset: 0;
+      z-index: var(--td-z-dialog);
+      min-height: 100dvh;
+      background: var(--td-ground);
+    }
+
+    .td-serve__wordmark {
+      width: 160px;
+      overflow: visible;
+    }
+
+    .td-serve__stroke {
+      fill: none;
+      stroke: currentColor;
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+      stroke-linecap: square;
+      stroke-width: 9;
+      animation: td-serve-draw var(--td-duration-loader-sunrise)
+        var(--td-ease-out) infinite;
+    }
+
+    .td-serve__label {
+      color: var(--td-ink-2);
+      font: var(--td-type-label);
+    }
+
+    /* Pull to refresh: the line follows the finger. */
+
+    .td-pull {
+      position: relative;
+      display: grid;
+      min-height: 0;
+    }
+
+    .td-pull__scroller {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      translate: 0 calc(var(--td-pull, 0px) * var(--td-motion));
+      transition: translate var(--td-duration-cross) var(--td-ease-cross);
+
+      .td-pull[data-pulling] & {
+        transition: none;
+      }
+    }
+
+    .td-pull__indicator {
+      position: absolute;
+      inset: 0 0 auto;
+      display: flex;
+      justify-content: center;
+      height: var(--td-space-1);
+      pointer-events: none;
+    }
+
+    .td-pull__line {
+      width: calc(100% * var(--td-pull-progress, 0));
+      height: 2px;
+      border-radius: 1px;
+      background: var(--td-line-strong);
+
+      .td-pull__indicator[data-armed] & {
+        background: var(--td-ink);
+      }
+    }
+
+    .td-pull__loading {
+      display: flex;
+      justify-content: center;
+      padding: var(--td-space-2);
+    }
+
+    /* Keyboard and switch access: the same refresh, shown when focused. */
+
+    .td-pull__button:not(:focus-visible, [data-loading]) {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .td-pull__button:is(:focus-visible, [data-loading]) {
+      justify-self: center;
+      margin-block: var(--td-space-2);
+    }
+
     /* ---------- Reduced motion: every loop has a resting state ---------- */
 
     @media (prefers-reduced-motion: reduce) {
@@ -226,6 +466,29 @@
 
       .td-skel {
         background: var(--td-surface-sunken);
+      }
+
+      /* The brand loaders rest as the finished mark. */
+
+      .td-rallyloader__crest,
+      .td-microrally__crest,
+      .td-crossing__travel,
+      .td-crossing__arc,
+      .td-setbyset__step[data-done] .td-setbyset__crest,
+      .td-serve__stroke {
+        animation: none;
+      }
+
+      .td-crossing__travel {
+        translate: 16px 0;
+      }
+
+      .td-crossing__arc {
+        translate: 0 -18px;
+      }
+
+      .td-serve__stroke {
+        stroke-dashoffset: 0;
       }
     }
   }
@@ -273,6 +536,76 @@
 
     to {
       background-position: 0 0;
+    }
+  }
+
+  /* A crest swells from the line and settles back, in turn. */
+
+  @keyframes td-crest-swell {
+    0%,
+    100% {
+      scale: 0.25 1;
+    }
+
+    40% {
+      scale: 1 1;
+    }
+
+    70% {
+      scale: 0.25 1;
+    }
+  }
+
+  @keyframes td-crest-grow {
+    from {
+      scale: 0 1;
+    }
+
+    to {
+      scale: 1 1;
+    }
+  }
+
+  @keyframes td-cross-travel {
+    from {
+      translate: 0 0;
+    }
+
+    to {
+      translate: 32px 0;
+    }
+  }
+
+  /* Up out of one side, down into the other: an arc, not a bounce. */
+
+  @keyframes td-cross-arc {
+    0% {
+      translate: 0 0;
+      animation-timing-function: var(--td-ease-out);
+    }
+
+    50% {
+      translate: 0 -18px;
+      animation-timing-function: var(--td-ease-in);
+    }
+
+    100% {
+      translate: 0 0;
+    }
+  }
+
+  @keyframes td-serve-draw {
+    0% {
+      stroke-dashoffset: 1;
+    }
+
+    45%,
+    75% {
+      stroke-dashoffset: 0;
+    }
+
+    100% {
+      stroke-dashoffset: -1;
     }
   }
 }
