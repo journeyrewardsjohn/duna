@@ -18,6 +18,7 @@ import {
 } from "../participation/session-model";
 import { getHqSession, hasScope } from "../shell/hq-session";
 import type { ShellSession } from "../shell/session-types";
+import { withBookingPayments } from "./schedule-desk";
 import {
   capabilitiesFrom,
   demoCapabilities,
@@ -77,8 +78,12 @@ export interface ScheduleConditions {
 export interface SchedulePermissions {
   /** Create, move, block, close, cancel (sessions:write). */
   readonly change: boolean;
-  /** Cancel with refunds (payments:write). */
+  /** Refunds, staff prices and free bookings of paid time (payments:write). */
   readonly refund: boolean;
+  /** Sees amounts (payments:read, payments:write or payments:collect). */
+  readonly money: boolean;
+  /** Records payments taken at the desk (payments:collect). */
+  readonly collect: boolean;
   /** Check people in: staff with sessions:write, or a coach on their own sessions. */
   readonly checkIn: boolean;
   /** A coach without write access sees their own day by default. */
@@ -290,13 +295,25 @@ export function calendarItems(
             })),
           }
         : {}),
-      // Only sessions have a move procedure (propose + confirm); bookings
-      // and blocks wait for the API (see the pull request's "Needs API").
+      // Sessions move by propose + confirm, court bookings by
+      // operator.schedule.moveCourtBooking; player matches and blocks stay.
       movable:
-        entry.draggable && entry.sourceType === "session" && kind !== "event",
+        !cancelled &&
+        (entry.sourceType === "booking" ||
+          (entry.draggable &&
+            entry.sourceType === "session" &&
+            kind !== "event")),
       ...(kind === "event" ? { href: `/events/${entry.id}` } : {}),
       ...(kind === "block"
-        ? { reason: entry.title, blockMode: "blocked" as const }
+        ? {
+            reason: entry.title,
+            blockMode:
+              entry.status === "maintenance"
+                ? ("maintenance" as const)
+                : ("blocked" as const),
+            // A connected calendar's busy time is the coach's, not the club's.
+            removable: entry.sourceType === "operator-block",
+          }
         : {}),
     });
   }
@@ -333,6 +350,7 @@ export function calendarItems(
           status: override.mode,
           people: [],
           movable: false,
+          removable: true,
         });
       }
     }
@@ -525,9 +543,13 @@ export function schedulePermissions(
 ): SchedulePermissions {
   const change = hasScope(session, "sessions:write");
   const isCoach = session.roles.includes("coach");
+  const refund = hasScope(session, "payments:write");
+  const collect = hasScope(session, "payments:collect");
   return {
     change,
-    refund: hasScope(session, "payments:write"),
+    refund,
+    money: refund || collect || hasScope(session, "payments:read"),
+    collect,
     checkIn: change || isCoach,
     ownDayOnly: !change && isCoach,
   };
@@ -671,11 +693,31 @@ export const loadSchedule = cache(
       }
     }
 
+    // Court bookings' money, one read for the range (money permission only).
+    const permissionsNow = schedulePermissions(session);
+    if (permissionsNow.money) {
+      try {
+        const answer = await caller.operator.schedule.bookingPayments({
+          from: new Date(
+            Date.parse(`${addCalendarDays(from, -1)}T00:00:00Z`),
+          ).toISOString(),
+          to: new Date(
+            Date.parse(`${addCalendarDays(to, 2)}T00:00:00Z`),
+          ).toISOString(),
+        });
+        items = withBookingPayments(items, answer.bookings);
+      } catch (error) {
+        if (!isPermissionDenied(error) && !isNotConfiguredAnswer(error)) {
+          log.warn("hq.schedule.booking_payments_unavailable", {});
+        }
+      }
+    }
+
     // Coaches' availability is read only when the person needs it (creating,
     // moving, "Who is free"): see `coachAvailabilityAction`. Reading it for
     // every page view would spend one request per coach.
 
-    const permissions = schedulePermissions(session);
+    const permissions = permissionsNow;
     const conditionsPlace =
       places.find((place) => place.id === query.place) ??
       (places.length === 1 ? places[0] : undefined);

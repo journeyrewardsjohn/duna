@@ -121,6 +121,11 @@ export interface ScheduleItem {
   readonly amountMinor?: number;
   readonly paidMinor?: number;
   readonly currency?: string;
+  /** Court bookings: the payment state the API answered (`bookingPayments`). */
+  readonly paymentState?:
+    "free" | "unpaid" | "part-paid" | "paid" | "refunded" | "cancelled";
+  /** Blocks: may be removed from here (not a connected calendar's busy time). */
+  readonly removable?: boolean;
   /** May be moved or resized on the calendar (the procedures allow it). */
   readonly movable: boolean;
   /** Events and other read-only items open their own page. */
