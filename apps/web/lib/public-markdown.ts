@@ -65,9 +65,21 @@ export const staticPublicPages = [
       "Keep score with one hand: the scorekeeper in the Duna app tracks the server and every rally, on your phone and your watch.",
       "Get your Sand Rating: when both sides confirm a result, the rating moves. How it works is at /sand-rating.",
       "Watch it back with your heart rate: film a match and see your effort laid over the video, point by point.",
-      "Played somewhere Duna doesn't know yet? Add the court and your score at /app/score.",
+      "Played somewhere Duna doesn't know yet? Add the court and your score at /add-score, no account needed.",
       "For clubs and coaches: bookings, memberships, programs and drills, payments and Ask Duna in one place, and you approve every change. See /run-your-club, Duna Pro for coaches at /coaches, and the plans at /pricing (prices are drafts until confirmed).",
       "Two apps: Duna for players and parents, Duna Pro for coaches and club staff.",
+    ],
+  },
+  {
+    path: "/add-score",
+    title: "Add a score and see your Sand Rating",
+    description:
+      "Add a match and where you played, no account needed. See what the result would do for your Sand Rating, then save it to your name.",
+    sections: [
+      "Four steps: where you played (a court on Duna, a place on the map, or a new court you describe), the score set by set, who played (first names or initials), and what the result would do.",
+      "No account is needed to add a score. The draft is kept in this browser for 7 days and then deleted; nobody else sees it.",
+      "A result moves a Sand Rating only after it is saved to an account and someone on the other side confirms it, it is a competitive two-on-two match, and every player has a Duna profile.",
+      "New courts are checked by Duna before they are listed for everyone.",
     ],
   },
   {

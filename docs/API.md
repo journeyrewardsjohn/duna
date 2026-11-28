@@ -187,6 +187,27 @@ Invariants an integration must preserve:
   approval may book for a dependent. The booking belongs to the dependent; the
   order belongs to whoever's wallet paid. A dependent can see but not cancel it.
 
+## Add a score without an account (`public.addScore`, `player.addScore`, `admin.addScore`, SITE-3)
+
+Contracts: `packages/api/src/contracts/add-score.ts`; how it works: `docs/product/add-score.md`.
+
+| Procedure                                                                | Who                                      | What                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `public.addScore.save({ token?, step, data })`                           | Anyone                                   | Saves one step (`where`, `score`, `players`) of the anonymous draft. The first save returns `newToken`; the web app keeps it in the HTTP-only `duna-score-draft` cookie. Answers `saved`, `invalid` (field errors), `expired` or `claimed`. |
+| `public.addScore.read({ token? })`                                       | Anyone                                   | `none`, `expired`, `claimed` (with the match) or `active` (the draft, its completed steps and soft warnings).                                                                                                                               |
+| `public.addScore.preview({ token })`                                     | Anyone                                   | What the result would do: the rating engine on a copy, never written; `not-ready` lists missing steps.                                                                                                                                      |
+| `public.addScore.discard({ token })`                                     | Anyone                                   | Deletes the draft now.                                                                                                                                                                                                                      |
+| `player.addScore.claim({ token, teammates, opponents, idempotencyKey })` | Signed in, `matches:write`, not under 13 | One `pending-verification` match through `recordCompletedMatch`; idempotent; never claimable by a second person.                                                                                                                            |
+| `admin.addScore.candidates({ status, limit })`                           | Admin                                    | Candidate venues players named; never public.                                                                                                                                                                                               |
+| `admin.addScore.resolveCandidate(promote / merge / dismiss)`             | Admin                                    | Promote makes a draft venue; merge links an existing venue; dismiss needs a reason. Audited.                                                                                                                                                |
+
+Anonymous calls have their own budgets inside the service (per hashed address and per draft) on top
+of the public procedure limit; a refusal is `TOO_MANY_REQUESTS` with the seconds to wait.
+
+The Places routes (`/api/places/autocomplete`, `/details`, `/map`) answer 429 with `Retry-After`
+over a per-address budget, take `session=<token>` and pass it to the provider, and cache identical
+requests for 10 minutes.
+
 ## Duna Pay (`operator.pay`, owner B2)
 
 Shapes are frozen in `packages/api/src/contracts/pay.ts`; the model is in

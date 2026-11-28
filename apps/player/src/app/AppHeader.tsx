@@ -3,8 +3,8 @@
  * still render at their top. Inside the new shell the route header carries
  * the title, the back control, Messages and the account, so this renders
  * nothing; it is deleted with the last legacy screen that imports it
- * (PlansScreen, DiscoverScreen, PerformanceScreen, PredictionPortfolioScreen,
- * PlayLauncherScreen).
+ * (PlansScreen, PerformanceScreen,
+ * PredictionPortfolioScreen).
  */
 export function AppHeader(props: { readonly eyebrow?: string }) {
   void props;

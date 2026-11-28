@@ -4,6 +4,7 @@ import {
   mapboxStaticImageUrl,
   publicMapboxToken,
 } from "../../../../lib/static-map";
+import { placesRateLimit } from "../guard";
 
 function fallbackMap(): Response {
   const svg = `
@@ -48,6 +49,10 @@ export async function GET(request: Request) {
       { status: 400 },
     );
   }
+
+  // Every answer below may call a paid provider: the budget comes first.
+  const limited = await placesRateLimit(request, "map");
+  if (limited) return limited;
 
   const googleKey = process.env.GOOGLE_PLACES_API_KEY;
   const location = hasCoordinates ? `${latitude},${longitude}` : address;

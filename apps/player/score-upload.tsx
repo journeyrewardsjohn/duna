@@ -19,7 +19,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useMapboxToken } from "./discovery-map";
+import { useMapboxToken } from "./src/features/find/mapbox-token";
 import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,

@@ -8,7 +8,7 @@
  *   to the tab they came from.
  * - Tapping the selected tab again goes back to its root (iOS convention).
  */
-import type { DiscoverIntentKind } from "../features/discovery/discover-intent";
+import type { DiscoverIntentKind } from "../features/find/discover-intent";
 import {
   INITIAL_TAB,
   ROUTES,
@@ -25,6 +25,8 @@ export interface RouteEntry {
   readonly conversationId?: string;
   /** Ask Duna: a first question. */
   readonly prompt?: string;
+  /** The thing a detail route shows (a session occurrence, a venue). */
+  readonly targetId?: string;
   /** Changes on every open, so re-opening the same route re-applies its intent. */
   readonly nonce: number;
 }
@@ -45,6 +47,7 @@ export type ShellAction =
       readonly intent?: DiscoverIntentKind;
       readonly conversationId?: string;
       readonly prompt?: string;
+      readonly targetId?: string;
       readonly nonce?: number;
     }
   | { readonly type: "back"; readonly tab: TabKey }
@@ -92,6 +95,7 @@ export function shellReducer(
           ? { conversationId: action.conversationId }
           : {}),
         ...(action.prompt ? { prompt: action.prompt } : {}),
+        ...(action.targetId ? { targetId: action.targetId } : {}),
         nonce: action.nonce ?? nextNonce(),
       };
       if (definition.presentation === "window") {

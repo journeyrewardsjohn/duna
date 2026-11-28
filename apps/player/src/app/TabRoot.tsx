@@ -19,7 +19,6 @@ import { useContext, useEffect, useState, type ReactNode } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { usePlayerRuntime } from "../../runtime";
 import { VideoStudioScreen } from "../../video-studio";
-import type { DiscoverIntentKind } from "../features/discovery/discover-intent";
 import {
   HomePrimary,
   HomeInspector,
@@ -27,6 +26,8 @@ import {
   HomeTabletopBottom,
   HomeTabletopTop,
 } from "../features/home/HomeScreen";
+import { FindProvider } from "../features/find/FindContext";
+import { FindList, FindMapPane } from "../features/find/FindScreen";
 import { shellPlan } from "./layout-plan";
 import {
   ROUTES,
@@ -46,51 +47,24 @@ import {
 } from "./shell-state";
 import { Row, SideBySideContext, usePaneEdges } from "./ui";
 
-/** Find's shortcuts into search, beside its routes (board P-IA, "Find"). */
-const FIND_SHORTCUTS: readonly {
-  readonly intent: DiscoverIntentKind;
-  readonly title: string;
-  readonly summary: string;
-  readonly icon: "ball" | "court" | "tournament" | "media-play";
-}[] = [
-  {
-    intent: "find-match",
-    title: "Find a game",
-    summary: "Open matches at your level",
-    icon: "ball",
-  },
-  {
-    intent: "book-court",
-    title: "Book a court",
-    summary: "Live court availability",
-    icon: "court",
-  },
-  {
-    intent: "join-event",
-    title: "Events",
-    summary: "Tournaments, clinics and leagues",
-    icon: "tournament",
-  },
-  {
-    intent: "watch-pros",
-    title: "Watch the pros",
-    summary: "Live coverage and pro matches",
-    icon: "media-play",
-  },
-];
-
 /** The header over a route: Back (one pane at a time) and the route's title. */
 export function RouteHeader({
   title,
   backLabel,
   onBack,
 }: {
-  readonly title: string;
+  /** Absent when the screen draws its own title: only Back shows. */
+  readonly title?: string;
   readonly backLabel?: string;
   readonly onBack?: () => void;
 }) {
   const edges = usePaneEdges();
   const { colors, tokens } = useTheme();
+  if (!title && !onBack) {
+    return (
+      <View style={{ height: edges.top, backgroundColor: colors.ground }} />
+    );
+  }
   return (
     <View
       style={{
@@ -118,7 +92,7 @@ export function RouteHeader({
           </Text>
         </Pressable>
       ) : null}
-      <Title size={24}>{title}</Title>
+      {title ? <Title size={24}>{title}</Title> : null}
     </View>
   );
 }
@@ -140,7 +114,7 @@ function RouteStack({
       <RouteHeader
         backLabel={tabDefinition(tab).title}
         onBack={showBack ? () => shell.back(tab) : undefined}
-        title={definition.title}
+        title={definition.ownTitle ? undefined : definition.title}
       />
       {/* A nested provider: the legacy screen's own safe-area views measure
           from below the header, so nothing is padded twice. */}
@@ -173,10 +147,7 @@ function TabHub({
   const sideBySide = useContext(SideBySideContext);
   const { colors, tokens } = useTheme();
   const definition = tabDefinition(tab);
-  const isSelected = (key: RouteKey, intent?: DiscoverIntentKind) =>
-    sideBySide &&
-    selected?.key === key &&
-    (intent === undefined || selected.intent === intent);
+  const isSelected = (key: RouteKey) => sideBySide && selected?.key === key;
   return (
     <ScrollView
       contentContainerStyle={{
@@ -201,29 +172,61 @@ function TabHub({
           icon={ROUTES[key].icon}
           key={key}
           onPress={() => shell.open(key)}
-          selected={
-            isSelected(key) && !(key === "discover" && selected?.intent)
-          }
+          selected={isSelected(key)}
           summary={ROUTES[key].summary}
           testID={`hub-row-${key}`}
           title={ROUTES[key].title}
         />
       ))}
-      {tab === "find"
-        ? FIND_SHORTCUTS.map((shortcut) => (
-            <Row
-              icon={shortcut.icon}
-              key={shortcut.intent}
-              onPress={() =>
-                shell.open("discover", { intent: shortcut.intent })
-              }
-              selected={isSelected("discover", shortcut.intent)}
-              summary={shortcut.summary}
-              title={shortcut.title}
-            />
-          ))
-        : null}
     </ScrollView>
+  );
+}
+
+/**
+ * Find (M-P1): Find's own root instead of a hub. The list is the primary
+ * pane; beside it the map (open Duo, iPad) until a session or a venue is
+ * opened; propped half-open, the map (or the opened detail) on the top
+ * pane and the list below. One `FindProvider` keeps the search and the
+ * selection across all of it.
+ */
+function FindTab({
+  detail,
+  entry,
+  layout,
+  onTabletopChange,
+  sideBySide,
+  tabletop,
+}: {
+  readonly detail: ReactNode;
+  readonly entry: RouteEntry | null;
+  readonly layout: ReturnType<typeof useRegionLayout>["layout"];
+  readonly onTabletopChange: (active: boolean) => void;
+  readonly sideBySide: boolean;
+  readonly tabletop: boolean;
+}) {
+  const list = (arrangement: "phone" | "side" | "tabletop") => (
+    <RouteEntryContext.Provider value={entry}>
+      <FindList arrangement={arrangement} />
+    </RouteEntryContext.Provider>
+  );
+  return (
+    <FindProvider>
+      {tabletop ? (
+        <FoldScaffold
+          layout={layout}
+          onTabletopChange={onTabletopChange}
+          primary={detail ?? <FindMapPane />}
+          secondary={list("tabletop")}
+        />
+      ) : (
+        <AdaptiveScaffold
+          detail={detail}
+          emptyDetail={sideBySide ? <FindMapPane /> : null}
+          layout={layout}
+          primary={list(sideBySide ? "side" : "phone")}
+        />
+      )}
+    </FindProvider>
   );
 }
 
@@ -288,7 +291,18 @@ export function TabRoot({
     ) : null;
 
   let content: ReactNode;
-  if (tab === "play" && plan.home === "tabletop" && !selected) {
+  if (tab === "find") {
+    content = (
+      <FindTab
+        detail={shown?.key === "discover" ? null : detail}
+        entry={selected?.key === "discover" ? selected : null}
+        layout={region.layout}
+        onTabletopChange={onTabletopChange}
+        sideBySide={plan.sideBySide}
+        tabletop={plan.home === "tabletop"}
+      />
+    );
+  } else if (tab === "play" && plan.home === "tabletop" && !selected) {
     content = (
       <FoldScaffold
         layout={region.layout}
