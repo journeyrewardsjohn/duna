@@ -61,8 +61,12 @@ export const setupOperatorRouter = router({
     .output(setupProfileSchema)
     .mutation(({ input }) => {
       if (usesDemoData()) {
-        const { confirmFields: _confirm, ...changes } = input;
-        return { ...setupDemo.profile, ...changes };
+        return {
+          ...setupDemo.profile,
+          ...Object.fromEntries(
+            Object.entries(input).filter(([key]) => key !== "confirmFields"),
+          ),
+        };
       }
       return notImplementedYet(DOMAIN, "updateProfile");
     }),
