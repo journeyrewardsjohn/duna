@@ -1,4 +1,16 @@
+import type { DiscoverIntentKind } from "../features/find/discover-intent";
 import { isRouteKey } from "./router";
+
+const INTENTS: readonly string[] = [
+  "find-match",
+  "book-court",
+  "join-event",
+  "watch-pros",
+  "search",
+];
+function isIntent(value: string | null): boolean {
+  return value !== null && INTENTS.includes(value);
+}
 import type { ShellAction } from "./shell-state";
 
 /** Where an old Live Activity link lands (kept for links already on Lock Screens). */
@@ -22,6 +34,9 @@ export type PlayerDeepLink =
   | { readonly kind: "ai" }
   | { readonly kind: "messages"; readonly conversationId?: string }
   | { readonly kind: "booking"; readonly bookingId: string }
+  | { readonly kind: "session"; readonly sessionId: string }
+  | { readonly kind: "court"; readonly venueId: string }
+  | { readonly kind: "find" }
   | {
       readonly kind: "live-activity";
       readonly tab: LiveActivityDestination;
@@ -72,6 +87,13 @@ export function parsePlayerDeepLink(
   if (bookingMatch?.[1]) {
     return { kind: "booking", bookingId: bookingMatch[1] };
   }
+  const sessionId = url?.match(/^duna:\/\/sessions\/([^/?#]+)/)?.[1];
+  if (sessionId) return { kind: "session", sessionId };
+  const courtVenueId = url?.match(/^duna:\/\/courts\/([^/?#]+)/)?.[1];
+  if (courtVenueId) return { kind: "court", venueId: courtVenueId };
+  if (url === "duna://find" || url?.startsWith("duna://find?")) {
+    return { kind: "find" };
+  }
   const match = url?.match(/^duna:\/\/live\/([^/]+)\//);
   if (!match) return undefined;
   return {
@@ -105,6 +127,20 @@ export function deepLinkNavigation(link: PlayerDeepLink): ShellAction | null {
         ...(decoded ? { conversationId: decoded } : {}),
       };
     }
+    case "session":
+      return {
+        type: "open",
+        route: "session",
+        targetId: safeDecode(link.sessionId),
+      };
+    case "court":
+      return {
+        type: "open",
+        route: "court",
+        targetId: safeDecode(link.venueId),
+      };
+    case "find":
+      return { type: "open", route: "discover" };
     case "booking":
       // The booking opens as a sheet over Plans.
       return { type: "open", route: "plans" };
@@ -193,7 +229,7 @@ export interface DevShellLink {
 }
 
 /**
- * `duna://dev/shell?tab=find&route=coaches&theme=dark&sheet=new` (preview
+ * `duna://dev/shell?tab=find&route=session&id=<occurrence>&theme=dark&sheet=new` (preview
  * builds only; DunaApp ignores it otherwise). Unknown values are ignored.
  */
 export function parseDevShellUrl(url: string | null): DevShellLink | null {
@@ -209,7 +245,18 @@ export function parseDevShellUrl(url: string | null): DevShellLink | null {
   )
     actions.push({ type: "select-tab", tab });
   const route = query.get("route");
-  if (route && isRouteKey(route)) actions.push({ type: "open", route });
+  const id = query.get("id");
+  if (route && isRouteKey(route))
+    actions.push({
+      type: "open",
+      route,
+      ...(id ? { targetId: id } : {}),
+      // A detail's first step, for screenshots ("book", "waitlist").
+      ...(query.get("step") ? { prompt: query.get("step")! } : {}),
+      ...(isIntent(query.get("intent"))
+        ? { intent: query.get("intent") as DiscoverIntentKind }
+        : {}),
+    });
   if (query.get("sheet") === "new") actions.push({ type: "open-sheet" });
   const theme = query.get("theme");
   return {

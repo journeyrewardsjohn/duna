@@ -897,9 +897,11 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible({ timeout: navigationTimeout });
 
   await page.goto(`${hqBaseUrl}/setup/places`);
-  await expect(page.getByRole("heading", { name: "Venues" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Places and courts", level: 1 }),
+  ).toBeVisible();
   const venueWorkspace = page.getByRole("link", {
-    name: "Open venue workspace",
+    name: /Beach Elite Training Center/,
   });
   await expect(venueWorkspace).toBeVisible();
   await clickAndWaitForUrl(
@@ -910,6 +912,12 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(
     page.getByRole("heading", { name: "Beach Elite Training Center" }).first(),
   ).toBeVisible({ timeout: navigationTimeout });
+  // The place's details editor opens from its "Details and pricing" tab.
+  await clickAndWaitForUrl(
+    page,
+    page.getByRole("link", { name: "Details and pricing" }),
+    /\/setup\/places\/10000000-0000-4000-8000-000000000101\/details$/,
+  );
   const venueDetails = page.getByRole("button", {
     name: "Venue details",
     exact: true,

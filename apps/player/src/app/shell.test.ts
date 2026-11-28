@@ -45,8 +45,9 @@ describe("route table", () => {
   });
 
   it("keeps every pre-shell screen reachable (no function dropped)", () => {
+    // Find (discover) was rebuilt by M-P1 and is no longer legacy.
+    expect(ROUTES.discover.legacy).toBe(false);
     const legacy: RouteKey[] = [
-      "discover",
       "coaches",
       "plans",
       "score",
@@ -142,8 +143,10 @@ describe("shell reducer", () => {
 
   it("shows a tab's default route only when there is a second pane", () => {
     const state = initialShellState();
-    expect(visibleRoute(state, "find", 1)).toBeNull();
-    expect(visibleRoute(state, "find", 2)?.key).toBe("discover");
+    expect(visibleRoute(state, "improve", 1)).toBeNull();
+    expect(visibleRoute(state, "improve", 2)?.key).toBe("performance");
+    // Find's root is the search; its second pane is the map, not a route.
+    expect(visibleRoute(state, "find", 2)).toBeNull();
     expect(visibleRoute(state, "play", 2)).toBeNull();
   });
 });

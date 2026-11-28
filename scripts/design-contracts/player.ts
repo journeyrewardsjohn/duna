@@ -147,6 +147,58 @@ export const player: SurfaceContract = {
     },
     {
       kind: "includes",
+      file: "apps/player/src/features/find/FindScreen.tsx",
+      values: [
+        "<SearchBar",
+        "<Title>Find</Title>",
+        "<LoadingState",
+        "<ErrorState",
+        "<OfflineState",
+        "<EmptyState",
+        "<ResultRow",
+      ],
+      message:
+        "Player Find leads with Where · When · What and lists results by What with loading, empty, error and offline states (M-P1)",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/features/find/FindMap.tsx",
+      values: [
+        "<MapPin",
+        "<MapStyleToggle",
+        "mapStyleForZoom",
+        "<NotConfiguredState",
+      ],
+      message:
+        "Find's map draws Duna pins by zoom with the single map / satellite toggle and an honest not-set-up state",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/features/find/SessionDetailScreen.tsx",
+      values: [
+        "<ParticipationChip",
+        "<ParticipationLine",
+        "<PriceLadder",
+        "player.participation.quote",
+        "createInvite",
+      ],
+      message:
+        "A group session shows the backend's participation words, the price ladder and invite (PART-11)",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/features/booking/BookingSheet.tsx",
+      values: [
+        "<AdaptiveSheet",
+        "The most you can be charged",
+        "joinWaitlist",
+        "I understand",
+      ],
+      message:
+        "Booking restates the most you can be charged before payment, joins waitlists and asks for the late-cancel acknowledgement",
+    },
+    {
+      kind: "includes",
       file: "apps/player/src/app/AccountScreen.tsx",
       values: ["Create new organisation", "switchOrganization", "Sign out"],
       message:

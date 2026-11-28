@@ -16,7 +16,8 @@ import { ScoreUploadScreen } from "../../score-upload";
 import { PlayerTrainingScreen } from "../../training-screen";
 import { PlansScreen } from "../features/calendar/PlansScreen";
 import { FindCoachScreen } from "../features/coaches/FindCoachScreen";
-import { DiscoverScreen } from "../features/discovery/DiscoverScreen";
+import { CourtTimesScreen } from "../features/find/CourtTimesScreen";
+import { SessionDetailScreen } from "../features/find/SessionDetailScreen";
 import { PredictionPortfolioScreen } from "../features/predictions/PredictionPortfolioScreen";
 import { PerformanceScreen } from "../features/profile/PerformanceScreen";
 import { WalletScreen } from "../features/wallet/WalletScreen";
@@ -44,18 +45,11 @@ const messagingPalette = {
 };
 
 export const SCREENS = {
-  discover: (entry, shell) => (
-    <DiscoverScreen
-      intent={
-        entry.intent ? { key: entry.nonce, kind: entry.intent } : undefined
-      }
-      onBook={shell.registerForEvent}
-      onCreateMatch={shell.createMatch}
-      onOpenEvent={shell.openEventAtIndex}
-      onOpenExternalEvent={shell.openEvent}
-      onOrganization={shell.openOrganization}
-    />
-  ),
+  // Find's root is drawn by `TabRoot` (list, map and search share one
+  // provider); opening "discover" applies its intent there.
+  discover: () => null,
+  session: () => <SessionDetailScreen />,
+  court: () => <CourtTimesScreen />,
   coaches: (_entry, shell) => (
     <FindCoachScreen
       onBack={() => shell.back("find")}
