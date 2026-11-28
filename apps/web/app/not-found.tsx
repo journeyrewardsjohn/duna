@@ -1,34 +1,32 @@
-import { ArrowRight, Compass } from "lucide-react";
 import Link from "next/link";
+import {
+  ErrorState,
+  errorStateActionClass,
+} from "@/components/observability/error-state";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
 export default function NotFound() {
   return (
-    <main className="not-found-v3" data-zone="editorial">
+    <>
       <SiteHeader />
-      <section className="not-found-v3__stage">
-        <div className="not-found-v3__copy">
-          <span className="not-found-v3__eyebrow">Out of bounds</span>
-          <h1>Nothing here. The next game is.</h1>
-          <p>
-            This page may have moved, but the beach is still connected. Head
-            back home or find a court, event, or player near you.
-          </p>
-          <div className="not-found-v3__actions">
-            <Link href="/discover">
-              Find what is next <Compass aria-hidden size={17} />
+      <ErrorState
+        actions={
+          <>
+            <Link className={errorStateActionClass.primary} href="/discover">
+              Find a game
             </Link>
-            <Link href="/">
-              Duna home <ArrowRight aria-hidden size={17} />
+            <Link className={errorStateActionClass.secondary} href="/">
+              Duna home
             </Link>
-          </div>
-        </div>
-        <div aria-hidden className="not-found-v3__mark">
-          404
-        </div>
-      </section>
+          </>
+        }
+        alert={false}
+        description="The link may be old, or the page may have moved. Head home or find a court, event or player near you."
+        eyebrow="Page not found"
+        title="We can’t find that page"
+      />
       <SiteFooter />
-    </main>
+    </>
   );
 }

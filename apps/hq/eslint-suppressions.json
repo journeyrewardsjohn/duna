@@ -1,0 +1,17 @@
+{
+  "app/[module]/page.tsx": {
+    "no-console": {
+      "count": 1
+    }
+  },
+  "app/messages/actions.ts": {
+    "no-console": {
+      "count": 1
+    }
+  },
+  "components/money-page.tsx": {
+    "no-console": {
+      "count": 1
+    }
+  }
+}

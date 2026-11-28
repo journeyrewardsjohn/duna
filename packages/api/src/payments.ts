@@ -11,6 +11,7 @@ import {
 } from "@duna/core";
 import type { MembershipSubscriptionPolicy } from "@duna/core";
 import Stripe from "stripe";
+import { withProviderCall } from "./observability";
 import {
   connectAccountMetadataEntityId,
   connectAccountMoneyReady,
@@ -468,28 +469,33 @@ export async function createDunaPlusCheckout(input: {
     dunaPlan: input.plan,
     product: "duna-membership",
   };
-  const session = await getStripeClient().checkout.sessions.create(
-    {
-      mode: "subscription",
-      customer_email: input.email,
-      client_reference_id: input.personId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: input.successUrl,
-      cancel_url: input.cancelUrl,
-      allow_promotion_codes: true,
-      billing_address_collection: "auto",
-      automatic_tax: {
-        enabled: automaticTaxEnabledInCurrentStripeMode(
-          process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
-        ),
-      },
-      tax_id_collection: { enabled: true },
-      subscription_data: {
-        metadata,
-      },
-      metadata,
-    },
-    { idempotencyKey: input.idempotencyKey },
+  const session = await withProviderCall(
+    "stripe",
+    "checkout.sessions.create",
+    () =>
+      getStripeClient().checkout.sessions.create(
+        {
+          mode: "subscription",
+          customer_email: input.email,
+          client_reference_id: input.personId,
+          line_items: [{ price: priceId, quantity: 1 }],
+          success_url: input.successUrl,
+          cancel_url: input.cancelUrl,
+          allow_promotion_codes: true,
+          billing_address_collection: "auto",
+          automatic_tax: {
+            enabled: automaticTaxEnabledInCurrentStripeMode(
+              process.env.STRIPE_AUTOMATIC_TAX_ENABLED === "true",
+            ),
+          },
+          tax_id_collection: { enabled: true },
+          subscription_data: {
+            metadata,
+          },
+          metadata,
+        },
+        { idempotencyKey: input.idempotencyKey },
+      ),
   );
   return { id: session.id, url: session.url };
 }
@@ -608,52 +614,59 @@ export async function createEventCheckoutSession(input: {
   const chargeRouting = await destinationChargeRouting(
     input.connectedAccountId,
   );
-  const session = await getStripeClient().checkout.sessions.create(
-    {
-      mode: "payment",
-      client_reference_id: input.personId,
-      customer_email: input.customerEmail,
-      line_items: [
+  const session = await withProviderCall(
+    "stripe",
+    "checkout.sessions.create",
+    () =>
+      getStripeClient().checkout.sessions.create(
         {
-          quantity: 1,
-          price_data: {
-            currency: input.currency.toLowerCase(),
-            unit_amount: input.amountMinor,
-            product_data: {
-              name: input.eventTitle,
-              tax_code: automaticTaxEnabled ? input.stripeTaxCode : undefined,
-              metadata: { dunaEventId: input.eventId },
+          mode: "payment",
+          client_reference_id: input.personId,
+          customer_email: input.customerEmail,
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: input.currency.toLowerCase(),
+                unit_amount: input.amountMinor,
+                product_data: {
+                  name: input.eventTitle,
+                  tax_code: automaticTaxEnabled
+                    ? input.stripeTaxCode
+                    : undefined,
+                  metadata: { dunaEventId: input.eventId },
+                },
+                tax_behavior: automaticTaxEnabled ? "exclusive" : undefined,
+              },
             },
-            tax_behavior: automaticTaxEnabled ? "exclusive" : undefined,
+          ],
+          success_url: input.successUrl,
+          cancel_url: input.cancelUrl,
+          expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
+          automatic_tax: marketplaceAutomaticTax(automaticTaxEnabled),
+          payment_intent_data: {
+            application_fee_amount: input.applicationFeeMinor,
+            ...chargeRouting,
+            metadata: {
+              dunaOrderId: input.orderId,
+              dunaEventId: input.eventId,
+              dunaPersonId: input.personId,
+              dunaOrganizationCommissionMinor: String(
+                input.organizationCommissionMinor,
+              ),
+              dunaOrganizationCommissionRateBps: String(
+                input.organizationCommissionRateBps,
+              ),
+            },
+          },
+          metadata: {
+            dunaOrderId: input.orderId,
+            dunaEventId: input.eventId,
+            dunaPersonId: input.personId,
           },
         },
-      ],
-      success_url: input.successUrl,
-      cancel_url: input.cancelUrl,
-      expires_at: Math.floor(input.expiresAt.getTime() / 1_000),
-      automatic_tax: marketplaceAutomaticTax(automaticTaxEnabled),
-      payment_intent_data: {
-        application_fee_amount: input.applicationFeeMinor,
-        ...chargeRouting,
-        metadata: {
-          dunaOrderId: input.orderId,
-          dunaEventId: input.eventId,
-          dunaPersonId: input.personId,
-          dunaOrganizationCommissionMinor: String(
-            input.organizationCommissionMinor,
-          ),
-          dunaOrganizationCommissionRateBps: String(
-            input.organizationCommissionRateBps,
-          ),
-        },
-      },
-      metadata: {
-        dunaOrderId: input.orderId,
-        dunaEventId: input.eventId,
-        dunaPersonId: input.personId,
-      },
-    },
-    { idempotencyKey: input.idempotencyKey },
+        { idempotencyKey: input.idempotencyKey },
+      ),
   );
   return {
     id: session.id,
@@ -695,30 +708,32 @@ export async function createEventPaymentIntent(input: {
     input.connectedAccountId,
   );
 
-  const intent = await getStripeClient().paymentIntents.create(
-    {
-      amount: input.amountMinor,
-      currency: input.currency.toLowerCase(),
-      customer: input.customerId,
-      receipt_email: input.customerEmail,
-      description: input.eventTitle,
-      automatic_payment_methods: { enabled: true },
-      application_fee_amount: input.applicationFeeMinor,
-      ...chargeRouting,
-      metadata: {
-        dunaOrderId: input.orderId,
-        dunaEventId: input.eventId,
-        dunaPersonId: input.personId,
-        dunaOrganizationCommissionMinor: String(
-          input.organizationCommissionMinor,
-        ),
-        dunaOrganizationCommissionRateBps: String(
-          input.organizationCommissionRateBps,
-        ),
-        channel: "native-payment-sheet",
+  const intent = await withProviderCall("stripe", "paymentIntents.create", () =>
+    getStripeClient().paymentIntents.create(
+      {
+        amount: input.amountMinor,
+        currency: input.currency.toLowerCase(),
+        customer: input.customerId,
+        receipt_email: input.customerEmail,
+        description: input.eventTitle,
+        automatic_payment_methods: { enabled: true },
+        application_fee_amount: input.applicationFeeMinor,
+        ...chargeRouting,
+        metadata: {
+          dunaOrderId: input.orderId,
+          dunaEventId: input.eventId,
+          dunaPersonId: input.personId,
+          dunaOrganizationCommissionMinor: String(
+            input.organizationCommissionMinor,
+          ),
+          dunaOrganizationCommissionRateBps: String(
+            input.organizationCommissionRateBps,
+          ),
+          channel: "native-payment-sheet",
+        },
       },
-    },
-    { idempotencyKey: `${input.idempotencyKey}:native-payment` },
+      { idempotencyKey: `${input.idempotencyKey}:native-payment` },
+    ),
   );
   if (!intent.client_secret) {
     throw new Error("Stripe did not return a PaymentIntent client secret");
@@ -1454,34 +1469,44 @@ export async function createBillingPortalSession(input: {
   readonly returnUrl: string;
 }): Promise<{ readonly id: string; readonly url: string }> {
   const stripe = getStripeClient();
-  const configuration = await stripe.billingPortal.configurations.create(
-    {
-      name: "Duna managed membership policies",
-      business_profile: {
-        headline:
-          "Update payment details and view invoices. Membership cancellation is handled in Duna using the terms accepted at signup.",
-        privacy_policy_url: "https://duna.coach/legal/privacy",
-        terms_of_service_url: "https://duna.coach/legal/terms",
-      },
-      features: {
-        customer_update: {
-          enabled: true,
-          allowed_updates: ["address", "email", "name", "phone", "tax_id"],
+  const configuration = await withProviderCall(
+    "stripe",
+    "billingPortal.configurations.create",
+    () =>
+      stripe.billingPortal.configurations.create(
+        {
+          name: "Duna managed membership policies",
+          business_profile: {
+            headline:
+              "Update payment details and view invoices. Membership cancellation is handled in Duna using the terms accepted at signup.",
+            privacy_policy_url: "https://duna.coach/legal/privacy",
+            terms_of_service_url: "https://duna.coach/legal/terms",
+          },
+          features: {
+            customer_update: {
+              enabled: true,
+              allowed_updates: ["address", "email", "name", "phone", "tax_id"],
+            },
+            invoice_history: { enabled: true },
+            payment_method_update: { enabled: true },
+            subscription_cancel: { enabled: false },
+            subscription_update: { enabled: false },
+          },
+          metadata: { dunaPolicy: "managed-memberships-v1" },
         },
-        invoice_history: { enabled: true },
-        payment_method_update: { enabled: true },
-        subscription_cancel: { enabled: false },
-        subscription_update: { enabled: false },
-      },
-      metadata: { dunaPolicy: "managed-memberships-v1" },
-    },
-    { idempotencyKey: "duna-billing-portal-managed-memberships-v1" },
+        { idempotencyKey: "duna-billing-portal-managed-memberships-v1" },
+      ),
   );
-  const session = await stripe.billingPortal.sessions.create({
-    customer: input.customerId,
-    configuration: configuration.id,
-    return_url: input.returnUrl,
-  });
+  const session = await withProviderCall(
+    "stripe",
+    "billingPortal.sessions.create",
+    () =>
+      stripe.billingPortal.sessions.create({
+        customer: input.customerId,
+        configuration: configuration.id,
+        return_url: input.returnUrl,
+      }),
+  );
   return { id: session.id, url: session.url };
 }
 
