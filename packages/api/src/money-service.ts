@@ -12,7 +12,6 @@ import {
   organizationMoneySettings,
   organizationRefundPolicies,
   organizations,
-  payoutAllocations,
   paymentFundSchedules,
   payments,
   payouts,
@@ -40,12 +39,24 @@ import type { ApiActor } from "./context";
 import { ensureLedgerAccount } from "./catalog-service";
 import {
   configureConnectedAccountMoney,
-  createConnectedAccountPayout,
   loadConnectedAccountMoney,
   retrieveStripePaymentLineage,
   type StripePaymentLineage,
 } from "./payments";
 import { postCatalogPaymentCapture } from "./catalog-checkout";
+import { report } from "@duna/observability";
+import { reconcilePayBalances } from "./services/pay/balances";
+import { synchronizePayDisputeCase } from "./services/pay/disputes";
+import { ensurePayObligationsForFund } from "./services/pay/obligations";
+import {
+  createPayoutFromReleasableTranches,
+  returnFailedPayoutTranches,
+} from "./services/pay/payouts";
+import { loadPayPolicySettings } from "./services/pay/policy-settings";
+import {
+  runPayReleaseJob,
+  type PayReleaseJobResult,
+} from "./services/pay/release-job";
 
 type Currency = OrganizationMoneyWorkspace["currency"];
 type PayoutInterval = OrganizationMoneyWorkspace["settings"]["payoutInterval"];
@@ -310,10 +321,19 @@ function currency(value: string): Currency {
   return "USD";
 }
 
+/**
+ * The processor-side view of when a charge's money may be released. Money
+ * for a scheduled booking or event is released only once it has been
+ * delivered (its end time), never before: releasing at "start minus the
+ * refund window" let money leave before a session that was then cancelled
+ * (payout-policy P1). The per-portion rules, holds and payouts live in
+ * services/pay (release-rules.ts); this date is the fund schedule's summary.
+ */
 export function calculateFundAvailability(input: {
   readonly policyMode: "refundable" | "non-refundable";
   readonly refundBeforeMinutes?: number;
   readonly eventStartsAt?: Date;
+  readonly eventEndsAt?: Date;
   readonly orderCreatedAt: Date;
   readonly processorAvailableAt: Date;
   readonly now: Date;
@@ -322,18 +342,15 @@ export function calculateFundAvailability(input: {
   readonly availableAt: Date;
   readonly status: "pending-clearance" | "held" | "available";
 } {
-  const policyReleaseAt =
-    input.policyMode === "non-refundable"
+  const deliveredAt = input.eventEndsAt ?? input.eventStartsAt;
+  const policyReleaseAt = deliveredAt
+    ? deliveredAt
+    : input.policyMode === "non-refundable"
       ? input.orderCreatedAt
-      : input.eventStartsAt
-        ? new Date(
-            input.eventStartsAt.getTime() -
-              (input.refundBeforeMinutes ?? 0) * 60_000,
-          )
-        : new Date(
-            input.orderCreatedAt.getTime() +
-              (input.refundBeforeMinutes ?? DEFAULT_REFUND_MINUTES) * 60_000,
-          );
+      : new Date(
+          input.orderCreatedAt.getTime() +
+            (input.refundBeforeMinutes ?? DEFAULT_REFUND_MINUTES) * 60_000,
+        );
   const availableAt = new Date(
     Math.max(input.processorAvailableAt.getTime(), policyReleaseAt.getTime()),
   );
@@ -388,7 +405,11 @@ async function ensureMoneyDefaults(organizationId: string): Promise<void> {
   await database.batch([
     database
       .insert(organizationMoneySettings)
-      .values({ organizationId })
+      // payout-policy §3: daily is the default schedule for new organisations.
+      .values({
+        organizationId,
+        payoutInterval: loadPayPolicySettings().defaultPayoutInterval,
+      })
       .onConflictDoNothing(),
     database
       .insert(organizationRefundPolicies)
@@ -411,6 +432,7 @@ async function resolveOrderPolicy(orderId: string) {
     .select({
       sessionId: sessions.id,
       startsAt: sessions.startsAt,
+      endsAt: sessions.endsAt,
       registrationSettings: eventBlueprints.registrationSettings,
     })
     .from(registrations)
@@ -425,6 +447,7 @@ async function resolveOrderPolicy(orderId: string) {
         .select({
           sessionId: sessions.id,
           startsAt: sessions.startsAt,
+          endsAt: sessions.endsAt,
           registrationSettings: eventBlueprints.registrationSettings,
         })
         .from(tickets)
@@ -457,6 +480,7 @@ async function resolveOrderPolicy(orderId: string) {
     return {
       sessionId: event.sessionId,
       startsAt: event.startsAt,
+      endsAt: event.endsAt as Date | undefined,
       mode,
       refundBeforeMinutes: mode === "refundable" ? hours * 60 : undefined,
       name:
@@ -476,6 +500,7 @@ async function resolveOrderPolicy(orderId: string) {
     return {
       sessionId: undefined,
       startsAt: court.startsAt,
+      endsAt: court.endsAt as Date | undefined,
       mode,
       refundBeforeMinutes: hours === undefined ? undefined : hours * 60,
       name:
@@ -500,6 +525,7 @@ async function resolveOrderPolicy(orderId: string) {
   return {
     sessionId: undefined,
     startsAt: undefined,
+    endsAt: undefined,
     mode:
       defaultPolicy?.mode === "non-refundable"
         ? ("non-refundable" as const)
@@ -598,6 +624,7 @@ export async function recordPaymentFundSchedule(input: {
     ? {
         sessionId: undefined,
         startsAt: input.policyOverride.releaseAt,
+        endsAt: input.policyOverride.releaseAt,
         mode: input.policyOverride.mode,
         refundBeforeMinutes: input.policyOverride.refundBeforeMinutes,
         name: input.policyOverride.name,
@@ -661,6 +688,7 @@ export async function recordPaymentFundSchedule(input: {
     policyMode: policy.mode,
     refundBeforeMinutes: policy.refundBeforeMinutes,
     eventStartsAt: policy.startsAt,
+    eventEndsAt: policy.endsAt,
     orderCreatedAt: order.createdAt,
     processorAvailableAt,
     now: input.now,
@@ -721,6 +749,27 @@ export async function recordPaymentFundSchedule(input: {
         updatedAt: input.now,
       },
     });
+  // Duna Pay: one obligation per sold line, with its delivery rule. Never
+  // allowed to fail the payment record; the release job backfills it.
+  try {
+    const [fund] = await database
+      .select({ id: paymentFundSchedules.id })
+      .from(paymentFundSchedules)
+      .where(eq(paymentFundSchedules.paymentId, payment.id))
+      .limit(1);
+    if (fund) {
+      await ensurePayObligationsForFund({
+        fundScheduleId: fund.id,
+        policy: loadPayPolicySettings(),
+        now: input.now,
+      });
+    }
+  } catch (error) {
+    report(error, {
+      event: "pay.obligation.failed",
+      fields: { orderId: order.id, paymentId: payment.id },
+    });
+  }
 }
 
 export async function recordStripePaymentLineage(input: {
@@ -1132,6 +1181,14 @@ export async function reconcileStripePaymentLineage(input?: {
     }
   }
   return { inspected: candidates.length, linked, failed };
+}
+
+/**
+ * Duna Pay reconciliation (runs with the money-reconciliation cron):
+ * reserves, negative-balance recovery and processor drift.
+ */
+export async function reconcileDunaPayBalances(now = new Date()) {
+  return reconcilePayBalances({ policy: loadPayPolicySettings(), now });
 }
 
 export async function releaseEligibleFunds(now = new Date()): Promise<number> {
@@ -1606,104 +1663,19 @@ async function createEligibleOrganizationPayout(input: {
   readonly idempotencyKey: string;
   readonly now: Date;
 }): Promise<{ readonly id: string; readonly amountMinor: number } | undefined> {
-  const stripeAccountId = input.organization.stripeAccountId;
-  if (!stripeAccountId) return undefined;
+  if (!input.organization.stripeAccountId) return undefined;
   if (input.stripeSettingsStatus !== "synced") {
     throw new Error(
       "Payouts stay locked until Stripe is synchronized to Duna's refund-safe manual rail.",
     );
   }
-  return getTransactionalDatabase().transaction(async (transaction) => {
-    await transaction.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`money-payout:${input.organization.id}`}))`,
-    );
-    const eligible = await transaction
-      .select()
-      .from(paymentFundSchedules)
-      .where(
-        and(
-          eq(paymentFundSchedules.organizationId, input.organization.id),
-          eq(paymentFundSchedules.status, "available"),
-          isNotNull(paymentFundSchedules.stripeBalanceTransactionId),
-        ),
-      )
-      .orderBy(asc(paymentFundSchedules.availableAt));
-    if (!eligible.length) return undefined;
-    const stripeMoney = await loadConnectedAccountMoney({
-      accountId: stripeAccountId,
-      currency: input.organization.currency,
-    });
-    let room = stripeMoney.stripeAvailableMinor ?? 0;
-    const selected: typeof eligible = [];
-    for (const fund of eligible) {
-      const amount = Math.max(
-        0,
-        fund.netMinor - fund.refundedMinor - fund.disputedMinor,
-      );
-      if (amount > 0 && amount <= room) {
-        selected.push(fund);
-        room -= amount;
-      }
-    }
-    const amountMinor = selected.reduce(
-      (sum, fund) =>
-        sum +
-        Math.max(0, fund.netMinor - fund.refundedMinor - fund.disputedMinor),
-      0,
-    );
-    if (amountMinor < input.minimumPayoutMinor || amountMinor <= 0) {
-      return undefined;
-    }
-    const payout = await createConnectedAccountPayout({
-      accountId: stripeAccountId,
-      amountMinor,
-      currency: input.organization.currency,
-      idempotencyKey: input.idempotencyKey,
-    });
-    const payoutId = crypto.randomUUID();
-    await transaction.insert(payouts).values({
-      id: payoutId,
-      organizationId: input.organization.id,
-      stripePayoutId: payout.id,
-      amountMinor,
-      currency: input.organization.currency,
-      status: payout.status,
-      expectedArrivalAt: payout.expectedArrivalAt,
-      composition: Object.fromEntries(
-        selected.map((fund) => [
-          fund.id,
-          Math.max(0, fund.netMinor - fund.refundedMinor - fund.disputedMinor),
-        ]),
-      ),
-      createdAt: input.now,
-      updatedAt: input.now,
-    });
-    await transaction.insert(payoutAllocations).values(
-      selected.map((fund) => ({
-        payoutId,
-        paymentFundScheduleId: fund.id,
-        amountMinor: Math.max(
-          0,
-          fund.netMinor - fund.refundedMinor - fund.disputedMinor,
-        ),
-        currency: fund.currency,
-        createdAt: input.now,
-      })),
-    );
-    await transaction
-      .update(paymentFundSchedules)
-      .set({
-        payoutId,
-        status: "payout-pending",
-        updatedAt: input.now,
-      })
-      .where(
-        inArray(
-          paymentFundSchedules.id,
-          selected.map((fund) => fund.id),
-        ),
-      );
-    return { id: payoutId, amountMinor };
+  // Duna Pay: only settled, delivered, unheld tranches are paid out.
+  return createPayoutFromReleasableTranches({
+    organization: input.organization,
+    minimumPayoutMinor: input.minimumPayoutMinor,
+    idempotencyKey: input.idempotencyKey,
+    policy: loadPayPolicySettings(),
+    now: input.now,
   });
 }
 
@@ -1715,6 +1687,7 @@ export async function createManualOrganizationPayout(input: {
   const organizationId = input.actor.organizationId;
   if (!organizationId) throw new Error("Choose an organization first.");
   await releaseEligibleFunds(input.now);
+  await runPayReleaseJob({ now: input.now, organizationId });
   const organization = await getDatabase().query.organizations.findFirst({
     where: eq(organizations.id, organizationId),
   });
@@ -1740,8 +1713,13 @@ export async function createManualOrganizationPayout(input: {
 
 export async function processAutomaticOrganizationPayouts(
   now = new Date(),
-): Promise<{ readonly organizations: number; readonly payouts: number }> {
+): Promise<{
+  readonly organizations: number;
+  readonly payouts: number;
+  readonly release: PayReleaseJobResult;
+}> {
   await releaseEligibleFunds(now);
+  const release = await runPayReleaseJob({ now });
   const database = getDatabase();
   const settingsRows = await database
     .select({
@@ -1778,7 +1756,7 @@ export async function processAutomaticOrganizationPayouts(
       .where(eq(organizationMoneySettings.organizationId, row.organization.id));
     payoutCount += 1;
   }
-  return { organizations: settingsRows.length, payouts: payoutCount };
+  return { organizations: settingsRows.length, payouts: payoutCount, release };
 }
 
 export async function synchronizeMoneyPayout(input: {
@@ -1795,6 +1773,10 @@ export async function synchronizeMoneyPayout(input: {
     where: eq(payouts.stripePayoutId, stripePayoutId),
   });
   if (!payout) return;
+  if (nextStatus === "failed" || nextStatus === "canceled") {
+    // Duna Pay: the tranches are payable again; the payout journal is reversed.
+    await returnFailedPayoutTranches({ payoutId: payout.id, now: input.now });
+  }
   await database.batch([
     database
       .update(payouts)
@@ -1921,6 +1903,15 @@ export async function synchronizeMoneyDispute(input: {
         updatedAt: input.now,
       },
     });
+  // Duna Pay: the dispute case, hold, transfer reversal and journals.
+  try {
+    await synchronizePayDisputeCase({ object: input.object, now: input.now });
+  } catch (error) {
+    report(error, {
+      event: "pay.dispute.failed",
+      fields: { orderId: order.id },
+    });
+  }
   const fund = await database.query.paymentFundSchedules.findFirst({
     where: eq(paymentFundSchedules.orderId, order.id),
   });

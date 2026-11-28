@@ -137,7 +137,7 @@ export function LegalHub({ lead }: { readonly lead: string }) {
   );
 
   return (
-    <main className="lc-main lc-hub" id="legal-content" tabIndex={-1}>
+    <main className="lc-main lc-hub" id="main" tabIndex={-1}>
       <header className="lc-hub__header">
         <h1 className="td-display lc-hub__title">Duna Legal Center</h1>
         <p className="lc-hub__lead">{lead}</p>

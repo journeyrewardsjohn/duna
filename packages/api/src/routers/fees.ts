@@ -24,6 +24,7 @@ import {
   feesStartPremiumResultSchema,
 } from "../contracts/fees";
 import { usesDemoData } from "../services/data-source";
+import { quoteCatalogPurchase } from "../services/fees/quote";
 import { notImplementedYet } from "./not-implemented";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
 
@@ -60,14 +61,18 @@ export const feesPlayerRouter = router({
   quote: protectedProcedure
     .input(feesQuoteInputSchema)
     .output(feesQuoteSchema)
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) {
         return (
           feesDemo.quotes.find((quote) => quote.surface === input.surface) ??
           feesDemo.quotes[0]!
         );
       }
-      return notImplementedYet(DOMAIN, "quote");
+      return quoteCatalogPurchase({
+        personId: ctx.actor.personId,
+        request: input,
+        now: ctx.now,
+      });
     }),
 
   /** The signed-in player's Duna Premium. */

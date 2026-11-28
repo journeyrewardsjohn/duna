@@ -1,46 +1,21 @@
 /*
- * The legal center (apps/web/app/legal). Layout and legal-specific marks
- * only: type, prose, section list, linkable headings and scrolling tables
- * come from the Tideline document family. Tokens only (--td-*), inside the
- * scope `.td.lc-root`; the skip link sits before the scope.
+ * The legal center (apps/web/app/(next)/(site)/legal). Layout and
+ * legal-specific marks only: type, prose, section list, linkable headings
+ * and scrolling tables come from the Tideline document family. Tokens only
+ * (--td-*), inside the scope `.td.lc-root`. The page sits in the public
+ * site shell (app/(next)): no legacy sheet loads with it, so nothing here
+ * undoes a legacy reset.
  */
-
-.lc-skip {
-  position: absolute;
-  z-index: 200;
-  top: 8px;
-  left: 8px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  background: var(--td-action, CanvasText);
-  color: var(--td-on-action, Canvas);
-  font: 600 15px/20px var(--td-font-ui, system-ui);
-  text-decoration: none;
-  transform: translateY(-200%);
-}
-
-.lc-skip:focus,
-.lc-skip:focus-visible {
-  transform: none;
-  outline: 2px solid Highlight;
-  outline-offset: 2px;
-}
 
 .td.lc-root {
   --lc-gutter: clamp(16px, 4vw, 40px);
-  --td-doc-anchor-offset: calc(var(--duna-web-nav-height, 72px) + 24px);
+  --td-doc-anchor-offset: calc(var(--site-header-height, 68px) + 24px);
   min-width: 0;
   color: var(--td-text);
   font-family: var(--td-font-ui);
 }
 
-/* The public site's unlayered heading and list resets would win over the
- * layered library; hand these elements back to the document styles. */
-.lc-root :is(h1, h2, h3) {
-  max-width: none;
-  word-spacing: normal;
-}
-
+/* The design system resets lists inside a scope; prose keeps its markers. */
 .lc-root :is(.td-doc-prose, .lc-summary__body, .lc-guide__body) ul {
   list-style: disc;
   padding-inline-start: var(--td-space-6);
@@ -637,7 +612,8 @@
 @media print {
   body:has(.lc-root) .site-header,
   body:has(.lc-root) .site-footer,
-  body:has(.lc-root) .lc-skip,
+  body:has(.lc-root) .site-thumb,
+  body:has(.lc-root) .site-skip,
   .lc-root .lc-doc__toc,
   .lc-root .lc-pager,
   .lc-root .lc-search,

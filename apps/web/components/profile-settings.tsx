@@ -22,7 +22,7 @@ import {
   recordBirthDateAction,
   updateProfileAccentAction,
   updateProfileAction,
-} from "@/app/app/settings/actions";
+} from "@/app/(legacy)/app/settings/actions";
 
 type Profile = PlayerSettings["profile"];
 

@@ -14,7 +14,7 @@ import { useRef, useState, useTransition } from "react";
 import {
   selfEnrollPlayerStaff,
   switchPlayerOrganization,
-} from "@/app/app/actions";
+} from "@/app/(legacy)/app/actions";
 import { DUNA_HQ_URL } from "@/lib/site-urls";
 
 function roleLabel(role: string): string {

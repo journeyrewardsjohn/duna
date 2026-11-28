@@ -147,6 +147,31 @@ Invariants an integration must preserve:
   order belongs to whoever's wallet paid.
 - A dependent can see a session their guardian booked but cannot cancel it.
 
+## Duna Pay (`operator.pay`, owner B2)
+
+Shapes are frozen in `packages/api/src/contracts/pay.ts`; the model is in
+[`docs/money/duna-pay.md`](money/duna-pay.md). Reads need `payments:read`;
+writes need `payments:write` (owner). In demo mode every procedure returns
+its fixture from `@duna/core/demo/pay`.
+
+| Procedure                                        | Status              | Notes                                                                                                                                        |
+| ------------------------------------------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `obligations`                                    | live                | Newest first, cursor `<createdAt>                                                                                                            | <id>`, filter by `status`and`deliveryRule` |
+| `obligation`                                     | live                | Tranches, delivery facts, refunds, hold ids; `NOT_FOUND` outside the caller's club                                                           |
+| `holds`                                          | live                | Every hold on the club, newest first                                                                                                         |
+| `disputes`, `dispute`                            | live                | Platform-side dispute cases for the caller's club, newest first                                                                              |
+| `submitDisputeEvidence`                          | live (owner)        | Idempotent by key; "not configured yet" without processor keys                                                                               |
+| `reserves`, `recoveries`, `requestReserveReview` | live                | Review request is owner-only and needs an active reserve                                                                                     |
+| `account`, `updateBusiness`, `publishGate`       | live                | Six derived statuses; the gate is `assertPaymentsReady`                                                                                      |
+| `startOnboarding`                                | live (owner)        | Hosted link or embedded session; `not-configured` without keys                                                                               |
+| `payoutSettings`, `updatePayoutSettings`         | live                | Reuses `organization_money_settings`; daily by default                                                                                       |
+| `player.fees.quote`                              | live                | All-in price before commitment; records `pay_fee_quotes`                                                                                     |
+| other procedures                                 | not implemented yet | `refundPolicies`, `upsertRefundPolicy`, `taxSettings`, `updateTaxSettings`, `balance`, `moneyHome`, `operator.fees.platformSummary`, Premium |
+
+Payouts are created only by the hourly `/api/cron/money-payouts` job and the
+existing owner-confirmed manual payout, and only from releasable tranches
+(settled, delivered, not held).
+
 ## Safety invariants
 
 - Only complete doubles teams with four distinct people enter the backtest.

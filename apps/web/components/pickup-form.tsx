@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createPickupAction,
   searchPickupPlayersAction,
-} from "@/app/app/pickup/new/actions";
+} from "@/app/(legacy)/app/pickup/new/actions";
 import { CalendarDatePicker } from "./calendar-date-picker";
 import { PlaceSearch, type PlaceDetails } from "./place-search";
 

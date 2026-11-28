@@ -21,7 +21,7 @@ import {
   catalogOfferEligibilityAction,
   catalogCheckoutStatusAction,
   startCatalogCheckoutAction,
-} from "@/app/clubs/[slug]/products/[productSlug]/actions";
+} from "@/app/(legacy)/clubs/[slug]/products/[productSlug]/actions";
 import { catalogAuthenticationHref } from "@/lib/catalog-auth";
 import {
   catalogCheckoutResumeReturnPath,

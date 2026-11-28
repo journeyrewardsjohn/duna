@@ -19,7 +19,7 @@
       "count": 1
     }
   },
-  "app/app/settings/actions.ts": {
+  "app/(legacy)/app/settings/actions.ts": {
     "no-console": {
       "count": 3
     }

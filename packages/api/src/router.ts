@@ -12174,7 +12174,9 @@ const operatorRouter = router({
     .input(
       z.object({
         orderId: z.string().uuid(),
-        amountMinor: z.number().int().positive().max(100_000_000),
+        // 0 is valid: a credit-paid order is refunded by restoring its
+        // credits; the service still rejects 0 for a cash refund (defect 5).
+        amountMinor: z.number().int().nonnegative().max(100_000_000),
         disposition: z.enum(["original-payment", "organization-credit"]),
         credits: z.number().int().positive().max(1_000_000).optional(),
         reason: z.string().trim().min(5).max(1_000),

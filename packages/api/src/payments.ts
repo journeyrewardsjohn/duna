@@ -1424,6 +1424,21 @@ export async function withholdDestinationChargeTax(input: {
   return reversal.id;
 }
 
+/**
+ * How much of Duna's platform fee is still to be withheld from a recurring
+ * charge's transfer: none of what the charge already collected as an
+ * application fee. Pure.
+ */
+export function platformFeeToWithhold(input: {
+  readonly requestedMinor: number;
+  readonly alreadyCollectedMinor: number;
+}): number {
+  return Math.max(
+    0,
+    input.requestedMinor - Math.max(0, input.alreadyCollectedMinor),
+  );
+}
+
 export async function withholdDestinationChargePlatformFee(input: {
   readonly paymentIntentId: string;
   readonly amountMinor: number;
@@ -1444,6 +1459,14 @@ export async function withholdDestinationChargePlatformFee(input: {
     typeof latestCharge === "string"
       ? await stripe.charges.retrieve(latestCharge)
       : latestCharge;
+  // Defect 3: a subscription created with application_fee_percent (native
+  // app subscriptions, web installment plans) already took Duna's fee on
+  // this charge. Withholding the metadata fee again charged the club twice.
+  const amountMinor = platformFeeToWithhold({
+    requestedMinor: input.amountMinor,
+    alreadyCollectedMinor: charge?.application_fee_amount ?? 0,
+  });
+  if (amountMinor === 0) return undefined;
   const chargeTransfer = charge?.transfer;
   const transferId =
     typeof chargeTransfer === "string" ? chargeTransfer : chargeTransfer?.id;
@@ -1453,7 +1476,7 @@ export async function withholdDestinationChargePlatformFee(input: {
   const reversal = await stripe.transfers.createReversal(
     transferId,
     {
-      amount: input.amountMinor,
+      amount: amountMinor,
       metadata: {
         dunaInvoiceId: input.invoiceId,
         purpose: "platform-fee-withholding",
@@ -2121,7 +2144,10 @@ export async function loadConnectedAccountMoney(input: {
       )
       .autoPagingToArray({ limit: 500 }),
     stripe.balanceSettings.retrieve({}, { stripeAccount: input.accountId }),
-    stripe.disputes.list({ limit: 100 }, { stripeAccount: input.accountId }),
+    // Defect 2: destination-charge disputes live on the platform account,
+    // never on the connected account. HQ lists the club's disputes from
+    // Duna's own records (webhooks on the platform), not from here.
+    Promise.resolve({ data: [] as Stripe.Dispute[] }),
     stripe.v2.core.accounts.retrieve(input.accountId, {
       include: [
         "configuration.merchant",
@@ -2354,13 +2380,15 @@ export async function createConnectedAccountPayout(input: {
   readonly status: string;
   readonly expectedArrivalAt?: Date;
 }> {
-  const payout = await getStripeClient().payouts.create(
-    {
-      amount: input.amountMinor,
-      currency: input.currency.toLowerCase(),
-      metadata: { dunaRelease: "eligible-funds-only" },
-    },
-    { stripeAccount: input.accountId, idempotencyKey: input.idempotencyKey },
+  const payout = await withProviderCall("stripe", "payouts.create", () =>
+    getStripeClient().payouts.create(
+      {
+        amount: input.amountMinor,
+        currency: input.currency.toLowerCase(),
+        metadata: { dunaRelease: "eligible-funds-only" },
+      },
+      { stripeAccount: input.accountId, idempotencyKey: input.idempotencyKey },
+    ),
   );
   return {
     id: payout.id,
@@ -2616,6 +2644,149 @@ export async function refundPayment(input: {
   return { id: refund.id, status: refund.status };
 }
 
+/**
+ * Duna Pay dispute handling (payout-policy §5.1). Destination-charge
+ * disputes debit the platform; Duna recovers the amount from the club by
+ * reversing the charge's transfer, and re-transfers on a win.
+ */
+/** The connected-account facts Duna Pay derives its status from. */
+export interface ConnectAccountFacts {
+  readonly chargesEnabled: boolean;
+  readonly payoutsEnabled: boolean;
+  readonly detailsSubmitted: boolean;
+  readonly cardPaymentsActive: boolean;
+  readonly currentlyDue: readonly string[];
+  readonly pastDue: readonly string[];
+  readonly pendingVerification: readonly string[];
+  readonly disabledReason?: string;
+  readonly currentDeadline?: Date;
+  readonly bank?: {
+    readonly status: "pending" | "verified" | "errored";
+    readonly last4?: string;
+    readonly name?: string;
+  };
+}
+
+export async function retrieveConnectAccountFacts(
+  accountId: string,
+): Promise<ConnectAccountFacts> {
+  const account = await withProviderCall("stripe", "accounts.retrieve", () =>
+    getStripeClient().accounts.retrieve(accountId),
+  );
+  const requirements = account.requirements;
+  const external = account.external_accounts?.data?.[0] as
+    { status?: string; last4?: string; bank_name?: string } | undefined;
+  return {
+    chargesEnabled: account.charges_enabled,
+    payoutsEnabled: account.payouts_enabled,
+    detailsSubmitted: account.details_submitted,
+    cardPaymentsActive: account.capabilities?.card_payments === "active",
+    currentlyDue: requirements?.currently_due ?? [],
+    pastDue: requirements?.past_due ?? [],
+    pendingVerification: requirements?.pending_verification ?? [],
+    disabledReason: requirements?.disabled_reason ?? undefined,
+    currentDeadline: requirements?.current_deadline
+      ? new Date(requirements.current_deadline * 1_000)
+      : undefined,
+    bank: external
+      ? {
+          status:
+            external.status === "errored" ||
+            external.status === "verification_failed"
+              ? "errored"
+              : external.status === "verified"
+                ? "verified"
+                : "pending",
+          last4: external.last4,
+          name: external.bank_name,
+        }
+      : undefined,
+  };
+}
+
+/** An embedded onboarding session (server side only; the secret goes to HQ). */
+export async function createConnectAccountSession(input: {
+  readonly accountId: string;
+}): Promise<{ readonly clientSecret: string; readonly expiresAt: Date }> {
+  const session = await withProviderCall(
+    "stripe",
+    "accountSessions.create",
+    () =>
+      getStripeClient().accountSessions.create({
+        account: input.accountId,
+        components: {
+          account_onboarding: { enabled: true },
+          notification_banner: { enabled: true },
+        },
+      }),
+  );
+  return {
+    clientSecret: session.client_secret,
+    expiresAt: new Date(session.expires_at * 1_000),
+  };
+}
+
+export async function reverseConnectedTransfer(input: {
+  readonly transferId: string;
+  readonly amountMinor: number;
+  readonly idempotencyKey: string;
+}): Promise<{ readonly id: string; readonly amountMinor: number }> {
+  const reversal = await withProviderCall(
+    "stripe",
+    "transfers.createReversal",
+    () =>
+      getStripeClient().transfers.createReversal(
+        input.transferId,
+        {
+          amount: input.amountMinor,
+          metadata: { dunaReason: "dispute" },
+        },
+        { idempotencyKey: input.idempotencyKey },
+      ),
+  );
+  return { id: reversal.id, amountMinor: reversal.amount };
+}
+
+export async function createConnectedTransfer(input: {
+  readonly connectedAccountId: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly idempotencyKey: string;
+  readonly reason: string;
+}): Promise<{ readonly id: string }> {
+  const transfer = await withProviderCall("stripe", "transfers.create", () =>
+    getStripeClient().transfers.create(
+      {
+        amount: input.amountMinor,
+        currency: input.currency.toLowerCase(),
+        destination: input.connectedAccountId,
+        metadata: { dunaReason: input.reason },
+      },
+      { idempotencyKey: input.idempotencyKey },
+    ),
+  );
+  return { id: transfer.id };
+}
+
+/** Send a person-confirmed explanation to the processor and submit it. */
+export async function submitProcessorDisputeEvidence(input: {
+  readonly disputeId: string;
+  readonly explanation: string;
+  readonly idempotencyKey: string;
+}): Promise<{ readonly status: string }> {
+  const dispute = await withProviderCall("stripe", "disputes.update", () =>
+    getStripeClient().disputes.update(
+      input.disputeId,
+      {
+        evidence: { uncategorized_text: input.explanation.slice(0, 20_000) },
+        submit: true,
+      },
+      { idempotencyKey: input.idempotencyKey },
+    ),
+  );
+  return { status: dispute.status };
+}
+
 export async function transferPrize(input: {
   readonly connectedAccountId: string;
   readonly amountMinor: number;
@@ -2649,9 +2820,21 @@ export function constructStripeEvent(
   if (!webhookSecret) {
     throw new Error("STRIPE_WEBHOOK_SECRET is not configured");
   }
-  return getStripeClient().webhooks.constructEvent(
-    payload,
-    signature,
-    webhookSecret,
-  );
+  // Duna Pay: payout and account events come from connected accounts through
+  // a separate Connect endpoint with its own signing secret.
+  const connectSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+  try {
+    return getStripeClient().webhooks.constructEvent(
+      payload,
+      signature,
+      webhookSecret,
+    );
+  } catch (error) {
+    if (!connectSecret) throw error;
+    return getStripeClient().webhooks.constructEvent(
+      payload,
+      signature,
+      connectSecret,
+    );
+  }
 }

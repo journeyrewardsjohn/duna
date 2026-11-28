@@ -24,7 +24,7 @@ import {
   claimTeamAction,
   type TeamClaimActionState,
   updateTeamRosterAction,
-} from "@/app/app/team/claim/[token]/actions";
+} from "@/app/(legacy)/app/team/claim/[token]/actions";
 
 const initialState: TeamClaimActionState = {
   status: "idle",

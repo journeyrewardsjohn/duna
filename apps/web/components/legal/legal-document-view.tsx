@@ -73,7 +73,7 @@ export function LegalDocumentView({ page }: { readonly page: LegalPage }) {
   const address = absolutePublicUrl(page.path).replace(/^https?:\/\//, "");
 
   return (
-    <main className="lc-main lc-doc" id="legal-content" tabIndex={-1}>
+    <main className="lc-main lc-doc" id="main" tabIndex={-1}>
       <header className="lc-doc__header">
         <nav aria-label="Breadcrumb" className="lc-crumbs">
           <ol>
