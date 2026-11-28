@@ -72,7 +72,7 @@ export type CancelPlan =
     };
 
 export const COURT_BOOKING_MISSING =
-  "Duna's server can't cancel a player's court booking for staff yet: the staff cancellation for court bookings (operator.schedule.cancelCourtBooking, with its refund preview) isn't live. Nothing was changed.";
+  "Staff can't cancel a player's court booking from Pro on this version of Duna yet. Nothing was changed. Cancel it from Schedule in Duna HQ, or ask the player to cancel in the Duna app.";
 
 export function cancelPlanFor(
   detail: Pick<SessionDetail, "entryKind" | "subject" | "cancelled">,
