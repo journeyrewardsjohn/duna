@@ -177,7 +177,8 @@ function omitPath(value: unknown, segments: readonly string[]): unknown {
   if (typeof value !== "object" || !(key in value)) return value;
   const record = value as Record<string, unknown>;
   if (rest.length === 0 && !isArray) {
-    const { [key]: _removed, ...kept } = record;
+    const kept = { ...record };
+    delete kept[key];
     return kept;
   }
   const child = record[key];

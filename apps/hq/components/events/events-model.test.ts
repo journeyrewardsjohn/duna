@@ -342,20 +342,25 @@ describe("an answer without money (PRIV-2)", () => {
   it("shows no money, no paid words and never $0 when the server sent none", () => {
     const event = demoEvent(demoEventIds.live, place, now, emptyDemoEvents)!;
     // What the API sends a scorekeeper: no finance, no amounts, no paid state.
-    const { finance: _finance, ...rest } = event.detail;
-    const unpaid = (teams: (typeof rest)["teams"]) =>
-      teams.map(
-        ({ fullyPaid: _f, paidPlayers: _pp, fullyPaidAt: _at, ...team }) => ({
-          ...team,
-          roster: team.roster.map(({ paid: _paid, ...player }) => player),
-        }),
-      );
+    const without = <T extends object>(
+      value: T,
+      keys: readonly string[],
+    ): T => {
+      const copy = { ...value } as Record<string, unknown>;
+      for (const key of keys) delete copy[key];
+      return copy as T;
+    };
+    const unpaid = (teams: typeof event.detail.teams) =>
+      teams.map((team) => ({
+        ...without(team, ["fullyPaid", "paidPlayers", "fullyPaidAt"]),
+        roster: team.roster.map((player) => without(player, ["paid"])),
+      }));
     const detail = {
-      ...rest,
-      attendees: rest.attendees.map(
-        ({ paidMinor: _p, refundedMinor: _r, paymentStatus: _s, ...a }) => a,
+      ...without(event.detail, ["finance"]),
+      attendees: event.detail.attendees.map((attendee) =>
+        without(attendee, ["paidMinor", "refundedMinor", "paymentStatus"]),
       ),
-      teams: unpaid(rest.teams),
+      teams: unpaid(event.detail.teams),
     };
     const divisions = event.divisions.map((division) => ({
       ...division,
