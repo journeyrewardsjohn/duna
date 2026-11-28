@@ -35,6 +35,28 @@ test.describe("PA-2 Book and pay for the junior", () => {
       page.getByRole("button", { name: /Continue to payment/ }),
     ).toBeVisible();
   });
+  test("PA-2.4 A club's clinic says how many have booked, what happens if too few do, and the price all-in", async ({
+    page,
+  }) => {
+    await page.goto(
+      "/clubs/south-bay-volleyball/products/serve-receive-clinic",
+    );
+    await expectPageReady(page, "Serve-receive clinic");
+    await expect(
+      page.getByRole("list", { name: "Next sessions of Serve-receive clinic" }),
+    ).toContainText(/Minimum reached|Needs \d+ more/);
+    await expect(page.getByText("If the group is too small")).toBeVisible();
+    await expect(page.getByText(/all-in/).first()).toBeVisible();
+    await expect(
+      page
+        .getByRole("main")
+        .getByRole("link", { name: "Book a place" })
+        .first(),
+    ).toHaveAttribute(
+      "href",
+      "/clubs/south-bay-volleyball/products/serve-receive-clinic/checkout",
+    );
+  });
   test.fixme("PA-2.2 Choose the junior as the participant [P5, FAM]", async () => {});
   test.fixme("PA-2.3 Pay once, with no double charge on a double tap, and see the booking in Next up [P5, B2]", async () => {
     // Expected: single-flight submit with an idempotency key; the

@@ -123,6 +123,21 @@ test.describe("PL-1 Find a game", () => {
         .or(page.getByRole("button", { name: "Show satellite" })),
     ).toBeVisible();
   });
+  test("PL-1.5 Opens a coach's profile and books their next opening", async ({
+    page,
+  }) => {
+    await page.goto("/coaches/theopark");
+    await expectPageReady(page, "Theo Park");
+    await page
+      .getByRole("main")
+      .getByRole("link", { name: /^Book / })
+      .first()
+      .click();
+    await expectPageReady(page, "Private lesson with Theo Park");
+    // Measure the page itself, not the page-change slide that brought it.
+    await page.goto(page.url());
+    await expectNoHorizontalOverflow(page);
+  });
 });
 
 test.describe("PL-2 Book a court with friends", () => {

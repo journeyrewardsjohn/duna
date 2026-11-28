@@ -2661,38 +2661,10 @@ body {
   text-align: right;
 }
 
-.event-public {
-  color: var(--text-1);
-  background: var(--ground);
-}
-
-.event-public__hero {
-  grid-template-columns: minmax(24rem, 0.88fr) minmax(30rem, 1.12fr);
-  gap: clamp(1.5rem, 4vw, 4rem);
-  width: 100%;
-  max-width: none;
-  min-height: min(50rem, calc(100svh - 2rem));
-  margin: 0;
-  padding-right: 0;
-  padding-left: max(2rem, calc((100vw - 86rem) / 2));
-}
-
-.event-public__hero h1,
-.event-public__intro h2,
 .event-public__section > header h2 {
   color: var(--text-1);
   font-family: var(--font-body);
   font-weight: 800;
-}
-
-.event-public__visual {
-  border-right: 0;
-  border-radius: 12px 0 0 12px;
-  box-shadow: none;
-}
-
-.event-public__facts > span {
-  border-radius: 12px;
 }
 
 .event-public__booking > a:not(.secondary) {
@@ -3629,22 +3601,6 @@ body {
     border-top: 0;
   }
 
-  .event-public__hero {
-    grid-template-columns: 1fr;
-    gap: 2rem;
-    min-height: 0;
-    padding: 7rem 0 3rem 1.5rem;
-  }
-
-  .event-public__hero-copy {
-    padding-right: 1.5rem;
-  }
-
-  .event-public__visual {
-    min-height: 28rem;
-    border-radius: 12px 0 0 12px;
-  }
-
   .not-found-v3__stage {
     grid-template-columns: 1fr;
     min-height: 0;
@@ -4498,59 +4454,6 @@ body {
 
 /* Consumer event pages keep the useful sticky registration rail without
    stretching the editorial stage across ultra-wide screens. */
-.event-public__hero {
-  gap: clamp(2rem, 4vw, 5rem);
-  grid-template-columns: minmax(24rem, 0.9fr) minmax(32rem, 1.1fr);
-  margin-inline: auto;
-  max-width: 100rem;
-  min-height: 46rem;
-  padding: clamp(8rem, 10vw, 10rem) 0 clamp(3rem, 6vw, 5rem);
-  width: min(calc(100% - clamp(2rem, 6vw, 6rem)), 100rem);
-}
-
-.event-public__hero-copy {
-  max-width: 42rem;
-  padding: 1rem 0;
-}
-
-.event-public__hero h1 {
-  font-size: clamp(3.5rem, 5.2vw, 6.5rem);
-  line-height: 0.9;
-  max-width: 11ch;
-  overflow-wrap: anywhere;
-}
-
-.event-public__host {
-  color: var(--text-2);
-  font-size: 0.875rem;
-}
-
-.event-public__hero-copy > p {
-  color: var(--text-2);
-  font-size: clamp(1rem, 1.25vw, 1.125rem);
-}
-
-.event-public__visual {
-  border: 1px solid var(--hairline);
-  border-radius: 1.5rem;
-  height: min(38rem, 48vw);
-  min-height: 32rem;
-}
-
-.event-public__facts small {
-  color: var(--text-2);
-  font-size: 0.75rem;
-}
-
-.event-public__facts strong {
-  font-size: 0.8125rem;
-  line-height: 1.4;
-}
-
-.event-public__availability > span,
-.event-public__availability > small {
-  font-size: 0.8125rem;
-}
 
 .event-public__layout {
   gap: clamp(2.5rem, 5vw, 5rem);
@@ -4559,9 +4462,7 @@ body {
   padding: clamp(2.5rem, 5vw, 5rem) clamp(1rem, 3vw, 2rem) 7rem;
 }
 
-.event-public__intro p,
-.event-public__section > header p,
-.event-public .markdown-content {
+.event-public__section > header p {
   color: var(--text-2);
   font-size: 1rem;
   line-height: 1.7;
@@ -4572,11 +4473,6 @@ body {
   top: 5.5rem;
 }
 
-.event-public__booking-label small,
-.event-public__booking-capacity small,
-.event-public__booking-policy,
-.event-public__booking-trust strong,
-.event-public__booking-trust small,
 .pickup-actions__guard,
 .pickup-actions small {
   font-size: 0.75rem;
@@ -4593,29 +4489,7 @@ body {
   min-height: 3rem;
 }
 
-.event-public__booking-capacity strong {
-  font-size: 0.875rem;
-}
-
 @media (max-width: 1080px) {
-  .event-public__hero {
-    gap: 2rem;
-    grid-template-columns: 1fr;
-    max-width: 54rem;
-    min-height: 0;
-    padding-top: 8rem;
-  }
-
-  .event-public__hero-copy {
-    max-width: 48rem;
-  }
-
-  .event-public__visual {
-    height: min(36rem, 70vw);
-    min-height: 28rem;
-    width: 100%;
-  }
-
   .event-public__layout {
     grid-template-columns: 1fr;
     max-width: 54rem;
@@ -4629,27 +4503,6 @@ body {
 @media (max-width: 620px) {
   .player-content {
     padding-inline: 1rem;
-  }
-
-  .event-public__hero {
-    gap: 1.5rem;
-    padding-top: 7rem;
-    width: calc(100% - 2rem);
-  }
-
-  .event-public__hero h1 {
-    font-size: clamp(3rem, 15vw, 4.5rem);
-  }
-
-  .event-public__facts {
-    grid-template-columns: 1fr;
-  }
-
-  .event-public__visual {
-    aspect-ratio: 4 / 5;
-    border-radius: 1.25rem;
-    height: auto;
-    min-height: 26rem;
   }
 
   .event-public__layout {
