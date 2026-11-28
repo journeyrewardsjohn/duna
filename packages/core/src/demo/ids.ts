@@ -27,6 +27,7 @@ export const demoIdPrefixes = {
   legal: "d0120000",
   participation: "d0130000",
   "add-score": "d0140000",
+  schedule: "d0150000",
 } as const;
 
 export type DemoDomain = keyof typeof demoIdPrefixes;
