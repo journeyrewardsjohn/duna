@@ -1,14 +1,7 @@
 /*
- * HQ semantic palette. Imported only by the operator application.
- * Legacy aliases (F2b): every --hq-* colour points at a Duna Design System
- * role. HQ sits on white / cool neutral (`<html data-zone="hq">`), never
- * Salt, Dune or sand: the HQ zone repaints the ground white, and the neutral
- * fills and hairlines that the light theme draws warm come from the cool
- * haze ramp here. See docs/design/legacy-aliases.md. Wave 5 deletes these.
- *
- * This block also overrides the shared legacy names that
- * apps/hq/app/design-v3.css sets for the operator zone, so HQ has one
- * palette whichever sheet loads first.
+ * HQ semantic palette (operator app only). Legacy aliases (F2b): each colour
+ * points at a Duna Design System role on white / cool neutral; also overrides
+ * the shared names design-v3.css sets for the zone. See docs/design/legacy-aliases.md.
  */
 body[data-zone="operator"],
 html[data-theme] body[data-zone="operator"] {
