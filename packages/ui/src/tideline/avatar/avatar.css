@@ -193,5 +193,77 @@
       background: var(--td-surface-sunken);
       color: var(--td-ink);
     }
+
+    /* ---------- WindowAvatar: a place seen through the mark ---------- */
+
+    .td-window {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-window-size);
+      height: var(--td-window-size);
+      border-radius: var(--td-radius-md);
+      background: var(--td-brand-salt);
+    }
+
+    .td-window--night-court {
+      background: var(--td-brand-night-court);
+    }
+
+    .td-window--dune {
+      background: var(--td-brand-dune);
+    }
+
+    .td-window__shape {
+      position: relative;
+      width: calc(var(--td-window-size) * 0.62 * 59 / 74);
+      height: calc(var(--td-window-size) * 0.62);
+      overflow: hidden;
+      background: var(--td-sun-ink);
+      mask-position: center;
+      mask-repeat: no-repeat;
+      mask-size: contain;
+    }
+
+    .td-window--night-court .td-window__shape {
+      background: var(--td-brand-dune);
+    }
+
+    .td-window--micro .td-window__shape {
+      mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='16 13 59 74'%3E%3Crect x='16' y='13' width='10' height='74'/%3E%3Cpath d='M48.96 13A42 40 0 0 1 48.96 87L33 87L33 13Z'/%3E%3C/svg%3E");
+    }
+
+    .td-window--full .td-window__shape {
+      mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='16 13 59 74'%3E%3Crect x='16' y='13' width='10' height='74'/%3E%3Cpath d='M48.96 13A42 40 0 0 1 48.96 87L44.78 87A31 40 0 0 0 44.78 13Z'/%3E%3Cpath d='M42.12 13A24 40 0 0 1 42.12 87L38.7 87A15 40 0 0 0 38.7 13Z'/%3E%3Cpath d='M36.04 13A8 40 0 0 1 36.04 87L33 87L33 13Z'/%3E%3C/svg%3E");
+    }
+
+    .td-window__photo {
+      position: absolute;
+      inset: -4%;
+      width: 108%;
+      height: 108%;
+      object-fit: cover;
+    }
+
+    /* The photo drifts a few percent, once, over 13 s. */
+    .td-window--drift .td-window__photo {
+      animation: td-window-drift 13s var(--td-ease-ui) both;
+    }
+
+    @keyframes td-window-drift {
+      from {
+        transform: translate(calc(-3% * var(--td-motion)), 0);
+      }
+
+      to {
+        transform: translate(calc(3% * var(--td-motion)), 0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .td-window--drift .td-window__photo {
+        animation: none;
+      }
+    }
   }
 }

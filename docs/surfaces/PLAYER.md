@@ -65,7 +65,7 @@ faster gap-fill.
 | Capability                        | Owning files/config                                                 | Release implication                                                |
 | --------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | HealthKit read and encrypted sync | `health-kit.ts`, `health-screen.tsx`, `app.json`                    | Physical iPhone, entitlement, privacy labels; never OTA-only proof |
-| Video, live, Vision, camera       | `video-studio.tsx`, Vision services, Mux/R2 server routes           | Camera/mic/device/provider validation                              |
+| Video, live, Vision, camera       | `video-studio.tsx`, Vision services, Stream/R2 server routes        | Camera/mic/device/provider validation                              |
 | Live Activities/widgets           | `live-activities.ts`, `DunaLiveActivity.tsx`, `expo-widgets` config | Fresh compatible native build when target/capability changes       |
 | Watch scoring                     | `watch-scoring.ts`, Apple-target plugin/source                      | Fresh paired iPhone/Watch build and receipt/reconnect tests        |
 | Apple Pay                         | `native-payments.ts`, Stripe plugin/merchant configuration          | Entitlement, merchant setup, physical/sandbox payment proof        |

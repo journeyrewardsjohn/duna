@@ -203,6 +203,48 @@
   --td-icon-stroke: 1.75;
   --td-icon-linecap: square;
   --td-icon-linejoin: miter;
+  --td-font-display: var(
+    --duna-font-ui,
+    "Geist",
+    "Inter",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif
+  );
+  --td-font-ui: var(
+    --duna-font-ui,
+    "Geist",
+    "Inter",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif
+  );
+  --td-font-numeric: var(
+    --duna-font-ui,
+    "Geist",
+    "Inter",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif
+  );
+  --td-font-mono: var(
+    --duna-font-mono,
+    "Geist Mono",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace
+  );
+  --td-font-brand: var(
+    --duna-font-brand,
+    "Jost",
+    "Geist",
+    system-ui,
+    sans-serif
+  );
   --td-type-heading-32-size: 32px;
   --td-type-heading-32-line: 40px;
   --td-type-heading-32-weight: 600;

@@ -543,8 +543,10 @@ interface TokenCssScope {
   /** Emit `color-scheme` lines (only the library owns the element's scheme). */
   readonly colorScheme: boolean;
   /**
-   * Emit the font-family stacks. The apps define `--td-font-*` on `<html>`
-   * through `next/font`, so the root scope must not redeclare them.
+   * Emit the font-family tokens. Each resolves to the loaded face an app
+   * sets on `<html>` (`TIDELINE_FONT_VARIABLES`), with the contract's stack
+   * as the fallback, so a nested scope never replaces a loaded face with a
+   * family name that `next/font` does not serve.
    */
   readonly fontFamilies: boolean;
   /** Wrap in this cascade layer, or emit unlayered. */
@@ -574,10 +576,30 @@ const LEGACY_ROOT_SCOPE: TokenCssScope = {
   attributeHost: ":root",
   descendantZones: new Set(["live"]),
   colorScheme: false,
-  fontFamilies: false,
+  fontFamilies: true,
   layer: null,
   title: "legacy root tokens (custom properties only)",
 };
+
+/**
+ * The variables an app's font module (`apps/web/app/fonts.ts`,
+ * `apps/hq/app/fonts.ts`) sets on `<html>` through `next/font`, which serves
+ * each face under a generated family name. The `--td-font-*` tokens read
+ * them, so every scope, at the root or nested, resolves to the loaded face.
+ * Display and numeric are the UI face (contract R2).
+ */
+export const TIDELINE_FONT_VARIABLES: Readonly<Record<string, string>> = {
+  ui: "--duna-font-ui",
+  display: "--duna-font-ui",
+  numeric: "--duna-font-ui",
+  brand: "--duna-font-brand",
+  mono: "--duna-font-mono",
+};
+
+function fontFamilyValue(family: string, stack: string): string {
+  const loaded = TIDELINE_FONT_VARIABLES[family];
+  return loaded ? `var(${loaded}, ${stack})` : stack;
+}
 
 function scopedThemeSelector(theme: string, scope: TokenCssScope): string {
   const host = scope.attributeHost;
@@ -603,8 +625,8 @@ export function buildTidelineTokensCss(source: TidelineTokenSource): string {
  * The same `--td-*` custom properties on `:root` (light),
  * `:root[data-theme="dark"]`, the live zone (on the root or any descendant)
  * and `:root[data-zone="hq"]`, unlayered and with nothing else: no
- * `color-scheme`, no font-family stack (next/font owns those on `<html>`),
- * no component style, no reset. Legacy stylesheets import it
+ * `color-scheme`, no component style, no reset. Its font-family tokens read
+ * the faces next/font loads (`TIDELINE_FONT_VARIABLES`). Legacy stylesheets import it
  * and point their own variables at these roles (F2b).
  */
 export function buildTidelineRootTokensCss(
@@ -647,7 +669,7 @@ function buildScopedTokensCss(
 
   if (scope.fontFamilies) {
     for (const [family, stack] of Object.entries(source.type.families)) {
-      base.push([cssVar(`font-${family}`), stack]);
+      base.push([cssVar(`font-${family}`), fontFamilyValue(family, stack)]);
     }
   }
   for (const style of typeStyles(source)) {
