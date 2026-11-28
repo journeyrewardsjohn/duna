@@ -174,48 +174,55 @@ Added by PART-3 (28 November 2026) from [`participation.md`](participation.md) �
 
 Added by H-PEOPLE (28 November 2026): the owner and front office on People.
 
-| Step    | The person does → expected result                                                                       | Surface | Packages | Status |
-| ------- | ------------------------------------------------------------------------------------------------------- | ------- | -------- | ------ |
-| CO-16.1 | Finds a member by name or phone; sees what needs attention; the "Needs attention" segment is an address | HQ      | H-PEOPLE | Main   |
-| CO-16.2 | Opens a junior: the guardian is named at the top, the child has no contact of their own                 | HQ      | H-PEOPLE | Main   |
-| CO-16.3 | Gives credits through a strong confirmation that restates the amount and the person                     | HQ      | H-PEOPLE | Main   |
+| Step    | The person does → expected result                                                       | Surface | Packages | Status |
+| ------- | --------------------------------------------------------------------------------------- | ------- | -------- | ------ |
+| CO-16.1 | Finds a member by name or phone and sees what needs attention; segments are addresses   | HQ      | H-PEOPLE | Main   |
+| CO-16.2 | Opens a junior: the guardian is named at the top; the child has no contact of their own | HQ      | H-PEOPLE | Main   |
+| CO-16.3 | Gives credits through a strong confirmation that restates the amount and the person     | HQ      | H-PEOPLE | Main   |
 
 ## Coach (CH)
 
 Teaches sessions, runs practices, scores matches, writes to players and
 parents, gets paid. Mostly on the phone (Pro, Watch); plans in HQ.
 
-| Step    | The person does → expected result                                                                                  | Surface    | Packages        | Status  |
-| ------- | ------------------------------------------------------------------------------------------------------------------ | ---------- | --------------- | ------- |
-| CH-1.1  | Sets weekly availability with effective dates → autosaved draft; conflicts named                                   | HQ         | B3a, H5         | Planned |
-| CH-1.2  | Adds time off and a blackout → sees what it uncovers and suggested substitutes                                     | HQ         | B3a, H5         | Planned |
-| CH-1.n  | Sets availability and blackouts on the phone                                                                       | Pro        | M-R5            | Native  |
-| CH-2.1  | Opens Today → the day's sessions                                                                                   | HQ         | H1              | Main    |
-| CH-2.2  | Opens Schedule by coach                                                                                            | HQ         | H2              | Main    |
-| CH-2.n  | Opens Pro Today: agenda by court and by coach, one-line conditions, light icon by the time                         | Pro        | M-R1            | Native  |
-| CH-3.1  | Opens the session from Today → its operations page                                                                 | HQ         | H2              | Main    |
-| CH-3.2  | Checks players in → tier 0 with Undo; the roster count Rallies                                                     | HQ         | H2              | Planned |
-| CH-3.n  | Checks in courtside on the phone, offline-tolerant                                                                 | Pro        | M-R2            | Native  |
-| CH-4.1  | Scores a match point by point from the session → NetScore, one state per match status                              | HQ         | H2, C1          | Planned |
-| CH-4.2  | Finishes the match and publishes the result after a confirm                                                        | HQ         | H9              | Planned |
-| CH-4.n  | Scores on the phone (live zone) or on the Watch (swipe up / down, left to undo; unchanged)                         | Pro, Watch | M-R2, M-P7      | Native  |
-| CH-5.1  | Writes an after-practice note for the program                                                                      | HQ         | H6              | Planned |
-| CH-5.2  | Messages a player or a parent about a session                                                                      | HQ         | H3              | Planned |
-| CH-5.n  | Writes notes and messages from the phone (voice notes kept)                                                        | Pro        | M-R3            | Native  |
-| CH-6.1  | Sees sessions, pay period and expected pay                                                                         | HQ         | H5, B3b         | Planned |
-| CH-6.2  | Receives contractor payouts to their own connected account                                                         | HQ         | B3c             | Planned |
-| CH-6.3  | Opens Money without permission → "You need access", not an error page                                              | HQ         | H10             | Main    |
-| CH-6.n  | Gets paid on the phone: Tap to Pay for a lesson (hidden where unsupported), see pay                                | Pro        | M-R4            | Native  |
-| CH-7.1  | Opens the practice plan builder                                                                                    | HQ         | H7              | Main    |
-| CH-7.2  | Starts a drill from a description                                                                                  | HQ         | H8              | Main    |
-| CH-7.3  | Builds a plan with totals, diagrams, coach mode; prints it with diagrams                                           | HQ         | H7, B6b         | Planned |
-| CH-7.4  | Creates a drill with AI placing the players; edits and versions it                                                 | HQ         | B6d, H8         | Planned |
-| CH-7.n  | Runs coach mode and the 2D drill player on the phone or iPad                                                       | Pro        | M-R6            | Native  |
-| CH-8.1  | Opens Training on their programs                                                                                   | HQ         | H6              | Main    |
-| CH-8.2  | Opens a program's Roster and Schedule tabs (deep-linkable)                                                         | HQ         | H6, S3          | Planned |
-| CH-9.1  | Opens a session that needs players → Nudge opens a Send review with the share link (spec id CH-7.1; CH-7 is taken) | HQ, Pro    | PART-7, PART-12 | Planned |
-| CH-9.2  | Marks attendance with "Everyone's here" and one exception, offline → it sends when back online (spec id CH-7.2)    | Pro        | PART-12         | Native  |
-| CH-10.1 | Opens a player in People: no Payments or Health tab, and no money or health in the page                            | HQ         | H-PEOPLE        | Main    |
+| Step   | The person does → expected result                                                                                  | Surface    | Packages        | Status  |
+| ------ | ------------------------------------------------------------------------------------------------------------------ | ---------- | --------------- | ------- |
+| CH-1.1 | Sets weekly availability with effective dates → autosaved draft; conflicts named                                   | HQ         | B3a, H5         | Planned |
+| CH-1.2 | Adds time off and a blackout → sees what it uncovers and suggested substitutes                                     | HQ         | B3a, H5         | Planned |
+| CH-1.n | Sets availability and blackouts on the phone                                                                       | Pro        | M-R5            | Native  |
+| CH-2.1 | Opens Today → the day's sessions                                                                                   | HQ         | H1              | Main    |
+| CH-2.2 | Opens Schedule by coach                                                                                            | HQ         | H2              | Main    |
+| CH-2.n | Opens Pro Today: agenda by court and by coach, one-line conditions, light icon by the time                         | Pro        | M-R1            | Native  |
+| CH-3.1 | Opens the session from Today → its operations page                                                                 | HQ         | H2              | Main    |
+| CH-3.2 | Checks players in → tier 0 with Undo; the roster count Rallies                                                     | HQ         | H2              | Planned |
+| CH-3.n | Checks in courtside on the phone, offline-tolerant                                                                 | Pro        | M-R2            | Native  |
+| CH-4.1 | Scores a match point by point from the session → NetScore, one state per match status                              | HQ         | H2, C1          | Planned |
+| CH-4.2 | Finishes the match and publishes the result after a confirm                                                        | HQ         | H9              | Planned |
+| CH-4.n | Scores on the phone (live zone) or on the Watch (swipe up / down, left to undo; unchanged)                         | Pro, Watch | M-R2, M-P7      | Native  |
+| CH-5.1 | Writes an after-practice note for the program                                                                      | HQ         | H6              | Planned |
+| CH-5.2 | Messages a player or a parent about a session                                                                      | HQ         | H3              | Planned |
+| CH-5.n | Writes notes and messages from the phone (voice notes kept)                                                        | Pro        | M-R3            | Native  |
+| CH-6.1 | Sees sessions, pay period and expected pay                                                                         | HQ         | H5, B3b         | Planned |
+| CH-6.2 | Receives contractor payouts to their own connected account                                                         | HQ         | B3c             | Planned |
+| CH-6.3 | Opens Money without permission → "You need access", not an error page                                              | HQ         | H10             | Main    |
+| CH-6.n | Gets paid on the phone: Tap to Pay for a lesson (hidden where unsupported), see pay                                | Pro        | M-R4            | Native  |
+| CH-7.1 | Opens the practice plan builder                                                                                    | HQ         | H7              | Main    |
+| CH-7.2 | Starts a drill from a description                                                                                  | HQ         | H8              | Main    |
+| CH-7.3 | Builds a plan with totals, diagrams, coach mode; prints it with diagrams                                           | HQ         | H7, B6b         | Planned |
+| CH-7.4 | Creates a drill with AI placing the players; edits and versions it                                                 | HQ         | B6d, H8         | Planned |
+| CH-7.n | Runs coach mode and the 2D drill player on the phone or iPad                                                       | Pro        | M-R6            | Native  |
+| CH-8.1 | Opens Training on their programs                                                                                   | HQ         | H6              | Main    |
+| CH-8.2 | Opens a program's Roster and Schedule tabs (deep-linkable)                                                         | HQ         | H6, S3          | Planned |
+| CH-9.1 | Opens a session that needs players → Nudge opens a Send review with the share link (spec id CH-7.1; CH-7 is taken) | HQ, Pro    | PART-7, PART-12 | Planned |
+| CH-9.2 | Marks attendance with "Everyone's here" and one exception, offline → it sends when back online (spec id CH-7.2)    | Pro        | PART-12         | Native  |
+
+### CH-10 The people I coach
+
+Added by H-PEOPLE (28 November 2026).
+
+| Step    | The person does → expected result                                                       | Surface | Packages | Status |
+| ------- | --------------------------------------------------------------------------------------- | ------- | -------- | ------ |
+| CH-10.1 | Opens a player in People: no Payments or Health tab, and no money or health in the page | HQ      | H-PEOPLE | Main   |
 
 ## Parent or guardian with a junior (PA)
 
