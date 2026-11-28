@@ -1,0 +1,94 @@
+/* Layout for the time and light gallery page only. Values come from Tideline tokens. */
+.main {
+  display: grid;
+  gap: var(--td-space-10);
+  max-width: var(--td-layout-content);
+  margin: 0 auto;
+  padding: var(--td-space-6) var(--td-space-4) var(--td-space-24);
+}
+
+.section {
+  display: grid;
+  gap: var(--td-space-4);
+  min-width: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: var(--td-space-4);
+  align-items: start;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.card {
+  display: grid;
+  gap: var(--td-space-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.stack {
+  display: grid;
+  gap: var(--td-space-4);
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--td-space-3);
+  align-items: center;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--td-space-6);
+  align-items: start;
+}
+
+.lines {
+  display: grid;
+  gap: var(--td-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lines li {
+  display: grid;
+  gap: var(--td-space-1);
+  min-width: 0;
+}
+
+.schedule {
+  display: grid;
+  gap: var(--td-space-3);
+  min-width: 0;
+}
+
+.scheduleHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--td-space-2);
+}
+
+.scheduleRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: var(--td-space-3);
+  padding: var(--td-space-3) 0;
+  box-shadow: inset 0 1px 0 var(--td-line);
+}
+
+.scheduleTime {
+  display: grid;
+  gap: var(--td-space-1);
+  justify-items: start;
+  font-variant-numeric: tabular-nums;
+}
