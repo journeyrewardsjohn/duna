@@ -1,3 +1,4 @@
+import { providerNotConfiguredResponse } from "@duna/api";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -11,12 +12,10 @@ export function GET() {
     .map((value) => value?.trim())
     .find((value) => value?.startsWith("pk."));
   if (!token) {
-    return NextResponse.json(
-      {
-        error:
-          "A public Mapbox token is not configured. Client maps require a pk token.",
-      },
-      { status: 503 },
+    // Not set up here: an honest 200 state, not a failure (maps show it).
+    return providerNotConfiguredResponse(
+      "mapbox",
+      "Maps need a public map key, which isn't set up yet.",
     );
   }
   return NextResponse.json(

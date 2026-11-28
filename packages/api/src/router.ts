@@ -357,6 +357,7 @@ import {
   createPromoCode,
   deactivatePromoCode,
   duplicatePromoCode,
+  loadDemoPromoCodeWorkspace,
   loadPromoCodeWorkspace,
   revisePromoCode,
 } from "./promo-codes";
@@ -8819,8 +8820,17 @@ const operatorRouter = router({
             ctx.actor!.personId,
           ),
     ),
-  promoCodeWorkspace: organizationProcedure("payments:read").query(({ ctx }) =>
-    loadPromoCodeWorkspace({ actor: ctx.actor!, now: ctx.now }),
+  promoCodeWorkspace: organizationProcedure("payments:read").query(
+    async ({ ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? loadDemoPromoCodeWorkspace(
+            (
+              await getRepository().operator.dashboard(
+                ctx.actor!.organizationId!,
+              )
+            ).organization,
+          )
+        : loadPromoCodeWorkspace({ actor: ctx.actor!, now: ctx.now }),
   ),
   createPromoCode: organizationProcedure("payments:write")
     .input(

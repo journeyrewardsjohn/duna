@@ -14,6 +14,7 @@ import {
   hasDunaAiGatewayCredential,
   listAskDunaActions,
   listAskDunaConversations,
+  providerNotConfiguredBody,
   readAskDunaReferences,
   reviewAskDunaOperation,
   updateAskDunaControls,
@@ -37,12 +38,38 @@ const json = (value: unknown, status = 200) =>
 async function handle(request: Request, { params }: Route) {
   try {
     const { actor } = await askDunaRequestContext(request);
-    if (!actor || actor.isDemo)
-      return json({ error: "Sign in to use Ask Duna." }, 401);
+    if (!actor) return json({ error: "Sign in to use Ask Duna." }, 401);
     const path = (await params).path ?? [];
     if (path.length > 3) return json({ error: "Not found." }, 404);
     const [resource, id, action] = path;
     const url = new URL(request.url);
+    if (actor.isDemo) {
+      // Demo mode has no stored conversations and no agent connection: the
+      // reads every page makes answer with an honest empty, not-configured
+      // result (200), and anything a person starts says so (503).
+      const notConfigured = providerNotConfiguredBody(
+        "aiGateway",
+        "Ask Duna is awaiting its agent connection. Your operator workspace is still available.",
+      );
+      if (request.method === "GET" && !id) {
+        if (resource === "conversations")
+          return json({
+            ...notConfigured,
+            conversations: [],
+            nextOffset: null,
+          });
+        if (resource === "capabilities")
+          return json({ ...notConfigured, capabilities: [] });
+        if (resource === "references")
+          return json({
+            ...notConfigured,
+            kind:
+              url.searchParams.get("kind") === "events" ? "events" : "members",
+            records: [],
+          });
+      }
+      return json({ error: notConfigured.message, ...notConfigured }, 503);
+    }
     if (request.method !== "GET") assertAskDunaOrigin(request);
     if (resource === "admin") {
       assertAskDunaAdmin(actor);
