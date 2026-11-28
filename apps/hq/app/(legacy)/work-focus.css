@@ -993,10 +993,7 @@ body[data-zone="operator"]
 }
 body[data-zone="operator"]
   .hq-shell--focused
-  :is(
-    .people-command-metrics__primary,
-    .product-performance-metrics article:first-child
-  )
+  :is(.product-performance-metrics article:first-child)
   :is(strong, .duna-numeric) {
   color: var(--hq-text);
 }
@@ -1061,9 +1058,7 @@ body[data-zone="operator"]
   :is(h2, h3, strong) {
   color: var(--hq-text);
 }
-.hq-shell--focused
-  :is(.people-filter-row, .event-history-workspace__filters)
-  button.active {
+.hq-shell--focused :is(.event-history-workspace__filters) button.active {
   color: var(--hq-ground);
   background: var(--hq-text);
 }
@@ -1139,25 +1134,9 @@ body[data-zone="operator"] .hq-shell--focused .hq-page-heading {
 .hq-work-actions a > svg {
   display: none;
 }
-
-.hq-shell--focused .people-command-layout {
-  grid-template-columns: minmax(0, 1fr);
-}
-.hq-shell--focused .people-command-rail {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.hq-shell--focused .people-privacy-note {
-  grid-column: 1 / -1;
-}
 .hq-shell--focused .people-directory {
   border: 0;
   padding: 0;
-}
-.hq-shell--focused .people-directory__header {
-  padding: 0 0 12px;
-  border: 0;
 }
 .hq-shell--focused .people-search {
   display: flex;
@@ -1178,21 +1157,6 @@ body[data-zone="operator"] .hq-shell--focused .hq-page-heading {
   outline: 2px solid var(--hq-focus);
   outline-offset: 2px;
 }
-.hq-shell--focused .people-filter-row {
-  padding: 0 0 8px;
-}
-.hq-shell--focused .people-filter-row button {
-  min-height: 48px;
-  font-size: 14px;
-  font-weight: 500;
-}
-.hq-shell--focused .people-directory__result-count {
-  padding: 8px 0;
-  font-size: 14px;
-}
-.hq-shell--focused .people-directory__list {
-  padding: 0;
-}
 .hq-person-link {
   gap: 10px;
   min-width: 220px;
@@ -1200,20 +1164,9 @@ body[data-zone="operator"] .hq-shell--focused .hq-page-heading {
 .hq-person-link strong {
   font-weight: 500;
 }
-.hq-data-table .people-directory__avatar {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: 50%;
-}
 .hq-shell--focused .people-directory .hq-data-table {
   min-width: 850px;
 }
 .hq-shell--focused .people-directory .hq-data-table td:last-child {
   max-width: 210px;
-}
-@media (max-width: 720px) {
-  .hq-shell--focused .people-command-rail {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }

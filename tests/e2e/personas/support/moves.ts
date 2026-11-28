@@ -20,7 +20,7 @@ export const hqAreas = {
   Today: hqRoutes.home,
   Schedule: hqModuleHref("schedule"),
   Inbox: hqRoutes.inbox,
-  People: hqModuleHref("people"),
+  People: hqRoutes.people,
   Team: hqModuleHref("team"),
   Training: hqRoutes.training,
   Events: hqModuleHref("events"),

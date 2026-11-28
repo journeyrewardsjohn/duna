@@ -342,10 +342,7 @@ body[data-zone="operator"] .hq-shell--focused:not(.admin-shell) .hq-sidebar {
 .hq-shell--focused .team-data-table .team-avatar {
   flex-shrink: 0;
 }
-.hq-shell--focused .people-directory__header {
-  max-width: 480px;
-}
-.hq-shell--focused :is(.people-filter-row, .team-filter-row) button {
+.hq-shell--focused :is(.team-filter-row) button {
   border-radius: 6px;
 }
 
@@ -481,7 +478,7 @@ body[data-zone="operator"]
   color: var(--hq-muted);
 }
 .hq-shell--focused .team-view-toggle button[aria-pressed="true"],
-.hq-shell--focused :is(.team-filter-row, .people-filter-row) button.active {
+.hq-shell--focused :is(.team-filter-row) button.active {
   border-color: var(--hq-line);
   background: var(--hq-ground);
   color: var(--hq-text);
@@ -492,7 +489,7 @@ body[data-zone="operator"]
   border-top: 1px solid var(--hq-line);
   background: var(--hq-soft);
 }
-.hq-shell--focused :is(.team-filter-row, .people-filter-row) button {
+.hq-shell--focused :is(.team-filter-row) button {
   min-height: 48px;
   border: 1px solid transparent;
 }

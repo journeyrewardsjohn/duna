@@ -37,7 +37,6 @@ import {
 import { ScheduleCalendar } from "./schedule-calendar";
 import { EventsTable } from "./events-table";
 import { EventHistoryWorkspace } from "./event-history-workspace";
-import { PeopleWorkspace } from "./people-workspace";
 import { TeamWorkspace } from "./team-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
@@ -1248,20 +1247,18 @@ export function ModulePanel({
             ? { href: hqRoutes.offeringCreate, label: "Create product" }
             : module === "places"
               ? { href: hqRoutes.placeCreate, label: "Add venue" }
-              : module === "people"
-                ? { href: hqRoutes.memberInvite, label: "Invite person" }
-                : module === "team"
-                  ? { href: hqRoutes.teamInvite, label: "Invite team member" }
-                  : module === "marketing"
-                    ? {
-                        href: hqRoutes.marketingCreate,
-                        label: "Create campaign",
-                      }
-                    : module === "money"
-                      ? { href: hqRoutes.moneySetup, label: "Configure money" }
-                      : module === "schedule"
-                        ? { href: "/events/create", label: "Add to calendar" }
-                        : undefined;
+              : module === "team"
+                ? { href: hqRoutes.teamInvite, label: "Invite team member" }
+                : module === "marketing"
+                  ? {
+                      href: hqRoutes.marketingCreate,
+                      label: "Create campaign",
+                    }
+                  : module === "money"
+                    ? { href: hqRoutes.moneySetup, label: "Configure money" }
+                    : module === "schedule"
+                      ? { href: "/events/create", label: "Add to calendar" }
+                      : undefined;
   // Until H9 turns them into in-page filters, the old sidebar children are a
   // row of type links inside the Offerings and Events lists.
   const typeLinks =
@@ -1329,8 +1326,6 @@ export function ModulePanel({
         </>
       ) : module === "places" ? (
         <VenuePortfolioPanel workspace={workspace} />
-      ) : module === "people" ? (
-        <PeopleWorkspace workspace={workspace} />
       ) : module === "team" ? (
         <TeamPanel workspace={workspace} />
       ) : module === "offerings" ? (

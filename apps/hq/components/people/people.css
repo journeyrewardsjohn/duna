@@ -1,0 +1,843 @@
+/*
+ * People (H-PEOPLE) on the Duna Design System. Imported by
+ * app/(next)/(hq)/people/layout.tsx only. Tokens only, in the `hq` layer
+ * (after the library), container queries on the shell's `hqs-main`.
+ * Numbers set in Geist Mono; nothing here wears the live colour. No legacy
+ * sheet is imported (docs/plan/legacy-styles.md).
+ */
+@layer hq {
+  .td {
+    .people {
+      --people-row-h: 76px;
+      display: grid;
+      gap: var(--td-space-5);
+      min-width: 0;
+    }
+
+    .people > .hqs-page-head,
+    .people > .td-objhead {
+      margin-block-end: 0;
+    }
+
+    .people .hqs-section__body {
+      display: grid;
+      gap: var(--td-space-3);
+      min-width: 0;
+    }
+
+    .people .hqs-section[data-flush] > .hqs-section__body {
+      gap: 0;
+    }
+
+    /* ---------- Words ---------- */
+
+    .people-quiet {
+      margin: 0;
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+    }
+
+    .people-pad {
+      padding-block: var(--td-space-2) var(--td-space-3);
+    }
+
+    .people-body {
+      max-width: 68ch;
+      margin: 0;
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .people-eyebrow {
+      margin: 0;
+      color: var(--td-text-3);
+      font: var(--td-type-micro);
+      text-transform: uppercase;
+    }
+
+    .people-num {
+      font-family: var(--td-font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .people-link {
+      color: var(--td-text);
+      font: var(--td-type-label);
+      text-decoration: underline;
+      text-decoration-color: var(--td-line-strong);
+      text-underline-offset: 3px;
+
+      &:hover {
+        text-decoration-color: currentColor;
+      }
+
+      &:focus-visible {
+        border-radius: var(--td-radius-xs);
+        box-shadow: var(--td-focus-ring);
+        outline: none;
+      }
+    }
+
+    .people-disclaimer {
+      max-width: 72ch;
+      margin: 0;
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+    }
+
+    .people-plain-list {
+      display: grid;
+      gap: var(--td-space-1);
+      margin: 0;
+      padding-inline-start: var(--td-space-5);
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .people-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--td-space-2);
+    }
+
+    .people-inline {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--td-space-2);
+    }
+
+    /* ---------- Forms ---------- */
+
+    .people-form {
+      display: grid;
+      gap: var(--td-space-4);
+      max-width: 640px;
+    }
+
+    .people-form--grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+      max-width: none;
+
+      & > .people-actions,
+      & > .td-notice,
+      & > .people-quiet {
+        grid-column: 1 / -1;
+      }
+    }
+
+    .people-form--inline {
+      grid-template-columns: minmax(0, 8rem) minmax(0, 11rem) minmax(
+          0,
+          1fr
+        ) auto;
+      align-items: end;
+      max-width: none;
+    }
+
+    .people-fieldset {
+      display: grid;
+      gap: var(--td-space-3);
+      margin: 0;
+      padding: var(--td-space-4);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-lg);
+
+      & > legend {
+        padding-inline: var(--td-space-1);
+        color: var(--td-text);
+        font: var(--td-type-label);
+      }
+    }
+
+    .people-dupes__list {
+      display: grid;
+      gap: var(--td-space-1);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .people-file {
+      max-width: 100%;
+      font: var(--td-type-body);
+    }
+
+    /* ---------- The list ---------- */
+
+    .people-directory {
+      display: grid;
+      gap: var(--td-space-4);
+      min-width: 0;
+    }
+
+    .people-tools {
+      display: grid;
+      gap: var(--td-space-3);
+    }
+
+    .people-search {
+      max-width: 520px;
+    }
+
+    .people-segments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+    }
+
+    .people-segment-count {
+      margin-inline-start: var(--td-space-1);
+      color: var(--td-text-3);
+      font-family: var(--td-font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .people-listhead {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--td-space-3);
+      padding-block-end: var(--td-space-2);
+      border-block-end: 1px solid var(--td-line);
+    }
+
+    .people-count {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+    }
+
+    .people-bulk {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--td-space-3);
+      padding: var(--td-space-3) var(--td-space-4);
+      border: 1px solid var(--td-line-strong);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface-subtle);
+      animation: people-rise var(--td-duration-rise) var(--td-ease-tide) both;
+    }
+
+    .people-bulk__count {
+      margin: 0;
+      color: var(--td-text);
+      font: var(--td-type-label);
+    }
+
+    .people-scroller[data-windowed] {
+      max-height: 640px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      border-block-end: 1px solid var(--td-line);
+    }
+
+    .people-rows {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .people-row {
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr) auto minmax(0, 9rem);
+      align-items: center;
+      gap: var(--td-space-3);
+      min-height: var(--people-row-h);
+      padding-block: var(--td-space-2);
+      border-block-end: 1px solid var(--td-line);
+      animation: people-rise var(--td-duration-rise) var(--td-ease-tide) both;
+
+      &[data-selected] {
+        background: var(--td-surface-subtle);
+      }
+
+      &:has(.people-row__name:focus-visible) {
+        background: var(--td-surface-subtle);
+      }
+    }
+
+    .people-scroller[data-windowed] .people-row {
+      height: var(--people-row-h);
+      min-height: 0;
+      animation: none;
+    }
+
+    .people-row__check {
+      padding-inline-start: var(--td-space-1);
+    }
+
+    .people-row__text {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .people-row__name {
+      overflow: hidden;
+      color: var(--td-text);
+      font: var(--td-type-label);
+      text-decoration: none;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      &:hover {
+        text-decoration: underline;
+      }
+
+      &:focus-visible {
+        border-radius: var(--td-radius-xs);
+        box-shadow: var(--td-focus-ring);
+        outline: none;
+      }
+    }
+
+    .people-row__relation {
+      overflow: hidden;
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .people-row__chips {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: var(--td-space-1);
+    }
+
+    .people-row__seen {
+      display: grid;
+      justify-items: end;
+      gap: 2px;
+    }
+
+    .people-row__meta {
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+      white-space: nowrap;
+    }
+
+    .people-duplicates {
+      max-width: 720px;
+    }
+
+    .people-first-use {
+      padding-block: var(--td-space-8);
+    }
+
+    .people-skeleton {
+      display: grid;
+      gap: var(--td-space-2);
+      animation: people-reveal var(--td-duration-base) var(--td-ease-ui) both;
+    }
+
+    /* ---------- An open person ---------- */
+
+    .people-guardian-line {
+      color: var(--td-text);
+      font: var(--td-type-label);
+    }
+
+    .people-contact {
+      display: block;
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+    }
+
+    .people-overview {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 372px);
+      align-items: start;
+      gap: var(--td-space-5);
+    }
+
+    .people-next {
+      display: grid;
+      align-content: start;
+      gap: var(--td-space-2);
+      padding: var(--td-space-5);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-xl);
+      background: var(--td-surface);
+      animation: people-rise var(--td-duration-rise) var(--td-ease-tide) both;
+
+      &[data-kind="none"] {
+        background: var(--td-surface-subtle);
+      }
+    }
+
+    .people-next__title {
+      margin: 0;
+      color: var(--td-text);
+      font: var(--td-type-heading-20);
+    }
+
+    .people-next__detail {
+      max-width: 60ch;
+      margin: 0;
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .people-next__draft {
+      padding: var(--td-space-3);
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface-subtle);
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+
+      & > summary {
+        color: var(--td-text);
+        font: var(--td-type-label);
+        cursor: pointer;
+      }
+
+      & > p {
+        margin: var(--td-space-2) 0 0;
+      }
+    }
+
+    .people-next__subject {
+      color: var(--td-text);
+      font: var(--td-type-label);
+    }
+
+    .people-card {
+      display: grid;
+      justify-items: center;
+      min-width: 0;
+      animation: people-rise var(--td-duration-rise) var(--td-ease-tide) both;
+      animation-delay: var(--td-stagger-rally);
+    }
+
+    .people-attention {
+      display: grid;
+      gap: var(--td-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+
+      & > li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--td-space-3);
+      }
+    }
+
+    .people-facts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+      gap: var(--td-space-3) var(--td-space-5);
+      margin: 0;
+
+      & > div {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      & dt {
+        color: var(--td-text-3);
+        font: var(--td-type-meta);
+      }
+
+      & dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+        color: var(--td-text);
+        font: var(--td-type-body);
+      }
+    }
+
+    .people-facts-list {
+      display: grid;
+      gap: var(--td-space-3);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+
+      & > li {
+        display: grid;
+        grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+        gap: var(--td-space-3);
+        color: var(--td-text-2);
+        font: var(--td-type-body);
+      }
+
+      & strong {
+        color: var(--td-text);
+        font: var(--td-type-label);
+      }
+    }
+
+    .people-figures {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+      gap: var(--td-space-3);
+      margin: 0;
+    }
+
+    .people-figure {
+      display: grid;
+      align-content: start;
+      gap: var(--td-space-1);
+      min-width: 0;
+      padding: var(--td-space-4);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-xl);
+      background: var(--td-surface);
+      animation: people-rise var(--td-duration-rise) var(--td-ease-tide) both;
+
+      & dt {
+        color: var(--td-text-3);
+        font: var(--td-type-meta);
+      }
+
+      & dd {
+        margin: 0;
+        color: var(--td-text);
+        font: var(--td-type-heading-20);
+        font-family: var(--td-font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+    }
+
+    .people-figure:nth-child(2) {
+      animation-delay: var(--td-stagger-rally);
+    }
+
+    .people-figure:nth-child(3) {
+      animation-delay: calc(var(--td-stagger-rally) * 2);
+    }
+
+    /* Rows of an open person's lists share one shape. */
+    .people-timeline,
+    .people-plans,
+    .people-bookings,
+    .people-payments,
+    .people-documents,
+    .people-household-list,
+    .people-notes,
+    .people-grants,
+    .people-import-rows {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+
+      & > li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--td-space-2) var(--td-space-4);
+        padding-block: var(--td-space-3);
+        border-block-end: 1px solid var(--td-line);
+      }
+
+      & > li:last-child {
+        border-block-end: 0;
+      }
+    }
+
+    .people-timeline > li,
+    .people-payments > li {
+      justify-content: space-between;
+    }
+
+    .people-timeline__what,
+    .people-plans__what,
+    .people-bookings__what,
+    .people-payments__what,
+    .people-documents__what,
+    .people-import-rows__what {
+      display: grid;
+      flex: 1 1 16rem;
+      gap: 2px;
+      min-width: 0;
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+
+      & strong {
+        color: var(--td-text);
+        font: var(--td-type-label);
+      }
+    }
+
+    .people-timeline time,
+    .people-notes time {
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+      white-space: nowrap;
+    }
+
+    .people-bookings__when {
+      display: grid;
+      min-width: 4.5rem;
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+
+      & strong {
+        color: var(--td-text);
+        font: var(--td-type-label);
+      }
+    }
+
+    .people-grants > li {
+      justify-content: space-between;
+    }
+
+    .people-notes > li {
+      display: grid;
+      gap: var(--td-space-1);
+    }
+
+    .people-notes__meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--td-space-2);
+      margin: 0;
+      color: var(--td-text);
+      font: var(--td-type-label);
+    }
+
+    .people-notes__subject {
+      margin: 0;
+      color: var(--td-text);
+      font: var(--td-type-label);
+    }
+
+    .people-household__person {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--td-space-3);
+    }
+
+    .people-household__text {
+      display: grid;
+      flex: 1 1 14rem;
+      gap: 2px;
+      color: var(--td-text);
+      font: var(--td-type-label);
+    }
+
+    /* ---------- Health ---------- */
+
+    .people-trends {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+      gap: var(--td-space-4);
+    }
+
+    .people-trend {
+      display: grid;
+      gap: var(--td-space-1);
+    }
+
+    .people-trend__label {
+      margin: 0;
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+    }
+
+    .people-trend > .people-num {
+      margin: 0;
+      color: var(--td-text);
+      font: var(--td-type-label);
+      font-family: var(--td-font-mono);
+    }
+
+    .people-trend__chart {
+      width: 100%;
+      height: 48px;
+
+      & path {
+        stroke: var(--td-line);
+        stroke-width: 1;
+      }
+
+      & polyline {
+        stroke: var(--td-text-2);
+        stroke-width: 1.75;
+        vector-effect: non-scaling-stroke;
+      }
+    }
+
+    /* ---------- Import ---------- */
+
+    .people-import {
+      display: grid;
+      gap: var(--td-space-5);
+    }
+
+    .people-columns {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+      gap: var(--td-space-3) var(--td-space-4);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .people-import-rows__line {
+      min-width: 4.5rem;
+      color: var(--td-text-3);
+      font-size: inherit;
+    }
+
+    .people-import-rows__problems {
+      color: var(--td-text);
+      font: var(--td-type-meta);
+    }
+
+    /* ---------- Merge ---------- */
+
+    .people-merge {
+      display: grid;
+      gap: var(--td-space-5);
+    }
+
+    .people-merge__compare {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--td-space-4);
+    }
+
+    .people-merge__side {
+      display: grid;
+      align-content: start;
+      gap: var(--td-space-3);
+      padding: var(--td-space-4);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-xl);
+      background: var(--td-surface);
+
+      &[data-kept="true"] {
+        border-color: var(--td-line-strong);
+        background: var(--td-surface-subtle);
+      }
+    }
+
+    .people-merge__plan {
+      display: grid;
+      gap: var(--td-space-3);
+    }
+
+    .people-merge__kept {
+      display: grid;
+      gap: var(--td-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+
+      & > li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--td-space-2) var(--td-space-3);
+        color: var(--td-text);
+        font: var(--td-type-body);
+      }
+    }
+
+    /* ---------- Tablet and phone ---------- */
+
+    @container hqs-main (max-width: 1080px) {
+      .people-overview {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+      }
+
+      .people-row {
+        grid-template-columns: auto auto minmax(0, 1fr) auto;
+      }
+
+      .people-row__seen {
+        display: none;
+      }
+    }
+
+    @container hqs-main (max-width: 760px) {
+      .people-overview,
+      .people-merge__compare,
+      .people-form--grid,
+      .people-form--inline {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .people-facts-list > li {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--td-space-1);
+      }
+
+      .people-row {
+        grid-template-columns: auto auto minmax(0, 1fr);
+      }
+
+      .people-row__chips {
+        grid-column: 3;
+        justify-content: flex-start;
+      }
+
+      .people-scroller[data-windowed] .people-row {
+        overflow: hidden;
+      }
+
+      .people-segments {
+        flex-wrap: nowrap;
+        margin-inline: calc(var(--td-space-4) * -1);
+        padding-inline: var(--td-space-4);
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .people-segments > * {
+        flex: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .people-row,
+      .people-bulk,
+      .people-next,
+      .people-card,
+      .people-figure {
+        animation-name: people-reveal;
+        animation-duration: var(--td-duration-quick);
+        animation-delay: 0s;
+      }
+    }
+  }
+
+  @keyframes people-rise {
+    from {
+      opacity: 0;
+      translate: 0 calc(var(--td-motion, 1) * 8px);
+    }
+
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes people-reveal {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+}

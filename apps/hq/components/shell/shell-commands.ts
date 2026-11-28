@@ -136,6 +136,38 @@ const money: readonly ShellCommand[] = [
   },
 ];
 
+/** People (H-PEOPLE): finding, adding and importing the club's people. */
+const people: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("people")}?focus=search`,
+    label: "Find a person",
+    group: "People",
+    icon: "search",
+    keywords: ["member", "player", "parent", "junior", "search", "lookup"],
+  },
+  {
+    value: `go:${hqHref("peopleImport")}`,
+    label: "Import people",
+    group: "People",
+    icon: "users",
+    keywords: ["import", "spreadsheet", "csv", "upload", "members list"],
+  },
+  {
+    value: `go:${hqHref("people")}?segment=attention`,
+    label: "People who need attention",
+    group: "People",
+    icon: "alert",
+    keywords: ["waiver", "payment failed", "consent", "lapsing"],
+  },
+  {
+    value: `go:${hqHref("peopleMerge")}`,
+    label: "Merge duplicate people",
+    group: "People",
+    icon: "users",
+    keywords: ["duplicate", "merge", "same person"],
+  },
+];
+
 /** Club setup (H-SETUP): Duna reading the club's website, and its identity. */
 const setup: readonly ShellCommand[] = [
   {
@@ -204,6 +236,7 @@ export const shellCommands: readonly ShellCommand[] = [
   ...places,
   ...create,
   ...money,
+  ...people,
   ...setup,
   ...run,
 ];
