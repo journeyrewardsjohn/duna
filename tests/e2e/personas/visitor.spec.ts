@@ -1,4 +1,4 @@
-import { expect, test } from "./support/fixtures";
+import { expect, test, webBaseUrl } from "./support/fixtures";
 import {
   expectNoHorizontalOverflow,
   expectNoLayoutShift,
@@ -79,11 +79,13 @@ test.describe("VI-3 Decide to book", () => {
     await page.goto("/checkout/serve-receive-lab");
     await expectPageReady(page, "Review your place on the sand.");
   });
-  test.fixme("VI-3.2 Booking asks the visitor to sign in and returns them to the same place [P1]", async () => {
-    // Evidence on main: with no actor, every /app page renders "This page
-    // couldn't load" in demo mode; in production the proxy redirects first.
-    // Expected: a designed signed-out state with sign-in and sign-up that
-    // keeps returnTo.
+  test("VI-3.2 Booking asks the visitor to sign in and returns them to the same place", async ({
+    page,
+  }) => {
+    await page.goto("/app/checkout/serve-receive-lab");
+    await expect(page).toHaveURL(
+      /\/sign-in\?returnTo=%2Fapp%2Fcheckout%2Fserve-receive-lab$/,
+    );
   });
 });
 
@@ -94,7 +96,28 @@ test.describe("VI-4 Join", () => {
       page.getByRole("link", { name: "Create my Duna account" }),
     ).toBeVisible();
   });
-  test.fixme("VI-4.2 After sign-up, onboarding asks who the account is for (me, my junior, my club) [P1]", async () => {});
+});
+
+test.describe("VI-4 Join (signed up)", () => {
+  // Signed in as a player with nothing set up yet (the demo "first day").
+  test.use({ persona: "player" });
+  test("VI-4.2 After sign-up, onboarding asks who the account is for (me, my junior, my club)", async ({
+    page,
+    context,
+  }) => {
+    await context.addCookies([
+      { name: "duna-demo-player", value: "first-day", url: webBaseUrl },
+    ]);
+    await page.goto("/app");
+    await expectPageReady(page);
+    const who = page.getByRole("region", { name: "Who is Duna for?" });
+    await expect(who.getByRole("link", { name: /^Me/ })).toHaveAttribute(
+      "href",
+      "/app/onboarding",
+    );
+    await expect(who.getByRole("link", { name: /My junior/ })).toBeVisible();
+    await expect(who.getByRole("link", { name: /My club/ })).toBeVisible();
+  });
 });
 
 test.describe("VI-5 Clubs and machines", () => {

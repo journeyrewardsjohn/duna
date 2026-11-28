@@ -132,6 +132,17 @@ Names `EXPO_PUBLIC_MAPBOX_API_TOKEN` (native, public `pk.` token), `MAPBOX_API_T
 
 `FIRECRAWL_API_KEY` (alias `FIRECRAWL_API`), `SAND_SCRAPER_ENGINE`. Used for AVP league tables, event research, player sources, website reference URLs ("AI setup from a club's website" reads reference sites through this; generation without reference URLs does not need it). Present in web Production; set on `duna-hq` too (HQ runs the sand crons; not checked).
 
+### 1.16a Club setup from a website (B1)
+
+| Item           | What production needs                                                                                                                                                                                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reader         | `FIRECRAWL_API_KEY` (alias `FIRECRAWL_API`) on the app that serves `operator.*` tRPC (HQ). Present in web Production; on `duna-hq` it is expected but not verified (see 1.16). Without it `startRun` for a website answers "not configured"; the profile, description reads and review still work. |
+| Model          | The AI Gateway credential already used by Ask Duna (`AI_GATEWAY_API_KEY` / `VERCEL_AI_GATEWAY_API_KEY`, or the Vercel OIDC token). Optional model selector `DUNA_SETUP_MODEL` (falls back to `DUNA_AI_MODEL`, then `openai/gpt-5.6-luna`). No new provider.                                        |
+| Places         | Not used: addresses are kept as text marked "not confirmed on a map yet" (Google Places is only reachable from HQ's own route today).                                                                                                                                                              |
+| Background     | Nothing to set: reads continue on `waitUntil` and resume when the setup screen polls. Optional: schedule `processPendingSetupRuns` from a cron route (needs the HQ cron owner; uses `CRON_SECRET`).                                                                                                |
+| Retention      | Owner decision: confirm the proposed 180-day retention for read pages and quotes; then schedule `purgeExpiredSetupRunData` (same cron).                                                                                                                                                            |
+| Google listing | `sourceKind: google-listing` has no reader yet and answers "not configured".                                                                                                                                                                                                                       |
+
 ### 1.17 LiveKit and the voice worker
 
 `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`. Web/HQ mint scoped tokens (`/api/livekit/token`, `/api/operator/session-notes/token`, `/api/livekit/session-notes/token`). The workers (`apps/voice-agent`: profile agent and session-notes agent, `@livekit/agents` 1.6.1) must be run somewhere with LiveKit creds plus `OPENAI_API_KEY`; no Dockerfile, deploy config or host is in the repo (could not determine where it runs, or whether it is running). Present in web Production and Preview.

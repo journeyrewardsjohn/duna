@@ -270,12 +270,5 @@ export const publicWeb: SurfaceContract = {
       message:
         "pro-event-detail must not restore the decorative full-page venue plate",
     },
-    {
-      kind: "excludes",
-      file: "apps/web/app/(legacy)/app/page.tsx",
-      values: ["duna-campaign-rally"],
-      message:
-        "apps/web/app/(legacy)/app/page.tsx must not restore the decorative campaign hero",
-    },
   ],
 };

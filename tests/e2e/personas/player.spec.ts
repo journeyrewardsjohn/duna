@@ -18,10 +18,10 @@ test.describe("PL-1 Find a game", () => {
   }) => {
     await openPlayerArea(page, "Home");
     const actions = page.getByRole("navigation", {
-      name: "Player quick actions",
+      name: "Primary actions",
     });
     await expect(
-      actions.getByRole("link", { name: /Find play/ }),
+      actions.getByRole("link", { name: /Find a game/ }),
     ).toBeVisible();
     await expect(page.getByText("Next up", { exact: true })).toBeVisible();
     await expectNoLayoutShift(page);

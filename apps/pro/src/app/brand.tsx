@@ -1,23 +1,21 @@
-import { useContext } from "react";
-import { Image } from "react-native";
-import { ThemeContext } from "../shared/theme-context";
-import { styles } from "../legacy/styles";
+import { View } from "react-native";
+import { DunaMark, DunaWordmark } from "@duna/ui/native";
 
-// Metro requires static module references so the full Duna mark ships natively.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-export const dunaProWordmarkBlue = require("../../assets/duna-horizontal-blue.png");
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-export const dunaProWordmarkWhite = require("../../assets/duna-horizontal-white.png");
-
+/**
+ * The Duna lockup for legacy screens (Club tools): the Crest mark and the
+ * drawn wordmark from the design system, replacing the retired raster
+ * wordmark and dune mark. Follows the theme.
+ */
 export function BrandMark() {
-  const { theme } = useContext(ThemeContext);
   return (
-    <Image
+    <View
       accessibilityLabel="Duna"
-      resizeMode="contain"
-      source={theme === "dark" ? dunaProWordmarkWhite : dunaProWordmarkBlue}
-      style={styles.wordmarkImage}
-    />
+      accessibilityRole="image"
+      accessible
+      style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+    >
+      <DunaMark decorative size={22} />
+      <DunaWordmark width={64} />
+    </View>
   );
 }
