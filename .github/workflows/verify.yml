@@ -264,6 +264,7 @@ jobs:
       - static-checks
       - unit-tests
       - build-and-e2e
+      - gallery-e2e
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -272,9 +273,10 @@ jobs:
           STATIC_CHECKS: ${{ needs.static-checks.result }}
           UNIT_TESTS: ${{ needs.unit-tests.result }}
           BUILD_AND_E2E: ${{ needs.build-and-e2e.result }}
+          GALLERY_E2E: ${{ needs.gallery-e2e.result }}
         run: |
-          echo "static-checks=$STATIC_CHECKS unit-tests=$UNIT_TESTS build-and-e2e=$BUILD_AND_E2E"
-          if [ "$STATIC_CHECKS" != "success" ] || [ "$UNIT_TESTS" != "success" ] || [ "$BUILD_AND_E2E" != "success" ]; then
+          echo "static-checks=$STATIC_CHECKS unit-tests=$UNIT_TESTS build-and-e2e=$BUILD_AND_E2E gallery-e2e=$GALLERY_E2E"
+          if [ "$STATIC_CHECKS" != "success" ] || [ "$UNIT_TESTS" != "success" ] || [ "$BUILD_AND_E2E" != "success" ] || [ "$GALLERY_E2E" != "success" ]; then
             echo "::error::A verification job did not succeed."
             exit 1
           fi
