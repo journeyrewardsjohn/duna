@@ -108,7 +108,8 @@ test("the card turns over to its pass, text first with a named code", async ({
   const card = page.locator("[data-wallet-flip] .td-mcard");
   await card.click();
   await expect(card).toHaveAttribute("aria-pressed", "true");
-  await expect(card.getByText("Check-in pass")).toBeVisible();
+  // The "Check-in pass" kicker gives way on narrow cards; the facts never do.
+  await expect(card.locator(".td-mpass__member")).toHaveText("Rae Castillo");
   await expect(card.getByText("Active member")).toBeVisible();
   await expect(
     card.getByRole("img", { name: "Check-in code for Rae Castillo" }),
