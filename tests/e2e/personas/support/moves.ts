@@ -23,7 +23,7 @@ export const hqAreas = {
   People: hqRoutes.people,
   Team: hqRoutes.team,
   Training: hqRoutes.training,
-  Events: hqModuleHref("events"),
+  Events: hqRoutes.events,
   Offerings: hqRoutes.offerings,
   Money: hqRoutes.money,
   "Club setup": hqRoutes.setup,

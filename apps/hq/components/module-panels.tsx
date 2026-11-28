@@ -2,9 +2,8 @@ import type {
   OperatorDashboard,
   OperatorScorableMatch,
   OperatorWorkspace,
-  TicketApprovalSummary,
 } from "@duna/api";
-import { defaultEventMedia, formatMoney, formatVenueTime } from "@duna/core";
+import { formatMoney, formatVenueTime } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import {
   ArrowRight,
@@ -12,7 +11,6 @@ import {
   Building2,
   CircleAlert,
   CreditCard,
-  ExternalLink,
   ShoppingBag,
   MapPinned,
   Plus,
@@ -22,19 +20,14 @@ import {
 import { hqRoutes } from "@duna/core/hq-routes";
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import {
-  eventNavigationItems,
-  type EventNavigationSlug,
-  type OperatorPanel,
-} from "./navigation";
-import { EventsTable } from "./events-table";
-import { EventHistoryWorkspace } from "./event-history-workspace";
-import { SessionDraftManager } from "./session-draft-manager";
-import { TicketApprovalQueue } from "./ticket-approval-queue";
+import type { OperatorPanel } from "./navigation";
 import { DunaAiWorkspace } from "./duna-ai-workspace";
 
 const moduleCopy: Record<
-  Exclude<OperatorPanel, "today" | "inbox" | "offerings">,
+  Exclude<
+    OperatorPanel,
+    "today" | "inbox" | "offerings" | "events" | "leagues"
+  >,
   {
     readonly eyebrow: string;
     readonly title: string;
@@ -78,16 +71,6 @@ const moduleCopy: Record<
     title: "Training",
     description:
       "Programs, practice plans, drills, workload, and the athlete handoff in one connected coaching workspace.",
-  },
-  events: {
-    eyebrow: "Competition + community",
-    title: "Events",
-    description: "Manage events, registration and drafts.",
-  },
-  leagues: {
-    eyebrow: "Structured play",
-    title: "Leagues",
-    description: "League sessions, standings and scoring.",
   },
   money: {
     eyebrow: "Earnings + payouts",
@@ -139,108 +122,6 @@ function venueWeatherSymbol(icon: string | undefined): string {
 
 function venueWeatherTemperature(celsius: number | undefined): string {
   return celsius === undefined ? "" : `${Math.round((celsius * 9) / 5 + 32)}°`;
-}
-
-function EventInventory({
-  dashboard,
-  kinds,
-}: {
-  readonly dashboard: OperatorDashboard;
-  readonly kinds?: readonly string[];
-}) {
-  const events = kinds
-    ? dashboard.events.filter((event) => kinds.includes(event.kind))
-    : dashboard.events;
-  const publicWebUrl =
-    process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
-    process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
-    "https://duna.coach";
-  return (
-    <section className="hq-card connected-table event-live-inventory">
-      <header className="hq-card-heading">
-        <div>
-          <span className="hq-eyebrow">Live on Duna</span>
-          <h2>
-            {kinds
-              ? `${events.length} connected`
-              : `${events.length} live listing${events.length === 1 ? "" : "s"}`}
-          </h2>
-          <p>Open the exact player page or scan registration at a glance.</p>
-        </div>
-        <Badge>{dashboard.organization.timezone}</Badge>
-      </header>
-      <div className="event-live-list">
-        {events.map((event) => {
-          const cover =
-            event.media?.find((item) => item.kind === "image")?.url ??
-            event.imageUrl ??
-            `${publicWebUrl}${defaultEventMedia(event.kind, event.title).path}`;
-          return (
-            <article key={event.id}>
-              <div
-                aria-hidden
-                className="event-live-list__cover"
-                style={{ backgroundImage: `url("${cover}")` }}
-              >
-                <Badge tone={event.live ? "live" : "positive"}>
-                  {event.live ? "Live now" : "Published"}
-                </Badge>
-              </div>
-              <div className="event-live-list__story">
-                <span>{event.kind.replaceAll("-", " ")}</span>
-                <strong>{event.title}</strong>
-                <small>
-                  {formatVenueTime(event.startsAt, event.timezone, "en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}{" "}
-                  · {event.venueName}
-                </small>
-              </div>
-              <dl>
-                <div>
-                  <dt>Available</dt>
-                  <dd>
-                    <Numeric>{event.spotsRemaining}</Numeric> spots
-                  </dd>
-                </div>
-                <div>
-                  <dt>Entry</dt>
-                  <dd>
-                    <Numeric>
-                      {event.price.amountMinor
-                        ? formatMoney(
-                            event.price.amountMinor,
-                            event.price.currency,
-                          )
-                        : "Free"}
-                    </Numeric>
-                  </dd>
-                </div>
-              </dl>
-              <a
-                className="hq-button hq-button--secondary event-live-list__action"
-                href={`${publicWebUrl}/events/${event.slug}`}
-                rel="noreferrer"
-                target="_blank"
-              >
-                View player page <ExternalLink aria-hidden size={15} />
-              </a>
-            </article>
-          );
-        })}
-        {events.length === 0 && (
-          <div className="hq-empty">
-            <strong>No matching published inventory.</strong>
-            <span>Draft and creation workflows can add the first item.</span>
-          </div>
-        )}
-      </div>
-    </section>
-  );
 }
 
 function VenuePortfolioPanel({
@@ -724,62 +605,42 @@ function SettingsPanel({
 }
 
 export function ModulePanel({
-  activeType,
   module,
   dashboard,
-  eventKinds,
-  focusedDraftId,
   pageCopy,
   workspace,
-  ticketApprovals,
 }: {
-  /** The type link shown as current in the Events list. */
-  readonly activeType?: EventNavigationSlug;
   readonly module: OperatorPanel;
   readonly dashboard: OperatorDashboard;
-  readonly eventKinds?: readonly OperatorWorkspace["sessions"][number]["kind"][];
-  readonly focusedDraftId?: string;
   /** Unused since Schedule moved to the new shell; Today lists scorable matches. */
   readonly matches?: readonly OperatorScorableMatch[];
   readonly pageCopy?: ModulePageCopy;
   readonly workspace: OperatorWorkspace;
-  readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
-  // Offerings has its own screens in app/(next) (H-OFFER).
-  if (module === "today" || module === "inbox" || module === "offerings")
+  // Offerings (H-OFFER) and Events (H-EVENTS) have their own screens in app/(next).
+  if (
+    module === "today" ||
+    module === "inbox" ||
+    module === "offerings" ||
+    module === "events" ||
+    module === "leagues"
+  )
     return null;
   const copy = pageCopy ?? moduleCopy[module];
   const createAction =
-    module === "events" && eventKinds?.[0]
-      ? {
-          href: `/events/create?type=${eventKinds[0]}`,
-          label: `Create ${eventKinds[0].replaceAll("-", " ")}`,
-        }
-      : module === "events"
-        ? { href: "/events/create?type=tournament", label: "Create event" }
-        : module === "leagues"
-          ? { href: "/events/create?type=league", label: "Create league" }
-          : module === "places"
-            ? { href: hqRoutes.placeCreate, label: "Add venue" }
-            : module === "marketing"
-              ? {
-                  href: hqRoutes.marketingCreate,
-                  label: "Create campaign",
-                }
-              : module === "money"
-                ? { href: hqRoutes.moneySetup, label: "Configure money" }
-                : undefined;
-  // Until H9 turns them into in-page filters, the old sidebar children are a
-  // row of type links inside the Events list.
-  const typeLinks =
-    module === "events" || module === "leagues"
-      ? eventNavigationItems
-      : undefined;
+    module === "places"
+      ? { href: hqRoutes.placeCreate, label: "Add venue" }
+      : module === "marketing"
+        ? {
+            href: hqRoutes.marketingCreate,
+            label: "Create campaign",
+          }
+        : module === "money"
+          ? { href: hqRoutes.moneySetup, label: "Configure money" }
+          : undefined;
 
   return (
-    <main
-      className={`hq-page module-page${module === "leagues" ? " module-page--leagues" : ""}`}
-    >
+    <main className="hq-page module-page">
       <header className="hq-page-heading">
         <div>
           <h1>{copy.title}</h1>
@@ -787,11 +648,6 @@ export function ModulePanel({
         </div>
         {createAction && (
           <div className="hq-page-heading__actions">
-            {module === "events" && (
-              <Link className="hq-button" href={hqRoutes.schedule}>
-                Schedule
-              </Link>
-            )}
             <Link
               className="hq-button hq-button--primary"
               href={createAction.href}
@@ -802,49 +658,8 @@ export function ModulePanel({
         )}
       </header>
 
-      {typeLinks && (
-        <nav aria-label="Event types" className="hq-page-heading__actions">
-          {typeLinks.map((item) => (
-            <Link
-              aria-current={activeType === item.slug ? "page" : undefined}
-              className={`hq-button${activeType === item.slug ? " hq-button--primary" : ""}`}
-              href={item.href}
-              key={item.slug}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      )}
-
-      {(module === "events" || module === "leagues" || module === "money") && (
-        <TicketApprovalQueue approvals={ticketApprovals} />
-      )}
-
       {module === "places" ? (
         <VenuePortfolioPanel workspace={workspace} />
-      ) : module === "events" ? (
-        <EventsTable
-          dashboard={dashboard}
-          workspace={workspace}
-          kinds={eventKinds}
-          focusedDraftId={focusedDraftId}
-          publicWebUrl={
-            process.env.NEXT_PUBLIC_DUNA_WEB_URL?.replace(/\/$/, "") ??
-            process.env.NEXT_PUBLIC_WEB_URL?.replace(/\/$/, "") ??
-            "https://duna.coach"
-          }
-        />
-      ) : module === "leagues" ? (
-        <>
-          <SessionDraftManager
-            focusedDraftId={focusedDraftId}
-            kinds={["league"]}
-            workspace={workspace}
-          />
-          <EventHistoryWorkspace kinds={["league"]} workspace={workspace} />
-          <EventInventory dashboard={dashboard} kinds={["league"]} />
-        </>
       ) : module === "money" ? null : module === "marketing" ? (
         <MessagesPanel workspace={workspace} />
       ) : module === "reports" ? (

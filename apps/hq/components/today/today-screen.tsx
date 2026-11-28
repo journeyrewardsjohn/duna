@@ -1,4 +1,4 @@
-import { hqHref, hqModuleHref } from "@duna/core/hq-routes";
+import { hqHref } from "@duna/core/hq-routes";
 import { Button } from "@duna/ui/tideline";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -80,7 +80,7 @@ export function TodayScreen({ session }: { readonly session: ShellSession }) {
           </PageSection>
           <PageSection
             aside={
-              <Link className="today-link" href={hqModuleHref("events")}>
+              <Link className="today-link" href={hqHref("events")}>
                 All events
               </Link>
             }

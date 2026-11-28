@@ -3,7 +3,7 @@ import type {
   OperatorScorableMatch,
   OrganizationSetupReadiness,
 } from "@duna/api";
-import { hqHref, hqModuleHref } from "@duna/core/hq-routes";
+import { hqHref } from "@duna/core/hq-routes";
 import type { Metric } from "@duna/core";
 
 /**
@@ -105,7 +105,7 @@ export function attentionItems({
         live > 0
           ? `${live} ${live === 1 ? "is" : "are"} being played now.`
           : "Scores keep ratings and standings right.",
-      href: hqModuleHref("events"),
+      href: hqHref("events"),
       action: "Open matches",
       icon: "score",
     });
