@@ -60,6 +60,8 @@ import { QuickActionsSheet } from "./QuickActionsSheet";
 import { VideoTransferBanner } from "./VideoTransferBanner";
 import { WatchScoreInbox } from "../features/matches/WatchScoreInbox";
 import { styles } from "../legacy/styles";
+import { DevicePostureProvider } from "@duna/expo-device-posture";
+import { PlayerLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
 
 type OrganizationModalDestination =
   | { readonly kind: "coach"; readonly coach: MobileCoach }
@@ -142,6 +144,12 @@ export function DunaApp() {
     readonly kind: DiscoverIntentKind;
   }>();
   const screenTransition = useRef(new Animated.Value(1)).current;
+  // Development-only Layout lab: preview builds only, never production navigation.
+  const [layoutLabOpen, setLayoutLabOpen] = useState(
+    Boolean(layoutLabAutostart),
+  );
+  const previewRef = useRef(runtime.mode === "preview");
+  previewRef.current = runtime.mode === "preview";
 
   useEffect(() => {
     if (!videoTransfer) return;
@@ -167,6 +175,10 @@ export function DunaApp() {
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
+      if (url?.startsWith("duna://dev/layout-lab")) {
+        if (previewRef.current) setLayoutLabOpen(true);
+        return;
+      }
       const link = parsePlayerDeepLink(url);
       if (!link) return;
       if (link.kind === "vision-remote") {
@@ -497,7 +509,7 @@ export function DunaApp() {
     setExternalEventDetail(event);
   };
 
-  return (
+  const shell = (
     <MessagingNavigationContext.Provider
       value={{
         open: (support) => {
@@ -514,11 +526,12 @@ export function DunaApp() {
         {runtime.dashboard ? (
           <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
         ) : null}
-        <SafeAreaView edges={["top"]} style={styles.safe}>
+        <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
           <StatusBar style="dark" />
           <View style={styles.app}>
             <PreviewBanner
               hidden={tab === "home" || tab === "messages" || tab === "ai"}
+              onOpenLayoutLab={() => setLayoutLabOpen(true)}
             />
             <Animated.View
               style={[
@@ -937,5 +950,14 @@ export function DunaApp() {
         </SafeAreaView>
       </PlayerProfileProvider>
     </MessagingNavigationContext.Provider>
+  );
+
+  return (
+    <DevicePostureProvider>
+      {shell}
+      {layoutLabOpen && runtime.mode === "preview" ? (
+        <PlayerLayoutLab onClose={() => setLayoutLabOpen(false)} />
+      ) : null}
+    </DevicePostureProvider>
   );
 }

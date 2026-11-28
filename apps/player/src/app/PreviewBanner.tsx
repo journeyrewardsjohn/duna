@@ -1,22 +1,30 @@
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { usePlayerRuntime } from "../../runtime";
 import { SatoshiText as Text } from "../../satoshi-text";
 import { styles } from "../legacy/styles";
 
 export function PreviewBanner({
   hidden = false,
+  onOpenLayoutLab,
 }: {
   readonly hidden?: boolean;
+  /** Preview builds only: a long press opens the development Layout lab. */
+  readonly onOpenLayoutLab?: () => void;
 }) {
   const { isOffline, lastSuccessfulSyncAt, mode } = usePlayerRuntime();
   if (hidden) return null;
   if (mode === "preview") {
     return (
-      <View style={styles.previewBanner}>
+      <Pressable
+        accessibilityHint="Opens the development Layout lab"
+        accessibilityRole="button"
+        onLongPress={onOpenLayoutLab}
+        style={styles.previewBanner}
+      >
         <Text style={styles.previewBannerText}>
           PREVIEW · SIGN-IN AND PAYMENTS ARE DISABLED
         </Text>
-      </View>
+      </Pressable>
     );
   }
   if (!isOffline) return null;

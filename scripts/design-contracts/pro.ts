@@ -1,11 +1,16 @@
+import { adaptiveScreenCheck } from "./adaptive-screens";
 import type { SurfaceContract } from "./types";
+
+/** Paths on the Duna Design System; `src/features/**` entries also get the adaptive-layout rule. */
+const migrated: readonly string[] = [];
 
 /** Duna Pro native (`apps/pro`). Owners: M-F5, M-R0 … M-R6, M-N1 for app config. */
 export const pro: SurfaceContract = {
   surface: "pro",
   owners: "M-F5, M-R0 … M-R6, M-N1",
-  migrated: [],
+  migrated,
   checks: [
+    adaptiveScreenCheck("pro", migrated),
     { kind: "expoAppConfig", app: "pro" },
     {
       kind: "fontLoader",

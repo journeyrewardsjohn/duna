@@ -69,6 +69,25 @@ export type ContractCheck =
       readonly root: string;
       readonly values: readonly string[];
     })
+  /**
+   * Source rules for screens that have migrated (each root is a file or a
+   * folder): no source may match a forbidden pattern, and each root's sources
+   * together must contain every required value. Used by the adaptive-layout
+   * rule for native feature screens (`adaptive-screens.ts`).
+   */
+  | (Base & {
+      readonly kind: "migratedSourceRules";
+      readonly roots: readonly string[];
+      readonly forbidden: readonly {
+        readonly pattern: string;
+        readonly flags?: string;
+        readonly message: string;
+      }[];
+      readonly required: readonly {
+        readonly value: string;
+        readonly message: string;
+      }[];
+    })
   /** A file stays at or below `bytes` while it exists. */
   | (Base & {
       readonly kind: "maxBytes";
