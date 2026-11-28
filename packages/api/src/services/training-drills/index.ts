@@ -1,9 +1,31 @@
 /**
- * Service seam: training-drills (owner: B5). Drill library, versions, review and storefront (flag training.storefront).
- *
- * Business rules, repository access and provider calls for this domain live
- * under this directory and are called from ../../routers/training-drills.ts.
- * Branch on usesDemoData() from ../data-source before touching the database
- * and return fixtures from @duna/core/demo/training-drills in demo mode.
+ * Service seam: training-drills (owner: B5; scenes B6a). The drill library,
+ * versions, scope, review, listings, the store (kill switch
+ * training.storefront) and purchases, called from
+ * ../../routers/training-drills.ts. Scenes are validated by the pure
+ * `@duna/core/training-scene`. See docs/product/training.md.
  */
-export {};
+export {
+  type DrillViewer,
+  pinDrillVersions,
+  purchasedCondition,
+  visibleDrillCondition,
+} from "./access";
+export {
+  copyLegacyScene,
+  delist,
+  drillDetail,
+  LEGACY_SCENE_CONVERTED,
+  library,
+  marketplaceFeeBps,
+  personalDataFindings,
+  playerDrill,
+  publicListing,
+  purchase,
+  purchases,
+  saveListing,
+  saveVersion,
+  setScope,
+  store,
+  submitForReview,
+} from "./drills-service";
