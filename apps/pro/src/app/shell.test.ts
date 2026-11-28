@@ -103,7 +103,26 @@ describe("route table", () => {
     expect(routesForTab("people")).toEqual(["people", "film"]);
     expect(routesForTab("inbox")).toEqual(["messages", "ai"]);
     expect(routesForTab("money")).toEqual(["money", "getPaid"]);
-    expect(routesForTab("schedule")).toEqual(["calendar", "checkin", "events"]);
+    expect(routesForTab("schedule")).toEqual([
+      "calendar",
+      "checkin",
+      "events",
+      "availability",
+      "timeAway",
+      "cover",
+    ]);
+  });
+
+  it("my working life (M-R5) lives in Schedule; Earnings is the money tab's root", () => {
+    for (const key of ["availability", "timeAway", "cover"] as const) {
+      expect(ROUTES[key]).toMatchObject({
+        tab: "schedule",
+        presentation: "pane",
+        legacy: false,
+      });
+    }
+    // Earnings is the tab's root: nothing is pushed beside it by default.
+    expect(TABS.find((tab) => tab.key === "money")?.defaultRoute).toBeNull();
   });
 
   it("the session (M-R2) opens where it was chosen; attendance covers the window, not live", () => {
@@ -268,7 +287,7 @@ describe("shell reducer", () => {
     const state = initialShellState();
     expect(visibleRoute(state, "people", 1)).toBeNull();
     expect(visibleRoute(state, "people", 2)?.key).toBe("people");
-    expect(visibleRoute(state, "money", 2)?.key).toBe("money");
+    expect(visibleRoute(state, "money", 2)).toBeNull();
     expect(visibleRoute(state, "today", 2)).toBeNull();
     expect(visibleRoute(state, "inbox", 2)).toBeNull();
   });
