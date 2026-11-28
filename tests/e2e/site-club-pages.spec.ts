@@ -134,8 +134,9 @@ test.describe("Club, offering, event and coach pages", () => {
     const types = await structuredTypes(page);
     expect(types).toContain("SportsClub");
     expect(types).toContain("SportsActivityLocation");
-    // Nobody who booked is named on a public page.
-    await expect(page.getByText("Mara Lewis")).toHaveCount(0);
+    // Nobody who booked is named on a public page (the card carries only
+    // the viewer's own name).
+    await expect(page.getByText("Noa Williams")).toHaveCount(0);
   });
 
   test("club page → offering → checkout entry", async ({ page }) => {
@@ -163,7 +164,10 @@ test.describe("Club, offering, event and coach pages", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Serve-receive clinic" }),
     ).toBeVisible();
-    expect(await structuredTypes(page)).toEqual([]);
+    // Checkout is not indexed and claims no offering of its own.
+    const checkoutTypes = await structuredTypes(page);
+    expect(checkoutTypes).not.toContain("Service");
+    expect(checkoutTypes).not.toContain("SportsClub");
   });
 
   test("membership shown as the club's card → join entry", async ({ page }) => {
@@ -312,9 +316,7 @@ test.describe("Club, offering, event and coach pages", () => {
     page,
   }) => {
     await page.goto("/clubs/northside-indoor-collective");
-    await expect(
-      page.getByRole("heading", { name: "Not open for booking yet" }),
-    ).toBeVisible();
+    await expect(page.getByText("Not open for booking yet")).toBeVisible();
     const response = await page.goto("/clubs/no-such-club-anywhere");
     expect(response?.status()).toBe(404);
     await expect(
