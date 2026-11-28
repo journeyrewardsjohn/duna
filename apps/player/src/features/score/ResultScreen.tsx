@@ -402,7 +402,13 @@ export function ResultScreen() {
 
       {model.state === "awaiting" && model.needsMe ? (
         <View style={{ gap: tokens.space["2"] }}>
-          <Text variant="phone-heading">Is this right?</Text>
+          <Notice
+            icon="clock"
+            tone="warning"
+            title={model.waiting ?? undefined}
+          >
+            Is this right? Sand Ratings move once your side confirms.
+          </Notice>
           <ActionButton
             busy={busy === "confirmed"}
             label="Confirm result"
@@ -423,9 +429,15 @@ export function ResultScreen() {
 
       {model.state === "awaiting" && !model.needsMe ? (
         <View style={{ gap: tokens.space["2"] }}>
-          {model.waiting ? (
+          {model.waitingFor === "them" && model.waiting ? (
             <Notice icon="clock" tone="warning" title={model.waiting}>
               Sand Ratings stay as they are until one of them confirms.
+            </Notice>
+          ) : null}
+          {model.waitingFor === "no-profile" && model.waiting ? (
+            <Notice icon="clock" tone="warning" title={model.waiting}>
+              Share the claim link: once one of them joins Duna they can confirm
+              it.
             </Notice>
           ) : null}
           {model.pendingClaims.length > 0 ? (

@@ -237,49 +237,108 @@ function summary(overrides: Partial<MatchSummary> = {}): MatchSummary {
 
 describe("the result screen's model", () => {
   const now = new Date("2026-11-28T12:00:00Z");
-  it("awaiting, added by me: waiting on the other side, never asks me", () => {
-    const model = resultModel({
-      summary: summary(),
-      scoring: {
-        confirmation: { confirmedPersonIds: ["me"], disputedPersonIds: [] },
-        reporting: {
-          reporters: [],
-          lastReporter: {
-            personId: "me",
-            displayName: "Noa Williams",
-            reportedAt: now.toISOString(),
-          },
+  // Noa ("me") added it, so Noa's side is confirmed (the save confirms the
+  // reporter's side); only Theo or Jamie can confirm.
+  const addedByMe = (
+    pending: readonly { personId: string; displayName: string }[] = [],
+  ) =>
+    ({
+      status: "pending-verification",
+      confirmation: { confirmedPersonIds: ["me"], disputedPersonIds: [] },
+      reporting: {
+        reporters: [],
+        lastReporter: {
+          personId: "me",
+          displayName: "Noa Williams",
+          reportedAt: now.toISOString(),
         },
-      } as never,
+      },
+      participantClaims: pending.length
+        ? {
+            shareUrl: "https://duna.coach/join/match/t",
+            pending: pending.map((claim) => ({ ...claim, side: "B" })),
+          }
+        : undefined,
+    }) as never;
+
+  it("the side that added it: names only the people who can confirm", () => {
+    for (const viewer of ["me", "mara", undefined]) {
+      const model = resultModel({
+        summary: summary(),
+        scoring: addedByMe(),
+        myId: viewer,
+        now,
+      });
+      expect(model.state).toBe("awaiting");
+      expect(model.needsMe).toBe(false);
+      expect(model.waitingFor).toBe("them");
+      expect(model.waiting).toBe("Waiting on Theo or Jamie");
+    }
+    const mine = resultModel({
+      summary: summary(),
+      scoring: addedByMe(),
       myId: "me",
       now,
     });
-    expect(model.state).toBe("awaiting");
-    expect(model.title).toBe("You won");
-    expect(model.needsMe).toBe(false);
-    expect(model.waiting).toBe("Waiting on Theo or Jamie");
-    expect(model.net.winnerProvisional).toBe(true);
+    expect(mine.title).toBe("You won");
+    expect(mine.net.winnerProvisional).toBe(true);
   });
 
-  it("awaiting, added by the other side: asks me to confirm", () => {
+  it("the side that must confirm: waiting on you, with Confirm", () => {
+    for (const viewer of ["theo", "jamie"]) {
+      const model = resultModel({
+        summary: summary(),
+        scoring: addedByMe(),
+        myId: viewer,
+        now,
+      });
+      expect(model.needsMe).toBe(true);
+      expect(model.waitingFor).toBe("you");
+      expect(model.waiting).toBe("Waiting on you");
+      expect(model.title).toBe("You lost");
+    }
+  });
+
+  it("someone added by name can't confirm until they join", () => {
     const model = resultModel({
       summary: summary(),
-      scoring: {
-        confirmation: { confirmedPersonIds: ["me"], disputedPersonIds: [] },
-        reporting: {
-          reporters: [],
-          lastReporter: {
-            personId: "me",
-            displayName: "Noa",
-            reportedAt: now.toISOString(),
-          },
-        },
-      } as never,
-      myId: "theo",
+      scoring: addedByMe([{ personId: "jamie", displayName: "Jamie Stone" }]),
+      myId: "me",
       now,
     });
-    expect(model.needsMe).toBe(true);
-    expect(model.title).toBe("You lost");
+    expect(model.waiting).toBe("Waiting on Theo");
+    expect(
+      resultModel({
+        summary: summary(),
+        scoring: addedByMe([{ personId: "jamie", displayName: "Jamie Stone" }]),
+        myId: "jamie",
+        now,
+      }).needsMe,
+    ).toBe(false);
+  });
+
+  it("nobody on the other side has a Duna profile yet", () => {
+    const model = resultModel({
+      summary: summary(),
+      scoring: addedByMe([
+        { personId: "theo", displayName: "Theo Park" },
+        { personId: "jamie", displayName: "Jamie Stone" },
+      ]),
+      myId: "me",
+      now,
+    });
+    expect(model.needsMe).toBe(false);
+    expect(model.waitingFor).toBe("no-profile");
+    expect(model.waiting).toBe(
+      "Nobody on the other side has a Duna profile yet",
+    );
+    expect(model.pendingClaims).toEqual(["Theo Park", "Jamie Stone"]);
+  });
+
+  it("without the confirmations, names nobody", () => {
+    const model = resultModel({ summary: summary(), myId: "me", now });
+    expect(model.waiting).toBeNull();
+    expect(model.needsMe).toBe(false);
   });
 
   it("confirmed: the rating movement, never a provisional number", () => {

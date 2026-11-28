@@ -17,6 +17,11 @@ import {
   type ResultState,
 } from "./result-rules";
 
+export type WaitingFor = "you" | "them" | "no-profile" | null;
+
+export const WAITING_ON_YOU = "Waiting on you";
+export const NO_PROFILE_YET = "Nobody on the other side has a Duna profile yet";
+
 export interface ResultModel {
   readonly state: ResultState;
   readonly chip: string;
@@ -28,7 +33,9 @@ export interface ResultModel {
   readonly mySide: "A" | "B" | null;
   /** I'm on a side that has not confirmed and I did not report it. */
   readonly needsMe: boolean;
-  /** "Waiting on Theo or Jamie", or null. */
+  /** Who the result waits on: the viewer, people who can confirm, or nobody on Duna yet. */
+  readonly waitingFor: WaitingFor;
+  /** "Waiting on Theo or Jamie", "Waiting on you", or null. */
   readonly waiting: string | null;
   /** First names on the other side, for the confirm message. */
   readonly opponents: readonly string[];
@@ -84,20 +91,40 @@ export function resultModel(input: {
     winner: summary.winner === "A" ? "home" : "away",
     names,
   });
+  // Who may confirm, as `confirmMatchResult` decides it: a signed-in
+  // participant on a side that has no confirmation yet (whoever added the
+  // result confirmed their own side when saving it). People added by name
+  // can confirm only once they have claimed a Duna profile. Without the
+  // scoring state the confirmations are unknown, so nobody is named.
   const confirmed = new Set(scoring?.confirmation.confirmedPersonIds ?? []);
+  const unclaimed = new Set(
+    scoring?.participantClaims?.pending.map((claim) => claim.personId) ?? [],
+  );
   const sidePeople = (side: "A" | "B") =>
     side === "A" ? summary.teamA : summary.teamB;
   const sideConfirmed = (side: "A" | "B") =>
     sidePeople(side).some((person) => confirmed.has(person.id));
-  const reporter = scoring?.reporting.lastReporter?.personId;
+  const canSignIn = (person: MatchSummary["teamA"][number]) =>
+    !unclaimed.has(person.id) &&
+    person.profileClaimStatus !== "unclaimed" &&
+    person.profileClaimStatus !== "claim-pending";
+  const awaiting = state === "awaiting" && scoring !== undefined;
+  const confirmers = awaiting
+    ? (["A", "B"] as const)
+        .filter((side) => !sideConfirmed(side))
+        .flatMap((side) => sidePeople(side).filter(canSignIn))
+    : [];
   const needsMe =
-    state === "awaiting" &&
-    mySide !== null &&
-    !sideConfirmed(mySide) &&
-    reporter !== myId;
-  const unconfirmedOthers = (["A", "B"] as const)
-    .filter((side) => side !== mySide && !sideConfirmed(side))
-    .flatMap((side) => sidePeople(side).map((person) => person.displayName));
+    myId !== undefined && confirmers.some((person) => person.id === myId);
+  const waitingFor: WaitingFor = !awaiting
+    ? null
+    : needsMe
+      ? "you"
+      : confirmers.length > 0
+        ? "them"
+        : (["A", "B"] as const).some((side) => !sideConfirmed(side))
+          ? "no-profile"
+          : null;
   const otherSide = mySide === "B" ? summary.teamA : summary.teamB;
   const won = mySide ? summary.winner === mySide : null;
   const title =
@@ -128,7 +155,15 @@ export function resultModel(input: {
     net,
     mySide,
     needsMe,
-    waiting: state === "awaiting" ? waitingOn(unconfirmedOthers) : null,
+    waitingFor,
+    waiting:
+      waitingFor === "you"
+        ? WAITING_ON_YOU
+        : waitingFor === "them"
+          ? waitingOn(confirmers.map((person) => person.displayName))
+          : waitingFor === "no-profile"
+            ? NO_PROFILE_YET
+            : null,
     opponents: otherSide.map((person) => first(person.displayName)),
     whatItWouldDo: whatThisResultWouldDo({
       teamSize: summary.teamSize ?? summary.teamA.length,
