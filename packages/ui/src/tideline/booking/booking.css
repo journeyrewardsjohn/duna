@@ -58,9 +58,9 @@
         scale: calc(1 - 0.01 * var(--td-motion));
       }
 
-      /* Selected: a tide-blue ring; never colour alone, the radio is checked. */
+      /* Selected: the selected-ring; never colour alone, the radio is checked. */
       &[data-checked] {
-        box-shadow: inset 0 0 0 var(--td-bk-ring) var(--td-link);
+        box-shadow: inset 0 0 0 var(--td-bk-ring) var(--td-selected-ring);
       }
 
       &:focus-visible {
@@ -201,6 +201,8 @@
       padding: var(--td-space-panel-comfort);
       border-radius: var(--td-radius-panel-comfort);
       background: var(--td-surface-warm);
+      /* On the Salt ground the warm panel is the ground's own colour: a hairline holds its edge. */
+      box-shadow: inset 0 0 0 1px var(--td-line);
       color: var(--td-text);
     }
 
@@ -346,7 +348,7 @@
         display: inline-flex;
         gap: var(--td-space-1);
         align-items: center;
-        min-height: var(--td-size-phone-control-sm);
+        min-height: var(--td-size-target);
         margin: 0;
         padding: 0;
         border: 0;

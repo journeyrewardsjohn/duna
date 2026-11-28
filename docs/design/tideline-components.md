@@ -16,14 +16,6 @@ uses it yet; later refactors adopt it screen by screen.
 button, dialog, menu, date picker or search box to an app. If a component is
 missing, add it here.
 
-**Current state:** the library still carries the published Tideline 3.1
-tokens and the visual details that come with them (tide-blue actions, the
-flare-orange live colour, Geist only with no Jost titles, the motion values
-below).
-Work package F2a replaces them with the 4.1.1 tokens, names and motion verbs
-(Rise, Rally, Cross). Until then, treat any colour, type or motion value
-quoted in this file as the 3.1 value, not the contract.
-
 ## Use it
 
 ```tsx
@@ -38,8 +30,9 @@ import { Button, Tideline, TidelineFonts } from "@duna/ui/tideline";
 
 - Every component must render inside a `Tideline` scope (a `div.td`). Tokens
   and styles apply only inside it, so the rest of the page is untouched.
-- `theme="dark"` is the person's preference. `zone="live"` means play in
-  progress and wins over the theme. A nested scope states its own theme.
+- Themes and zones are `data-` attributes on the `.td` wrapper (the
+  `Tideline` props set them). See "Themes and zones" under Tokens.
+  A nested scope states its own theme and zone; it never inherits them.
 - Popups (dialogs, menus, selects, toasts) render in place in the browser's
   top layer, so they stay inside the scope. Render `Toaster` once per scope.
 - In HQ and Web, also import `@duna/ui/tideline/legacy-bridge.css` (see
@@ -117,14 +110,17 @@ missing from a list or listed twice.
 - **Only `packages/ui/src/tideline/**` imports `@ui-sdk/*`.** Apps and other
   packages use the Tideline wrappers. `styles.test.ts` scans `apps/` and
   `packages/` and fails on any other import.
-- **No `!important`.** Win with the layer and specificity instead. Two legacy
-  uses remain until the apps' global CSS is layered (closed UI SDK content in
-  `base.css`, the primary label lock in `button.css`); `styles.test.ts`
-  allows exactly those and fails on any new one. The Tideline guard in
-  `pnpm verify:design-system` enforces the same rule (plus no retired orange,
-  Solar only on live states, no vendor names in copy); its legacy exemptions
-  for these files are listed in `scripts/design-contracts/shared.ts` and go
-  with F2a.
+- **No `!important`.** Win with the layer and specificity instead; against
+  unlayered host CSS, `legacy-bridge.css` hands properties back with
+  `revert-layer`. `styles.test.ts` fails on any important declaration. The
+  Tideline guard in `pnpm verify:design-system` enforces the same rule (plus
+  no retired orange, Solar only on live states, no vendor names in copy)
+  with no exemptions for the library.
+- **Colour discipline.** Solar (`live`, `live-ink`, `live-wash`) only inside
+  a live-state selector (the live chip, live notice, live badge, recording);
+  offline, scarcity, dates and CTAs never wear it. Dune (`sun`, `energy`) is
+  a non-text accent: warm text and small marks use `sun-ink` / `energy-ink`.
+  Raw colours never appear in a family stylesheet.
 - **Keyboard first.** Every interactive part is reachable and operable from
   the keyboard, with the shared focus ring, focus return after overlays and
   roving focus in groups. Add the keyboard path to
@@ -207,52 +203,126 @@ browser supports it and motion is welcome, and just runs it otherwise.
 `Button` loading blocks a second press immediately, keeps its width and its
 label, and puts the spinner where the icon was.
 
-Motion tokens (3.1, until F2a applies contract rule R10): 80ms press, 120ms
-hover and toggles, 180ms popovers and tabs, 260ms sheets and dialogs, one
-ease-out curve, press scale 0.98. Under
-`prefers-reduced-motion` movement stops and state changes fall back to
-opacity; every loop has a resting state.
+Motion follows contract R10: three verbs, each a named duration and easing.
+
+| Verb  | Means                           | Tokens                                                                     |
+| ----- | ------------------------------- | -------------------------------------------------------------------------- |
+| Rise  | Something grows out of a line   | `--td-duration-rise` 600ms, `--td-ease-rise`                               |
+| Rally | Things arrive one after another | `--td-duration-rally` 600ms, `--td-ease-rally`, `--td-stagger-rally` 120ms |
+| Cross | Something travels over a line   | `--td-duration-cross` 320ms, `--td-ease-cross`                             |
+
+Interface feedback keeps the small durations: 80ms press, 120ms hover and
+toggles, 180ms popovers and tabs, 260ms sheets and dialogs, one ease-out
+curve (`cubic-bezier(0.2, 0.8, 0.2, 1)`), press scale 0.98. Nothing bounces,
+springs or overshoots (every curve stays inside 0..1; `tokens.test.ts`
+checks), and nothing scales on hover. Entrances play once; only loaders and
+the live indicator loop.
+
+Reduced motion is in the token layer: under `prefers-reduced-motion: reduce`
+`tokens.css` sets Rise, Rally and Cross to a 200ms fade
+(`--td-duration-fade-reduced`), the Rally stagger to 0, and popovers and
+sheets to 120ms; `base.css` sets `--td-motion: 0`, which multiplies every
+transform to nothing. Every loop has a resting state in its family's own
+stylesheet.
 
 ## Tokens
 
-`packages/ui/src/tideline/tokens/tokens.json` is the source. Two files are generated
-from it and must not be edited by hand:
+The source of truth is the contract's
+[`tideline-4.1.1/tokens.json`](tideline-4.1.1/tokens.json). Three files are
+generated from it and must not be edited by hand:
 
-- `tokens.css`: every token as a `--td-*` custom property, with light, dark
-  and live values selected by `data-theme` / `data-zone` on the `.td` wrapper
-  (never on `:root`).
+- `packages/ui/src/tideline/tokens/tokens.json`: the code token source, which
+  the web and native builders read. It is the contract file with the
+  canonical renames applied, the retired tokens removed, the contrast
+  adjustments applied and the `$duna` zone and icon decisions promoted to
+  ordinary tokens (`canonicalTidelineSource` in `token-build.ts`).
+- `tokens.css`: every token as a `--td-*` custom property, with theme and
+  zone values selected by `data-theme` / `data-zone` on the `.td` wrapper
+  (never on `:root`), and the reduced-motion values.
 - `tokens.ts`: resolved values (numbers for lengths and times) for React
-  Native.
+  Native, with `tidelineColors(theme, zone)`.
 
-To take a design revision, replace `tokens.json` and run:
+To take a design revision, replace the contract file and run:
 
 ```bash
-pnpm tideline:tokens          # rewrites tokens.css and tokens.ts
-pnpm tideline:tokens --check  # fails if they are stale
+pnpm tideline:tokens          # rewrites tokens.json, tokens.css and tokens.ts
+pnpm tideline:tokens --check  # fails if any is stale
 ```
 
-`tokens.test.ts` fails when the generated files are stale, when a text pair
-drops below WCAG AA in any theme, or when the stylesheet uses a raw colour.
+### Names
 
-`tokens.json` is the published Tideline 3 file, unchanged. Names the code
-needs before design publishes them live in `tokens.additions.json` (today: one
-12px `micro` type style, because the published `tab-label` is 11px, under the
-12px floor). The build merges the additions in, and a token of the same name in
-`tokens.json` always wins, so an addition stops mattering once design ships it.
+Semantic roles keep their names, so components never change for a value:
+`ground`, `surface*`, `line*`, `border-control`, `text*`, `action*`,
+`on-action*`, `link`, `focus`, `selected*`, `sun*`, `energy*`, `attention*`,
+`live*`, `positive*`, `warning*`, `danger*`, `info*`, `club-*`, `mesh-*`.
 
-The build skips any published type style below the 12px floor (today the
-11px `tab-label`): it stays in `tokens.json` but is not generated into
-`tokens.css` or `tokens.ts`, so no product code can use it.
+The contract's primitive ramps reuse brand words for other colours, so the
+build renames them, keeping every value:
+
+| Contract ramp | Code name    | What it is                                                       |
+| ------------- | ------------ | ---------------------------------------------------------------- |
+| `salt-*`      | `haze-*`     | Cool grey ramp (`haze-0` is white)                               |
+| `night-*`     | `umber-*`    | Warm brown ramp; product dark neutrals are `graphite-*`          |
+| `flare-*`     | `solar-*`    | Solar ramp (`solar-500` is #F2542D); live states only            |
+| `sunburst-*`  | `hardwood-*` | Hardwood ramp (`hardwood-400` is #B5814F)                        |
+| `sun-*`       | `dune-*`     | Dune ramp (`dune-400` is #D9C3A0); the `sun` role keeps its name |
+
+The brand colours are `brand-night-court` (#0E1A22), `brand-salt`
+(#F4F2EC), `brand-dune` (#D9C3A0), `brand-hardwood` (#B5814F) and
+`brand-solar` (#F2542D). No token is named `salt` or `night-court` unless it
+is the brand value. Components use roles, not primitives or brand tokens;
+the exceptions are labels on a fixed fill (`.td-btn--light`, the live badge
+use `brand-night-court`).
+
+Promoted from `$duna`: icon sizes `size-icon-chip` 14, `size-icon-inline`
+16, `size-icon-control` 20, `size-icon-nav` 24, `size-brand-mark-max` 24, and
+`icon-stroke` 1.75, `icon-linecap` square, `icon-linejoin` miter (the 18px
+`size-icon` is retired; `size-icon-sm` and `size-icon-lg` stay as 16 / 20
+aliases); the HQ shell `hq-sidebar-expanded` 248px, `hq-sidebar-collapsed`
+64px, `hq-top-bar` 56px and the themed `hq-nav-selected-wash`.
+
+Type: `--td-font-brand` is Jost (falling back to Geist until the Jost files
+load, work package F3), with `--td-type-brand-weight` 500,
+`--td-type-brand-tracking` -0.015em and `--td-type-brand-min` 22px. The
+`.td-display` role, the one title per screen, uses it; every other role is
+Geist (`--td-font-ui`), numerals Geist 600 tabular, codes Geist Mono.
+
+### Themes and zones
+
+| Attribute on `.td`                          | Prop           | Effect                                                                                                               |
+| ------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| none, or `data-theme="light"`               | default        | Light: Salt ground (the player ground), white cards                                                                  |
+| `data-theme="dark"`                         | `theme="dark"` | The person's dark preference: Night Court ground                                                                     |
+| `data-zone="live"` (or `data-theme="live"`) | `zone="live"`  | Play in progress; wins over the theme                                                                                |
+| `data-zone="hq"`                            | `zone="hq"`    | HQ: white / cool neutral ground, never Salt or sand; keeps the theme (`data-zone="hq" data-theme="dark"` is HQ dark) |
+
+`tidelineColors(theme, zone)` returns the same resolved set for native code.
+
+### Contrast
+
+`tokens.test.ts` checks, in light, dark and live and in the player and HQ
+zones: 4.5:1 for every text role on every ground and surface it may sit on,
+every label on its fill (`on-action` on `action` and `action-hover`, ...) and
+every status ink on its wash; 3:1 for `border-control`, `focus`, `action`,
+`selected-ring`, `live` and `energy-ink` marks on ground, surface and
+surface-subtle. Disabled labels are exempt (WCAG 1.4.3). One published
+value is adjusted (`TIDELINE_VALUE_ADJUSTMENTS`): light `border-control`
+#8A9399 is 2.79:1 on Salt, so the code uses `haze-400` (#7F8A95, 3.14:1).
+
+The build skips any published type style below the 12px floor (the 11px
+`tab-label`): it stays in `tokens.json` but is not generated. Names the code
+needs before design publishes them live in `tokens.additions.json` (the 12px
+`micro` style, `duration-rally`, `ease-rally`, `ease-cross`,
+`duration-fade-reduced` and the reduced-motion values); a published name
+always wins.
 
 Following the published system, text fields use the hairline `line-strong`
 border; small indicators (checkbox, radio, switch) keep the 3:1
 `border-control`.
 
-The primary button label is `on-action`, white in every theme. `button.css`
-locks it with `!important` inside the layer, which outranks every unlayered
-rule a host page has, so no page style for links can turn it dark. This is
-one of the two legacy `!important` uses; it goes once HQ and Web layer their
-global CSS. A disabled primary keeps the white label on `action-disabled`.
+The primary button label is `on-action`: Salt on Night Court in light, Night
+Court on Dune in dark and live. A disabled primary is `action-disabled` with
+a `text-3` label, always shown with its reason.
 
 ## Density
 
@@ -296,7 +366,10 @@ layer or with specificity above `.td.td`, not with a single class.
 
 ## Gallery
 
-`apps/hq/app/tideline/page.tsx` shows every component and state, with an
+`apps/hq/app/tideline/page.tsx` opens with **Foundations**: the brand
+colours, the palette by role in light, HQ, dark and live, the type roles
+(Jost falls back to Geist until F3), the icon scale and the motion verbs.
+Then it shows every component and state, with an
 Interactions lab (simulated latency of 0 / 150 / 600 / 2000ms and a "fail next
 request" switch). It builds its sections from
 `apps/hq/app/tideline/sections/<family>.tsx`: each file default exports its
@@ -336,7 +409,9 @@ TIDELINE_GALLERY=1 pnpm dev:hq
 - The Playwright spec `tests/e2e/tideline-gallery.spec.ts` checks keyboard
   operation of Dialog, Select, Combobox, DatePicker, Switch and Tabs, plus
   search cancellation, loader thresholds, button loading, optimistic undo and
-  rollback, and the command palette. It skips itself unless the flag is set:
+  rollback, the command palette, the Foundations grounds per theme and zone,
+  that closed UI SDK parts stay hidden, and that Solar appears only on live
+  states. It skips itself unless the flag is set:
 
   ```bash
   TIDELINE_GALLERY=1 pnpm exec playwright test tests/e2e/tideline-gallery.spec.ts --project=desktop

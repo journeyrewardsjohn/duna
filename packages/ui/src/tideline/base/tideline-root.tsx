@@ -6,8 +6,13 @@ export type TidelineThemeName = "light" | "dark";
 export interface TidelineProps extends ComponentProps<"div"> {
   /** The person's preference. Light when omitted. */
   theme?: TidelineThemeName;
-  /** `live` is a meaning (a ball is in the air), and wins over the theme. */
-  zone?: "live";
+  /**
+   * The surface's semantic zone, as `data-zone`. `live` is a meaning (a ball
+   * is in the air) and wins over the theme; `hq` repaints the ground white /
+   * cool neutral (never Salt or sand) and keeps the theme. Without a zone the
+   * ground is Salt, the player ground.
+   */
+  zone?: "live" | "hq";
   /** Paints the theme's ground behind the content. */
   ground?: boolean;
   /**

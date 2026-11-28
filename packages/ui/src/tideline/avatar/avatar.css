@@ -171,8 +171,8 @@
       font: var(--td-type-micro);
 
       .td-icon {
-        width: 14px;
-        height: 14px;
+        width: var(--td-size-icon-chip);
+        height: var(--td-size-icon-chip);
       }
     }
 

@@ -20,6 +20,7 @@
  */
 .td.td :where([class*="td-"], [data-slot]) {
   color: revert-layer;
+  -webkit-text-fill-color: revert-layer;
   font: revert-layer;
   letter-spacing: revert-layer;
   word-spacing: revert-layer;

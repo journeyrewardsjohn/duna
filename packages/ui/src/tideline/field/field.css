@@ -39,8 +39,8 @@
       }
 
       .td-icon {
-        width: 18px;
-        height: 18px;
+        width: var(--td-size-icon-control);
+        height: var(--td-size-icon-control);
       }
     }
 
