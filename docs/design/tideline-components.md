@@ -429,6 +429,27 @@ TIDELINE_GALLERY=1 pnpm dev:hq
   Playwright passes the flag to the HQ server it starts. If an HQ server
   without the flag is already on the port, stop it or set `PLAYWRIGHT_HQ_PORT`.
 
+## Time and conditions (C4, C5)
+
+Presentational: data comes in as props, rules come from `@duna/tideline-core`
+(which `@duna/ui` depends on), and every component takes an explicit IANA
+zone. Every state is on `/tideline/time-and-light` in the gallery; the
+Playwright spec is `tests/e2e/tideline-time-conditions.spec.ts`.
+
+| Component        | Built on                                   | Notes                                                                                                                                                                               |
+| ---------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DayStrip`       | UI SDK Radio                               | Takes `days` from `dayStrip()` (or the older `start` / `count`); "Today", count with micro mark or em dash, month label at boundaries, `aria-current="date"`, selected kept in view |
+| `TimeSlots`      | UI SDK Radio                               | Chips grouped by daypart with the light mark; 14 px marks; width measured from the longest label; available, few left, full, outside hours, too dark, selected, just taken (stale)  |
+| `TimeRail`       | none (ordered list)                        | Vertical day: events in lanes, free windows, a moving "now" line, sunrise / sunset, the daylight-saving change                                                                      |
+| `DurationCrests` | UI SDK Radio                               | Up to three crest options (1 crest per first hour, +1 per half hour); longer club lengths as plain options                                                                          |
+| `Dayparts`       | toggle buttons (`aria-pressed`)            | Multi-select filter by the venue's light                                                                                                                                            |
+| `TimeZoneNote`   | none                                       | "Times in PST" only when the venue's clock differs from the viewer's                                                                                                                |
+| `LightMark`      | `Icon`                                     | Glyph, inline or chip; always labelled                                                                                                                                              |
+| `SunArc`         | SVG                                        | Light left, or time until first light; elapsed arc draws once                                                                                                                       |
+| `WindOnCourt`    | SVG                                        | Wind relative to the court axis, favoured end in words, chip at 12 mph steady / 14 mph gusts                                                                                        |
+| `Conditions`     | `NotConfigured` for the unconfigured state | Full panel: temperature, play call (icon, words, crests), readings, hourly, sun arc, wind on court; loading, no data, stale, not configured                                         |
+| `ConditionsLine` | UI SDK Popover (wide) / Drawer (phone)     | One line that never wraps (drops parts in the core's priority order); call only when caution or stop; stop announced; opens `Conditions`                                            |
+
 ## Not included yet
 
 - No existing screen has been refactored.
