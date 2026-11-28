@@ -2,8 +2,11 @@
  * Outdoor conditions: the play call, wind relative to the court, whether a
  * row deserves a weather chip, and the conditions line.
  *
- * Units follow the repo's forecast contract: degrees Celsius, kilometres per
- * hour, percent, degrees clockwise from north.
+ * Inputs follow the repo's forecast contract: degrees Celsius, kilometres per
+ * hour, percent, degrees clockwise from north. This is a US product, so the
+ * default thresholds are defined in mph and degrees F (the owner reviews
+ * those) and the conditions line displays US customary units unless told
+ * otherwise.
  *
  * Every threshold below is a DEFAULT. A club may change them; pass a partial
  * override as `thresholds`. The owner has not agreed the contract's "play
@@ -11,44 +14,104 @@
  * proposals.
  */
 
-export interface ConditionThresholds {
-  /** Caution from this sustained wind (km/h). */
-  readonly cautionWindKph: number;
-  /** Stop from this sustained wind (km/h). */
-  readonly stopWindKph: number;
-  readonly cautionGustKph: number;
-  readonly stopGustKph: number;
+/** Unit system for display and thresholds. The package never infers it from a device: callers pass it. */
+export type UnitSystem = "us" | "metric";
+
+/** Display default: this is a US product, so US customary unless told otherwise. */
+export const DEFAULT_UNIT_SYSTEM: UnitSystem = "us";
+
+const KPH_PER_MPH = 1.609344;
+export const mphToKph = (mph: number): number => mph * KPH_PER_MPH;
+export const kphToMph = (kph: number): number => kph / KPH_PER_MPH;
+export const fahrenheitToCelsius = (f: number): number => ((f - 32) * 5) / 9;
+export const celsiusToFahrenheit = (c: number): number => (c * 9) / 5 + 32;
+
+/**
+ * The default thresholds in US customary units: mph and degrees Fahrenheit.
+ * These are the numbers the owner reviews, and the single source: the metric
+ * thresholds below are converted from them. A club may change any of them.
+ */
+export interface ConditionThresholdsUs {
+  /** Caution from this sustained wind (mph). */
+  readonly cautionWindMph: number;
+  readonly stopWindMph: number;
+  readonly cautionGustMph: number;
+  readonly stopGustMph: number;
   /** Chance of precipitation (percent). */
   readonly cautionPrecipPct: number;
   readonly stopPrecipPct: number;
-  /** Air temperature (Celsius), hot side. */
+  /** Air temperature (F), hot side. */
+  readonly cautionHeatF: number;
+  readonly stopHeatF: number;
+  /** Air temperature (F), cold side: at or below. */
+  readonly cautionColdF: number;
+  readonly stopColdF: number;
+  readonly cautionUv: number;
+  readonly stopUv: number;
+}
+
+/** Defaults a club may change (mph, F). */
+export const DEFAULT_CONDITION_THRESHOLDS_US: ConditionThresholdsUs = {
+  cautionWindMph: 20,
+  stopWindMph: 30,
+  cautionGustMph: 30,
+  stopGustMph: 40,
+  cautionPrecipPct: 40,
+  stopPrecipPct: 80,
+  cautionHeatF: 90,
+  stopHeatF: 100,
+  cautionColdF: 40,
+  stopColdF: 30,
+  cautionUv: 8,
+  stopUv: 11,
+};
+
+/** The same thresholds in km/h and degrees Celsius, the units of the forecast contract. */
+export interface ConditionThresholds {
+  readonly cautionWindKph: number;
+  readonly stopWindKph: number;
+  readonly cautionGustKph: number;
+  readonly stopGustKph: number;
+  readonly cautionPrecipPct: number;
+  readonly stopPrecipPct: number;
   readonly cautionHeatC: number;
   readonly stopHeatC: number;
-  /** Air temperature (Celsius), cold side. */
   readonly cautionColdC: number;
   readonly stopColdC: number;
   readonly cautionUv: number;
   readonly stopUv: number;
 }
 
-/** Defaults a club may change. */
+const US = DEFAULT_CONDITION_THRESHOLDS_US;
+
+/** Defaults a club may change (km/h, C), converted from the US table. Overrides to `playCall` use these units. */
 export const DEFAULT_CONDITION_THRESHOLDS: ConditionThresholds = {
-  cautionWindKph: 30,
-  stopWindKph: 50,
-  cautionGustKph: 45,
-  stopGustKph: 65,
-  cautionPrecipPct: 40,
-  stopPrecipPct: 80,
-  cautionHeatC: 32,
-  stopHeatC: 38,
-  cautionColdC: 5,
-  stopColdC: -2,
-  cautionUv: 8,
-  stopUv: 11,
+  cautionWindKph: mphToKph(US.cautionWindMph),
+  stopWindKph: mphToKph(US.stopWindMph),
+  cautionGustKph: mphToKph(US.cautionGustMph),
+  stopGustKph: mphToKph(US.stopGustMph),
+  cautionPrecipPct: US.cautionPrecipPct,
+  stopPrecipPct: US.stopPrecipPct,
+  cautionHeatC: fahrenheitToCelsius(US.cautionHeatF),
+  stopHeatC: fahrenheitToCelsius(US.stopHeatF),
+  cautionColdC: fahrenheitToCelsius(US.cautionColdF),
+  stopColdC: fahrenheitToCelsius(US.stopColdF),
+  cautionUv: US.cautionUv,
+  stopUv: US.stopUv,
 };
 
-/** A good-weather row still gets a chip from this wind (km/h): it changes which end to take. */
-export const CHIP_WIND_KPH = 20;
+/**
+ * A good-weather row still gets a chip from this steady wind (mph): it changes
+ * which end to take. A default a club may change.
+ */
+export const CHIP_WIND_MPH = 12;
+/**
+ * ... or from this gust (mph): "Gusty 14 mph" gets a chip, a steady 9 mph
+ * westerly does not.
+ */
+export const CHIP_GUST_MPH = 14;
+export const CHIP_WIND_KPH = mphToKph(CHIP_WIND_MPH);
+export const CHIP_GUST_KPH = mphToKph(CHIP_GUST_MPH);
 /** Chance of rain (percent) from which the conditions line mentions rain. */
 export const LINE_RAIN_PCT = 20;
 /** UV index from which the conditions line mentions UV. */
@@ -157,6 +220,8 @@ export interface WindOnCourt {
   readonly alongKph: number;
   /** Wind speed across the court (km/h, 0 or more). */
   readonly crossKph: number;
+  readonly alongMph: number;
+  readonly crossMph: number;
   readonly dominant: "along" | "cross" | "calm";
   /**
    * The good end: the end the wind comes from. A player standing there has the
@@ -170,8 +235,9 @@ export interface WindOnCourt {
   readonly windFromCompass: CompassPoint | null;
 }
 
-/** Winds under this (km/h) are calm for the purposes of choosing an end. */
-export const CALM_WIND_KPH = 5;
+/** Winds under this (mph) are calm for the purposes of choosing an end. */
+export const CALM_WIND_MPH = 3;
+export const CALM_WIND_KPH = mphToKph(CALM_WIND_MPH);
 
 /**
  * Wind relative to a court. `orientationDeg` is the bearing of the court's
@@ -204,6 +270,8 @@ export function windOnCourt(
   return {
     alongKph: round1(alongKph),
     crossKph: round1(crossKph),
+    alongMph: round1(kphToMph(alongKph)),
+    crossMph: round1(kphToMph(crossKph)),
     dominant,
     goodEndBearingDeg: normalised,
     goodEndCompass: normalised === null ? null : compassPoint(normalised),
@@ -217,15 +285,19 @@ function round1(value: number): number {
 
 /**
  * Whether a schedule row deserves a weather chip: only when the weather
- * changes what a coach or player does. That is any caution or stop, or a wind
- * strong enough that the choice of end matters.
+ * changes what a coach or player does. That is any caution or stop, or a
+ * steady wind (12 mph) or gust (14 mph) strong enough that the choice of end
+ * matters. A steady 9 mph westerly gets none.
  */
 export function needsWeatherChip(
   hour: HourlyConditions,
   thresholds: Partial<ConditionThresholds> = {},
 ): boolean {
   if (playCall(hour, thresholds).call !== "good") return true;
-  return (hour.windSpeedKph ?? 0) >= CHIP_WIND_KPH;
+  return (
+    (hour.windSpeedKph ?? 0) >= CHIP_WIND_KPH ||
+    (hour.windGustKph ?? 0) >= CHIP_GUST_KPH
+  );
 }
 
 export type ConditionsPartKind =
@@ -235,9 +307,17 @@ export interface ConditionsPart {
   readonly kind: ConditionsPartKind;
   /** 1 is most important. Parts come back in priority order. */
   readonly priority: number;
+  /** English text for wind, temperature, rain and UV in the line's unit system, e.g. "W 9 mph", "Gusty 14 mph", "72\u00b0F". */
+  readonly text?: string;
   readonly reason?: ConditionReason;
-  readonly temperatureC?: number;
-  readonly windSpeedKph?: number;
+  /** Rounded, in the line's unit system. */
+  readonly temperature?: number;
+  /** Rounded sustained wind, in the line's unit system. */
+  readonly windSpeed?: number;
+  /** Rounded gust, in the line's unit system (only when gusty). */
+  readonly windGust?: number;
+  /** The wind is gusty: the text shows the gust speed. */
+  readonly gusty?: boolean;
   readonly windFromCompass?: CompassPoint;
   readonly precipChancePct?: number;
   readonly uvIndex?: number;
@@ -247,6 +327,7 @@ export interface ConditionsPart {
 
 export interface ConditionsLine {
   readonly call: PlayCall;
+  readonly units: UnitSystem;
   /** In priority order; the renderer prints them in this order. */
   readonly parts: ReadonlyArray<ConditionsPart>;
 }
@@ -254,43 +335,70 @@ export interface ConditionsLine {
 /**
  * The conditions line, parts in priority order:
  * reason (only when not good), wind, temperature, rain, UV, sunset.
+ *
+ * `units` is explicit and defaults to US customary (mph, degrees F); the
+ * package never reads a device locale. Wind reads "W 9 mph"; when the gust
+ * reaches the chip gust threshold it reads "Gusty 14 mph" with the gust speed.
  */
 export function conditionsLine(
   hour: HourlyConditions,
   options: {
     readonly sunsetAt?: number | null;
     readonly thresholds?: Partial<ConditionThresholds>;
+    readonly units?: UnitSystem;
   } = {},
 ): ConditionsLine {
+  const units = options.units ?? DEFAULT_UNIT_SYSTEM;
+  const us = units === "us";
+  const speedUnit = us ? "mph" : "km/h";
+  const speed = (kph: number): number => Math.round(us ? kphToMph(kph) : kph);
   const result = playCall(hour, options.thresholds);
   const parts: Omit<ConditionsPart, "priority">[] = [];
   if (result.reason !== null)
     parts.push({ kind: "reason", reason: result.reason });
   if (hour.windSpeedKph !== undefined) {
+    const compass =
+      hour.windFromDeg !== undefined && hour.windSpeedKph >= CALM_WIND_KPH
+        ? compassPoint(hour.windFromDeg)
+        : undefined;
+    const gusty = (hour.windGustKph ?? 0) >= CHIP_GUST_KPH;
+    const windSpeed = speed(hour.windSpeedKph);
+    const windGust = speed(hour.windGustKph ?? 0);
+    const text = gusty
+      ? `Gusty ${windGust} ${speedUnit}`
+      : `${compass ? `${compass} ` : ""}${windSpeed} ${speedUnit}`;
     parts.push({
       kind: "wind",
-      windSpeedKph: Math.round(hour.windSpeedKph),
-      ...(hour.windFromDeg !== undefined && hour.windSpeedKph >= CALM_WIND_KPH
-        ? { windFromCompass: compassPoint(hour.windFromDeg) }
-        : {}),
+      text,
+      windSpeed,
+      gusty,
+      ...(gusty ? { windGust } : {}),
+      ...(compass ? { windFromCompass: compass } : {}),
     });
   }
   if (hour.temperatureC !== undefined) {
-    parts.push({ kind: "temp", temperatureC: Math.round(hour.temperatureC) });
-  }
-  if ((hour.precipChancePct ?? 0) >= LINE_RAIN_PCT) {
+    const temperature = Math.round(
+      us ? celsiusToFahrenheit(hour.temperatureC) : hour.temperatureC,
+    );
     parts.push({
-      kind: "rain",
-      precipChancePct: Math.round(hour.precipChancePct ?? 0),
+      kind: "temp",
+      temperature,
+      text: `${temperature}\u00b0${us ? "F" : "C"}`,
     });
   }
+  if ((hour.precipChancePct ?? 0) >= LINE_RAIN_PCT) {
+    const pct = Math.round(hour.precipChancePct ?? 0);
+    parts.push({ kind: "rain", precipChancePct: pct, text: `${pct}% rain` });
+  }
   if ((hour.uvIndex ?? 0) >= LINE_UV) {
-    parts.push({ kind: "uv", uvIndex: Math.round(hour.uvIndex ?? 0) });
+    const uv = Math.round(hour.uvIndex ?? 0);
+    parts.push({ kind: "uv", uvIndex: uv, text: `UV ${uv}` });
   }
   if (options.sunsetAt != null)
     parts.push({ kind: "sunset", sunsetAt: options.sunsetAt });
   return {
     call: result.call,
+    units,
     parts: parts.map((part, index) => ({ ...part, priority: index + 1 })),
   };
 }

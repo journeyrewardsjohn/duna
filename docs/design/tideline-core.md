@@ -43,36 +43,66 @@ only), individual courts from 18, clusters up to zoom 14.
 
 ## Decisions on ambiguous points
 
-| Question                                                                                            | Resolved as                                                                                                                                                                                       |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Golden hour start. The brand sample (Santa Monica, 28 Nov) shows 3:45 PM, 60 minutes before sunset. | Sun 6 degrees above the horizon (about 38 minutes before sunset there, 4:07 PM). `sunTimes(..., { goldenHourElevationDeg })` changes it. **Owner to confirm.**                                    |
-| Satellite from which zoom: `mobile.md` says "max zoom minus 3", R14 says 17 to 19.                  | Same thing: satellite when zoom is above `maxZoom - 3` (so 16.1 and up), which keeps fractional zoom consistent.                                                                                  |
-| Pin thresholds and what "cluster" means in the ladder.                                              | The renderer says how many pins a cluster holds; clustering is allowed up to zoom 14. Dot / icon / label / mark thresholds are defaults (11 / 13 / 15).                                           |
-| Unlit court after sunset.                                                                           | `dark`: the contract has no evening twilight state. Civil dusk is returned separately as "last light" for the day line. A lit court is `under-lights` whenever the sun is down.                   |
-| Morning golden hour.                                                                                | Not modelled: the contract names one golden-hour state, used in the evening.                                                                                                                      |
-| "Which end is the good side".                                                                       | The end the wind comes from: a player there has the wind at their back. Only given when the wind is mostly along the court (not calm, not a crosswind).                                           |
-| Court orientation.                                                                                  | Bearing of the long axis, either direction (0 and 180 are the same court).                                                                                                                        |
-| UV and wind direction are not in `WeatherForecastPoint` today.                                      | Both are optional inputs; a missing value never triggers a call, chip or line part.                                                                                                               |
-| Week start for the day strip.                                                                       | Parameter, default Sunday (US).                                                                                                                                                                   |
-| Daylight-saving days in time slots.                                                                 | Slots use the wall-clock times printed on the venue's clock. The day strip reports the day's real length (1380 / 1500 minutes) so a renderer can warn.                                            |
-| Monogram "brand rule".                                                                              | The brand book only says "two-character". Rule: first letter of the first two words (skipping "the / of / and / at / &"), or the first two characters of a single word; letters and numbers only. |
-| Weather "play call" wording.                                                                        | Not agreed (README open questions). The code uses good / caution / stop; wording is the renderer's.                                                                                               |
+| Question                                                                           | Resolved as                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Golden hour start.                                                                 | Owner ruling: **60 minutes before sunset** (`GOLDEN_HOUR_LEAD_MINUTES`), matching the brand sample (Santa Monica, 28 Nov: sunset 4:45 PM, golden hour 3:45 PM, tested). The sun-elevation method (6 degrees is about 4:07 PM there) stays available as `sunTimes(..., { goldenHourElevationDeg })`. |
+| Satellite from which zoom: `mobile.md` says "max zoom minus 3", R14 says 17 to 19. | Same thing: satellite when zoom is above `maxZoom - 3` (so 16.1 and up), which keeps fractional zoom consistent.                                                                                                                                                                                    |
+| Pin thresholds and what "cluster" means in the ladder.                             | The renderer says how many pins a cluster holds; clustering is allowed up to zoom 14. Dot / icon / label / mark thresholds are defaults (11 / 13 / 15).                                                                                                                                             |
+| Unlit court after sunset.                                                          | `dark`: the contract has no evening twilight state. Civil dusk is returned separately as "last light" for the day line. A lit court is `under-lights` whenever the sun is down.                                                                                                                     |
+| Morning golden hour.                                                               | Not modelled: the contract names one golden-hour state, used in the evening.                                                                                                                                                                                                                        |
+| "Which end is the good side".                                                      | The end the wind comes from: a player there has the wind at their back. Only given when the wind is mostly along the court (not calm, not a crosswind).                                                                                                                                             |
+| Court orientation.                                                                 | Bearing of the long axis, either direction (0 and 180 are the same court).                                                                                                                                                                                                                          |
+| UV and wind direction are not in `WeatherForecastPoint` today.                     | Both are optional inputs; a missing value never triggers a call, chip or line part.                                                                                                                                                                                                                 |
+| Week start for the day strip.                                                      | Parameter, default Sunday (US).                                                                                                                                                                                                                                                                     |
+| Daylight-saving days in time slots.                                                | Slots use the wall-clock times printed on the venue's clock. The day strip reports the day's real length (1380 / 1500 minutes) so a renderer can warn.                                                                                                                                              |
+| Monogram "brand rule".                                                             | The brand book only says "two-character". Rule: first letter of the first two words (skipping "the / of / and / at / &"), or the first two characters of a single word; letters and numbers only.                                                                                                   |
+| Weather "play call" wording.                                                       | Not agreed (README open questions). The code uses good / caution / stop; wording is the renderer's.                                                                                                                                                                                                 |
 
 ## Default condition thresholds (a club may change them)
 
-| Signal         | Caution      | Stop          |
-| -------------- | ------------ | ------------- |
-| Sustained wind | 30 km/h      | 50 km/h       |
-| Gusts          | 45 km/h      | 65 km/h       |
-| Chance of rain | 40 %         | 80 %          |
-| Heat           | 32 C         | 38 C          |
-| Cold           | 5 C or below | -2 C or below |
-| UV index       | 8            | 11            |
+US product: the table in US customary units is the source (`DEFAULT_CONDITION_THRESHOLDS_US`);
+the metric constants (`DEFAULT_CONDITION_THRESHOLDS`, km/h and C, the forecast
+contract's units) are converted from it. Both are exported.
 
-A good-weather row still gets a chip from 20 km/h wind. The conditions line
-mentions rain from 20 % and UV from 6. Priority when space is short (first
-dropped last): reason, wind, temperature, rain, UV, sunset; the reason is never
+| Signal         | Caution (US)  | Stop (US)     | Caution (metric) | Stop (metric)   |
+| -------------- | ------------- | ------------- | ---------------- | --------------- |
+| Sustained wind | 20 mph        | 30 mph        | 32.2 km/h        | 48.3 km/h       |
+| Gusts          | 30 mph        | 40 mph        | 48.3 km/h        | 64.4 km/h       |
+| Chance of rain | 40 %          | 80 %          | 40 %             | 80 %            |
+| Heat           | 90 F          | 100 F         | 32.2 C           | 37.8 C          |
+| Cold           | 40 F or below | 30 F or below | 4.4 C or below   | -1.1 C or below |
+| UV index       | 8             | 11            | 8                | 11              |
+
+Chip and line rules (US / metric):
+
+| Rule                                                  | US     | Metric    |
+| ----------------------------------------------------- | ------ | --------- |
+| A good-weather row still gets a chip from steady wind | 12 mph | 19.3 km/h |
+| ... or from a gust ("Gusty 14 mph")                   | 14 mph | 22.5 km/h |
+| Wind under this is calm (no direction, no good end)   | 3 mph  | 4.8 km/h  |
+| The conditions line mentions rain from                | 20 %   | 20 %      |
+| The conditions line mentions UV from                  | UV 6   | UV 6      |
+
+Design checks: a steady 9 mph westerly shows no chip and reads "W 9 mph"; a
+gust of 14 mph shows a chip and reads "Gusty 14 mph" (the gust speed). A steady
+14 mph also chips.
+
+The conditions line displays US customary (mph, degrees F, compass point
+first: "W 9 mph") unless `units: "metric"` is passed; the package never infers
+units from a device or locale. Priority when space is short (first dropped
+last): reason, wind, temperature, rain, UV, sunset; the reason is never
 dropped.
+
+## Score announcements
+
+`scoreAnnouncement(prev, next)` returns what changed between two successive
+`NetScoreState`s as parts, in announcement order: `point` (side, set,
+count), `set-won`, `match-won` (provisional or confirmed), `serve-change`,
+then newly arisen `match-point` and `set-point`; a score that went down gives a
+single `correction`. `netScoreState` takes optional `rules` (`SetRules`, with
+`BEACH_VOLLEYBALL_RULES` as 21 / decider 15 / win by 2) to know set and match
+point, and returns `setPoint` / `matchPoint` sides. A Live Activity, a
+screen-reader announcement and an animation all key off the same parts.
 
 ## Existing helpers that should move here later (not moved now)
 

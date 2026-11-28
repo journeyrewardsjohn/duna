@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  BEACH_VOLLEYBALL_RULES,
   netScoreState,
+  scoreAnnouncement,
   type MatchStatus,
   type NetScoreInput,
   type NetScoreStatus,
@@ -343,5 +345,235 @@ describe("netScoreState", () => {
     expect(JSON.stringify(input)).toBe(copy);
     const status: NetScoreStatus = "live";
     expect(status).toBe("live");
+  });
+});
+
+const live = (
+  sets: ReadonlyArray<{ home: number; away: number; finished?: boolean }>,
+  extra: Partial<NetScoreInput> = {},
+) =>
+  netScoreState({
+    status: "live",
+    sets,
+    rules: BEACH_VOLLEYBALL_RULES,
+    bestOf: 3,
+    ...extra,
+  });
+
+describe("set point and match point", () => {
+  it("flags set point for the side one point from the set", () => {
+    expect(live([{ home: 20, away: 18 }]).setPoint).toEqual(["home"]);
+    expect(live([{ home: 18, away: 20 }]).setPoint).toEqual(["away"]);
+    expect(live([{ home: 20, away: 19 }]).setPoint).toEqual(["home"]);
+  });
+
+  it("needs a two-point lead (win by two)", () => {
+    expect(live([{ home: 20, away: 20 }]).setPoint).toEqual([]);
+    expect(live([{ home: 24, away: 24 }]).setPoint).toEqual([]);
+    expect(live([{ home: 25, away: 24 }]).setPoint).toEqual(["home"]);
+    expect(live([{ home: 10, away: 5 }]).setPoint).toEqual([]);
+  });
+
+  it("flags match point only when that set also wins the match", () => {
+    const first = live([{ home: 20, away: 18 }]);
+    expect(first.setPoint).toEqual(["home"]);
+    expect(first.matchPoint).toEqual([]);
+    const second = live([
+      { home: 21, away: 10 },
+      { home: 20, away: 18 },
+    ]);
+    expect(second.matchPoint).toEqual(["home"]);
+  });
+
+  it("uses the deciding-set target for the last set", () => {
+    const decider = live([
+      { home: 21, away: 15 },
+      { home: 15, away: 21 },
+      { home: 14, away: 12 },
+    ]);
+    expect(decider.setPoint).toEqual(["home"]);
+    expect(decider.matchPoint).toEqual(["home"]);
+    const earlier = live([{ home: 14, away: 12 }]);
+    expect(earlier.setPoint).toEqual([]);
+  });
+
+  it("falls back to the normal target when no deciding target is given", () => {
+    const rules = { pointsToWin: 11 };
+    const s = live(
+      [
+        { home: 11, away: 11 },
+        { home: 11, away: 11 },
+        { home: 10, away: 8 },
+      ],
+      {
+        rules,
+      },
+    );
+    expect(s.setPoint).toEqual(["home"]);
+  });
+
+  it("best-of-one: set point is match point", () => {
+    const s = live([{ home: 20, away: 15 }], { bestOf: 1 });
+    expect(s.setPoint).toEqual(["home"]);
+    expect(s.matchPoint).toEqual(["home"]);
+  });
+
+  it("without bestOf there is set point but no match point", () => {
+    const s = live([{ home: 20, away: 15 }], { bestOf: undefined });
+    expect(s.setPoint).toEqual(["home"]);
+    expect(s.matchPoint).toEqual([]);
+  });
+
+  it("a cap ends a set for both sides at once", () => {
+    const s = live([{ home: 24, away: 24 }], {
+      rules: { pointsToWin: 21, cap: 25 },
+    });
+    expect(s.setPoint).toEqual(["home", "away"]);
+  });
+
+  it("is empty when not live, without rules, or without an open set", () => {
+    expect(
+      netScoreState({
+        status: "complete",
+        sets: [{ home: 21, away: 10 }],
+        rules: BEACH_VOLLEYBALL_RULES,
+      }).setPoint,
+    ).toEqual([]);
+    expect(
+      netScoreState({ status: "live", sets: [{ home: 20, away: 10 }] })
+        .setPoint,
+    ).toEqual([]);
+    expect(live([{ home: 20, away: 10, finished: true }]).setPoint).toEqual([]);
+  });
+});
+
+describe("scoreAnnouncement", () => {
+  it("announces a point and nothing else", () => {
+    const a = live([{ home: 17, away: 14 }]);
+    const b = live([{ home: 18, away: 14 }]);
+    expect(scoreAnnouncement(a, b)).toEqual([
+      { kind: "point", side: "home", setNumber: 1, points: 1 },
+    ]);
+    const c = live([{ home: 18, away: 15 }]);
+    expect(scoreAnnouncement(b, c)).toEqual([
+      { kind: "point", side: "away", setNumber: 1, points: 1 },
+    ]);
+  });
+
+  it("returns nothing for an unchanged pair", () => {
+    const a = live([{ home: 17, away: 14 }], { serving: "home" });
+    expect(scoreAnnouncement(a, a)).toEqual([]);
+  });
+
+  it("announces a serve change with the point", () => {
+    const a = live([{ home: 17, away: 14 }], { serving: "home" });
+    const b = live([{ home: 17, away: 15 }], { serving: "away" });
+    expect(scoreAnnouncement(a, b)).toEqual([
+      { kind: "point", side: "away", setNumber: 1, points: 1 },
+      { kind: "serve-change", side: "away" },
+    ]);
+  });
+
+  it("announces a set won, the point that won it, and the next set's first point", () => {
+    const a = live([{ home: 20, away: 18 }]);
+    const b = live([
+      { home: 21, away: 18 },
+      { home: 1, away: 0 },
+    ]);
+    expect(scoreAnnouncement(a, b)).toEqual([
+      { kind: "point", side: "home", setNumber: 1, points: 1 },
+      { kind: "point", side: "home", setNumber: 2, points: 1 },
+      { kind: "set-won", side: "home", setNumber: 1 },
+    ]);
+  });
+
+  it("does not repeat a set already won", () => {
+    const a = live([
+      { home: 21, away: 18 },
+      { home: 3, away: 2 },
+    ]);
+    const b = live([
+      { home: 21, away: 18 },
+      { home: 4, away: 2 },
+    ]);
+    expect(scoreAnnouncement(a, b).map((p) => p.kind)).toEqual(["point"]);
+  });
+
+  it("announces newly arisen set point, once", () => {
+    const a = live([{ home: 19, away: 18 }]);
+    const b = live([{ home: 20, away: 18 }]);
+    expect(scoreAnnouncement(a, b)).toEqual([
+      { kind: "point", side: "home", setNumber: 1, points: 1 },
+      { kind: "set-point", side: "home" },
+    ]);
+    const c = live([{ home: 20, away: 19 }]);
+    expect(scoreAnnouncement(b, c).map((p) => p.kind)).toEqual(["point"]);
+  });
+
+  it("announces match point before the set point it contains", () => {
+    const a = live([
+      { home: 21, away: 10 },
+      { home: 19, away: 18 },
+    ]);
+    const b = live([
+      { home: 21, away: 10 },
+      { home: 20, away: 18 },
+    ]);
+    expect(scoreAnnouncement(a, b).map((p) => p.kind)).toEqual([
+      "point",
+      "match-point",
+      "set-point",
+    ]);
+  });
+
+  it("does not repeat match point that is already on", () => {
+    const a = live([
+      { home: 21, away: 10 },
+      { home: 20, away: 18 },
+    ]);
+    const b = live([
+      { home: 21, away: 10 },
+      { home: 20, away: 19 },
+    ]);
+    expect(scoreAnnouncement(a, b).map((p) => p.kind)).toEqual(["point"]);
+  });
+
+  it("announces the match won, provisional first and confirmed later", () => {
+    const sets = [
+      { home: 21, away: 10 },
+      { home: 21, away: 15 },
+    ];
+    const playing = live([
+      { home: 21, away: 10 },
+      { home: 20, away: 15 },
+    ]);
+    const pending = netScoreState({ status: "pending-verification", sets });
+    const verified = netScoreState({ status: "verified", sets });
+    expect(
+      scoreAnnouncement(playing, pending).filter((p) => p.kind === "match-won"),
+    ).toEqual([{ kind: "match-won", side: "home", provisional: true }]);
+    expect(scoreAnnouncement(pending, verified)).toEqual([
+      { kind: "match-won", side: "home", provisional: false },
+    ]);
+    expect(scoreAnnouncement(verified, verified)).toEqual([]);
+    const flipped = netScoreState({ status: "complete", sets, winner: "away" });
+    expect(scoreAnnouncement(verified, flipped)).toEqual([
+      { kind: "match-won", side: "away", provisional: false },
+    ]);
+  });
+
+  it("reports a score that went down as a correction", () => {
+    const a = live([{ home: 18, away: 14 }]);
+    const b = live([{ home: 17, away: 14 }]);
+    expect(scoreAnnouncement(a, b)).toEqual([{ kind: "correction" }]);
+  });
+
+  it("reports several points at once", () => {
+    const a = live([{ home: 10, away: 10 }]);
+    const b = live([{ home: 12, away: 11 }]);
+    expect(scoreAnnouncement(a, b)).toEqual([
+      { kind: "point", side: "home", setNumber: 1, points: 2 },
+      { kind: "point", side: "away", setNumber: 1, points: 1 },
+    ]);
   });
 });

@@ -54,6 +54,10 @@ state.liveLabel; // { kind: "live", setNumber: 2, points: { home: 17, away: 14 }
 state.winner; // null: a winner is known only in verified / complete / forfeit
 ```
 
+```ts
+scoreAnnouncement(prev, next); // [{ kind: "point", side: "home", setNumber: 2, points: 1 }, { kind: "set-point", side: "home" }]
+```
+
 Only finished sets count. `not-finished` is a proposed status that is not in
 the `match_status` enum yet.
 
@@ -111,6 +115,7 @@ const hour = {
 };
 playCall(hour); // { call: "caution", reason: "wind", reasons: ["wind"] }
 windOnCourt(34, 280, 0); // court runs north-south: wind is across it
+conditionsLine(hour, { sunsetAt: sun.sunset }).parts[1].text; // "W 21 mph" (US units by default; pass units: "metric")
 fitConditionsLine(conditionsLine(hour, { sunsetAt: sun.sunset }), 2); // keeps the reason and wind
 ```
 

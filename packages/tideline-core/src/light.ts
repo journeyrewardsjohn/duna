@@ -19,9 +19,17 @@ const DAY_MS = 86_400_000;
 export const ZENITH = {
   sunriseSunset: 90.833,
   civil: 96,
-  /** Golden hour begins when the sun is 6 degrees above the horizon (the `goldenHourElevationDeg` option changes it). */
+  /** Golden hour by sun elevation: 6 degrees above the horizon. Used only when `goldenHourElevationDeg` is passed. */
   goldenHour: 84,
 } as const;
+
+/**
+ * Default golden hour: it starts this many minutes before sunset. This is the
+ * owner's brand-book sample (sunset 4:45 PM, golden hour 3:45 PM) and what
+ * every design board shows. Pass `goldenHourElevationDeg` to `sunTimes` to
+ * use the sun's elevation instead (6 degrees is the usual photographer's rule).
+ */
+export const GOLDEN_HOUR_LEAD_MINUTES = 60;
 
 export type DaylightKind = "normal" | "polar-day" | "polar-night";
 
@@ -32,7 +40,7 @@ export interface SunTimes {
   /** Civil dawn / dusk (sun 6 degrees below the horizon); `null` in white nights or polar night. */
   readonly civilDawn: number | null;
   readonly civilDusk: number | null;
-  /** Evening golden hour begins (sun 6 degrees above the horizon); `null` if it never gets that high. */
+  /** Evening golden hour begins: 60 minutes before sunset by default (see `GOLDEN_HOUR_LEAD_MINUTES`); `null` without a sunset. */
   readonly goldenHourStart: number | null;
   readonly solarNoon: number;
   readonly daylight: DaylightKind;
@@ -122,6 +130,27 @@ function crossing(
   return { kind: "crosses", rise, set };
 }
 
+function goldenHourStart(
+  horizon: Crossing,
+  midnight: number,
+  latitude: number,
+  longitude: number,
+  options: { readonly goldenHourElevationDeg?: number },
+): number | null {
+  if (options.goldenHourElevationDeg !== undefined) {
+    const golden = crossing(
+      midnight,
+      latitude,
+      longitude,
+      90 - options.goldenHourElevationDeg,
+    );
+    return golden.kind === "crosses" ? golden.set : null;
+  }
+  return horizon.kind === "crosses"
+    ? horizon.set - GOLDEN_HOUR_LEAD_MINUTES * 60_000
+    : null;
+}
+
 /**
  * Sun times for the LOCAL calendar date at a place. The date is the date on
  * the venue's wall calendar; no time zone is needed because the local solar
@@ -140,15 +169,6 @@ export function sunTimes(
 
   const horizon = crossing(midnight, latitude, longitude, ZENITH.sunriseSunset);
   const civil = crossing(midnight, latitude, longitude, ZENITH.civil);
-  const golden = crossing(
-    midnight,
-    latitude,
-    longitude,
-    options.goldenHourElevationDeg === undefined
-      ? ZENITH.goldenHour
-      : 90 - options.goldenHourElevationDeg,
-  );
-
   const crosses = horizon.kind === "crosses";
   const daylight: DaylightKind = crosses
     ? "normal"
@@ -161,7 +181,13 @@ export function sunTimes(
     sunset: horizon.kind === "crosses" ? horizon.set : null,
     civilDawn: civil.kind === "crosses" ? civil.rise : null,
     civilDusk: civil.kind === "crosses" ? civil.set : null,
-    goldenHourStart: golden.kind === "crosses" ? golden.set : null,
+    goldenHourStart: goldenHourStart(
+      horizon,
+      midnight,
+      latitude,
+      longitude,
+      options,
+    ),
     solarNoon,
     daylight,
     whiteNight: crosses && civil.kind === "always-above",

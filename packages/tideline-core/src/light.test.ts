@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { dayLineParts, lightMarkFor, sunTimes, type SunTimes } from "./light";
+import { formatTime } from "./format";
+import {
+  dayLineParts,
+  GOLDEN_HOUR_LEAD_MINUTES,
+  lightMarkFor,
+  sunTimes,
+  type SunTimes,
+} from "./light";
 
 const MIN = 60_000;
 const iso = (ms: number | null) =>
@@ -89,15 +96,37 @@ describe("sunTimes: published values", () => {
     expect(night.whiteNight).toBe(false);
   });
 
-  it("lets the golden hour elevation be changed", () => {
+  it("golden hour defaults to 60 minutes before sunset: Santa Monica shows 3:45 PM and 4:45 PM", () => {
+    expect(GOLDEN_HOUR_LEAD_MINUTES).toBe(60);
+    const s = sunTimes(34.0195, -118.4912, { year: 2026, month: 11, day: 28 });
+    expect((s.sunset as number) - (s.goldenHourStart as number)).toBe(60 * MIN);
+    const zone = { locale: "en-US", timeZone: "America/Los_Angeles" };
+    expect(formatTime(s.sunrise as number, zone)).toBe("6:38 AM");
+    expect(formatTime(s.goldenHourStart as number, zone)).toBe("3:45 PM");
+    expect(formatTime(s.sunset as number, zone)).toBe("4:45 PM");
+  });
+
+  it("lets the golden hour be set by sun elevation instead", () => {
     const date = { year: 2026, month: 11, day: 28 };
-    const six = sunTimes(34.0195, -118.4912, date);
+    const six = sunTimes(34.0195, -118.4912, date, {
+      goldenHourElevationDeg: 6,
+    });
+    // 6 degrees above the horizon: about 4:07 PM in Santa Monica.
+    near(six.goldenHourStart, "2026-11-29T00:07:38Z");
     const ten = sunTimes(34.0195, -118.4912, date, {
       goldenHourElevationDeg: 10,
     });
     expect(ten.goldenHourStart as number).toBeLessThan(
       six.goldenHourStart as number,
     );
+    // A sun that never gets that high has no golden hour.
+    const night = sunTimes(
+      69.6492,
+      18.9553,
+      { year: 2026, month: 12, day: 21 },
+      { goldenHourElevationDeg: 6 },
+    );
+    expect(night.goldenHourStart).toBeNull();
   });
 });
 

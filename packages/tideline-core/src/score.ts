@@ -45,12 +45,36 @@ export interface SetInput {
   readonly finished?: boolean;
 }
 
+/**
+ * How a set is won, so set point and match point can be known. Clubs vary;
+ * pass the rules of the event.
+ */
+export interface SetRules {
+  /** Points to win a set. */
+  readonly pointsToWin: number;
+  /** Points to win the deciding set (the last of `bestOf`); defaults to `pointsToWin`. */
+  readonly decidingSetPointsToWin?: number;
+  /** Lead needed to win a set; default 2. */
+  readonly winBy?: number;
+  /** A hard cap: the first side to reach it wins. Default none. */
+  readonly cap?: number;
+}
+
+/** Beach volleyball: sets to 21, a decider to 15, win by two, no cap. */
+export const BEACH_VOLLEYBALL_RULES: SetRules = {
+  pointsToWin: 21,
+  decidingSetPointsToWin: 15,
+  winBy: 2,
+};
+
 export interface NetScoreInput {
   readonly status: NetScoreStatus;
   /** Sets in play order. May be empty. */
   readonly sets: ReadonlyArray<SetInput>;
   /** Sets the format is played over: 1 for a single set, otherwise 3 or 5. */
   readonly bestOf?: number;
+  /** Set rules; needed for set point and match point. */
+  readonly rules?: SetRules;
   /** Which side is serving; shown only while live. */
   readonly serving?: Side | null;
   /** A final (trophy badge instead of a check). */
@@ -104,6 +128,10 @@ export interface NetScoreState {
   /** Badge beside the winner: check, or trophy for a title match. */
   readonly winnerBadge: "check" | "trophy" | null;
   readonly serving: Side | null;
+  /** Sides that would win the set in progress with the next point (live only; needs `rules`). */
+  readonly setPoint: ReadonlyArray<Side>;
+  /** Sides that would win the MATCH with the next point (live only; needs `rules` and `bestOf`). */
+  readonly matchPoint: ReadonlyArray<Side>;
   readonly liveLabel: LiveLabelParts | null;
   /** English, for screen readers; localise the parts if you need another language. */
   readonly accessibleSummary: string;
@@ -206,6 +234,8 @@ export function netScoreState(input: NetScoreInput): NetScoreState {
         }
       : null;
 
+  const { setPoint, matchPoint } = pointStatus(input, openRow, setsWon);
+
   const showSetsWon = status === "live" && !singleSet && rows.length > 0;
 
   return {
@@ -218,6 +248,8 @@ export function netScoreState(input: NetScoreInput): NetScoreState {
     winnerProvisional,
     winnerBadge,
     serving,
+    setPoint,
+    matchPoint,
     liveLabel,
     accessibleSummary: summarise({
       input,
@@ -229,6 +261,139 @@ export function netScoreState(input: NetScoreInput): NetScoreState {
       serving,
     }),
   };
+}
+
+function pointStatus(
+  input: NetScoreInput,
+  openRow: SetRow | undefined,
+  setsWon: { home: number; away: number },
+): { setPoint: Side[]; matchPoint: Side[] } {
+  const none = { setPoint: [], matchPoint: [] };
+  if (input.status !== "live" || !openRow || !input.rules) return none;
+  const { rules } = input;
+  const decider =
+    input.bestOf !== undefined &&
+    input.bestOf > 1 &&
+    openRow.number === input.bestOf;
+  const target = decider
+    ? (rules.decidingSetPointsToWin ?? rules.pointsToWin)
+    : rules.pointsToWin;
+  const winBy = rules.winBy ?? 2;
+  const setsToWin =
+    input.bestOf === undefined ? null : Math.ceil(input.bestOf / 2);
+  const setPoint: Side[] = [];
+  const matchPoint: Side[] = [];
+  for (const side of ["home", "away"] as const) {
+    const mine = openRow[side] + 1;
+    const theirs = openRow[other(side)];
+    const wins =
+      (rules.cap !== undefined && mine >= rules.cap) ||
+      (mine >= target && mine - theirs >= winBy);
+    if (!wins) continue;
+    setPoint.push(side);
+    if (setsToWin !== null && setsWon[side] + 1 >= setsToWin)
+      matchPoint.push(side);
+  }
+  return { setPoint, matchPoint };
+}
+
+export type ScoreEventPart =
+  /** A side scored `points` (usually 1) in a set. */
+  | {
+      readonly kind: "point";
+      readonly side: Side;
+      readonly setNumber: number;
+      readonly points: number;
+    }
+  | {
+      readonly kind: "set-won";
+      readonly side: Side;
+      readonly setNumber: number;
+    }
+  | { readonly kind: "set-point"; readonly side: Side }
+  | { readonly kind: "match-point"; readonly side: Side }
+  | {
+      readonly kind: "match-won";
+      readonly side: Side;
+      readonly provisional: boolean;
+    }
+  | { readonly kind: "serve-change"; readonly side: Side }
+  /** A score went DOWN (an undo or a correction): announce it as a correction, not a point. */
+  | { readonly kind: "correction" };
+
+/**
+ * What changed between two successive score states, as structured parts in
+ * the order to announce them: points, sets won, match won, serve change,
+ * then newly arisen set point and match point. An unchanged pair returns an
+ * empty list. One event, three consumers: a Live Activity, a screen-reader
+ * announcement and an animation can all key off the same parts.
+ *
+ * Match point implies set point; both are listed.
+ */
+export function scoreAnnouncement(
+  prev: NetScoreState,
+  next: NetScoreState,
+): ScoreEventPart[] {
+  const parts: ScoreEventPart[] = [];
+
+  let corrected = false;
+  for (const row of next.rows) {
+    const before = prev.rows[row.number - 1];
+    const dh = row.home - (before?.home ?? 0);
+    const da = row.away - (before?.away ?? 0);
+    if (dh < 0 || da < 0) corrected = true;
+    if (dh > 0)
+      parts.push({
+        kind: "point",
+        side: "home",
+        setNumber: row.number,
+        points: dh,
+      });
+    if (da > 0)
+      parts.push({
+        kind: "point",
+        side: "away",
+        setNumber: row.number,
+        points: da,
+      });
+  }
+  if (corrected) return [{ kind: "correction" }];
+
+  for (const row of next.rows) {
+    const before = prev.rows[row.number - 1];
+    if (row.winningSide !== null && before?.winningSide !== row.winningSide) {
+      parts.push({
+        kind: "set-won",
+        side: row.winningSide,
+        setNumber: row.number,
+      });
+    }
+  }
+
+  if (
+    next.winner !== null &&
+    (prev.winner !== next.winner ||
+      prev.winnerProvisional !== next.winnerProvisional)
+  ) {
+    parts.push({
+      kind: "match-won",
+      side: next.winner,
+      provisional: next.winnerProvisional,
+    });
+  }
+
+  if (next.serving !== null && next.serving !== prev.serving) {
+    parts.push({ kind: "serve-change", side: next.serving });
+  }
+
+  for (const side of next.matchPoint) {
+    if (!prev.matchPoint.includes(side))
+      parts.push({ kind: "match-point", side });
+  }
+  for (const side of next.setPoint) {
+    if (!prev.setPoint.includes(side)) parts.push({ kind: "set-point", side });
+  }
+  return parts;
 }
 
 function summarise(args: {

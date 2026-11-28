@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  CHIP_WIND_KPH,
+  CALM_WIND_KPH,
+  celsiusToFahrenheit,
+  CHIP_GUST_MPH,
+  CHIP_WIND_MPH,
   compassPoint,
   conditionsLine,
   DEFAULT_CONDITION_THRESHOLDS,
+  DEFAULT_CONDITION_THRESHOLDS_US,
+  fahrenheitToCelsius,
+  kphToMph,
+  mphToKph,
   fitConditionsLine,
   needsWeatherChip,
   playCall,
@@ -164,12 +171,58 @@ describe("windOnCourt", () => {
   });
 });
 
+describe("units", () => {
+  it("converts both ways", () => {
+    expect(mphToKph(10)).toBeCloseTo(16.0934, 3);
+    expect(kphToMph(mphToKph(7.5))).toBeCloseTo(7.5, 9);
+    expect(celsiusToFahrenheit(0)).toBe(32);
+    expect(fahrenheitToCelsius(212)).toBe(100);
+  });
+
+  it("the metric thresholds are converted from the mph / F table", () => {
+    const us = DEFAULT_CONDITION_THRESHOLDS_US;
+    const metric = DEFAULT_CONDITION_THRESHOLDS;
+    expect(metric.cautionWindKph).toBeCloseTo(us.cautionWindMph * 1.609344, 9);
+    expect(metric.stopGustKph).toBeCloseTo(us.stopGustMph * 1.609344, 9);
+    expect(metric.stopHeatC).toBeCloseTo(((us.stopHeatF - 32) * 5) / 9, 9);
+    expect(metric.cautionColdC).toBeCloseTo(
+      ((us.cautionColdF - 32) * 5) / 9,
+      9,
+    );
+    expect(us).toEqual({
+      cautionWindMph: 20,
+      stopWindMph: 30,
+      cautionGustMph: 30,
+      stopGustMph: 40,
+      cautionPrecipPct: 40,
+      stopPrecipPct: 80,
+      cautionHeatF: 90,
+      stopHeatF: 100,
+      cautionColdF: 40,
+      stopColdF: 30,
+      cautionUv: 8,
+      stopUv: 11,
+    });
+  });
+
+  it("the mph / F thresholds give the calls the owner reads", () => {
+    const call = (extra: object) => playCall({ at: 0, ...extra }).call;
+    expect(call({ windSpeedKph: mphToKph(19) })).toBe("good");
+    expect(call({ windSpeedKph: mphToKph(20) })).toBe("caution");
+    expect(call({ windSpeedKph: mphToKph(30) })).toBe("stop");
+    expect(call({ windGustKph: mphToKph(30) })).toBe("caution");
+    expect(call({ windGustKph: mphToKph(40) })).toBe("stop");
+    expect(call({ temperatureC: fahrenheitToCelsius(90) })).toBe("caution");
+    expect(call({ temperatureC: fahrenheitToCelsius(100) })).toBe("stop");
+    expect(call({ temperatureC: fahrenheitToCelsius(40) })).toBe("caution");
+    expect(call({ temperatureC: fahrenheitToCelsius(30) })).toBe("stop");
+    expect(call({ temperatureC: fahrenheitToCelsius(60) })).toBe("good");
+  });
+});
+
 describe("needsWeatherChip", () => {
   it("only when it changes what people do", () => {
     expect(needsWeatherChip(calm)).toBe(false);
-    expect(needsWeatherChip({ ...calm, windSpeedKph: CHIP_WIND_KPH })).toBe(
-      true,
-    );
     expect(needsWeatherChip({ ...calm, precipChancePct: 60 })).toBe(true);
     expect(needsWeatherChip({ ...calm, uvIndex: 12 })).toBe(true);
     expect(needsWeatherChip({ at: 0 })).toBe(false);
@@ -177,26 +230,104 @@ describe("needsWeatherChip", () => {
       needsWeatherChip({ ...calm, windSpeedKph: 25 }, { cautionWindKph: 22 }),
     ).toBe(true);
   });
+
+  it("a steady 9 mph westerly shows no chip", () => {
+    const steady = { at: 0, windSpeedKph: mphToKph(9), windFromDeg: 270 };
+    expect(needsWeatherChip(steady)).toBe(false);
+    expect(needsWeatherChip({ ...steady, windGustKph: mphToKph(11) })).toBe(
+      false,
+    );
+  });
+
+  it('"Gusty 14 mph" shows a chip, whether 14 is the gust or the steady wind', () => {
+    expect(
+      needsWeatherChip({
+        at: 0,
+        windSpeedKph: mphToKph(9),
+        windGustKph: mphToKph(CHIP_GUST_MPH),
+      }),
+    ).toBe(true);
+    expect(
+      needsWeatherChip({
+        at: 0,
+        windSpeedKph: mphToKph(14),
+        windGustKph: mphToKph(20),
+      }),
+    ).toBe(true);
+    expect(
+      needsWeatherChip({ at: 0, windSpeedKph: mphToKph(CHIP_WIND_MPH) }),
+    ).toBe(true);
+    expect(needsWeatherChip({ at: 0, windSpeedKph: mphToKph(11.9) })).toBe(
+      false,
+    );
+    expect(needsWeatherChip({ at: 0, windGustKph: mphToKph(13.9) })).toBe(
+      false,
+    );
+  });
 });
 
 describe("conditionsLine", () => {
-  it("good weather: wind, temperature, sunset in priority order, no reason", () => {
-    const line = conditionsLine(calm, { sunsetAt: 1234 });
+  it("defaults to US units: a steady 9 mph westerly reads W 9 mph", () => {
+    const line = conditionsLine(
+      { at: 0, windSpeedKph: mphToKph(9), windFromDeg: 270, temperatureC: 22 },
+      { sunsetAt: 1234 },
+    );
+    expect(line.units).toBe("us");
     expect(line.call).toBe("good");
     expect(line.parts.map((p) => p.kind)).toEqual(["wind", "temp", "sunset"]);
     expect(line.parts.map((p) => p.priority)).toEqual([1, 2, 3]);
     expect(line.parts[0]).toMatchObject({
-      windSpeedKph: 10,
+      text: "W 9 mph",
+      windSpeed: 9,
+      gusty: false,
       windFromCompass: "W",
     });
+    expect(line.parts[1]).toMatchObject({ text: "72\u00b0F", temperature: 72 });
     expect(line.parts[2]).toMatchObject({ sunsetAt: 1234 });
+  });
+
+  it('shows "Gusty 14 mph" with the gust speed when gusts reach the chip threshold', () => {
+    const line = conditionsLine({
+      at: 0,
+      windSpeedKph: mphToKph(9),
+      windGustKph: mphToKph(14),
+      windFromDeg: 270,
+    });
+    expect(line.parts[0]).toMatchObject({
+      text: "Gusty 14 mph",
+      gusty: true,
+      windGust: 14,
+      windSpeed: 9,
+      windFromCompass: "W",
+    });
+  });
+
+  it("metric on request, never inferred", () => {
+    const line = conditionsLine(
+      {
+        at: 0,
+        windSpeedKph: 15,
+        windFromDeg: 270,
+        temperatureC: 22,
+        windGustKph: 30,
+      },
+      { units: "metric" },
+    );
+    expect(line.units).toBe("metric");
+    expect(line.parts[0]).toMatchObject({ text: "Gusty 30 km/h" });
+    expect(line.parts[1]).toMatchObject({ text: "22\u00b0C", temperature: 22 });
+    const steady = conditionsLine(
+      { at: 0, windSpeedKph: 15, windFromDeg: 270 },
+      { units: "metric" },
+    );
+    expect(steady.parts[0]).toMatchObject({ text: "W 15 km/h" });
   });
 
   it("leads with the reason when not good, then rain and UV when notable", () => {
     const line = conditionsLine(
       {
         ...calm,
-        windSpeedKph: 34.6,
+        windSpeedKph: mphToKph(22),
         precipChancePct: 45.2,
         uvIndex: 8.4,
         temperatureC: 33.4,
@@ -213,21 +344,30 @@ describe("conditionsLine", () => {
       "sunset",
     ]);
     expect(line.parts[0]).toMatchObject({ reason: "rain" });
-    expect(line.parts[1]).toMatchObject({ windSpeedKph: 35 });
-    expect(line.parts[3]).toMatchObject({ precipChancePct: 45 });
-    expect(line.parts[4]).toMatchObject({ uvIndex: 8 });
+    expect(line.parts[1]).toMatchObject({ windSpeed: 22, text: "W 22 mph" });
+    expect(line.parts[2]).toMatchObject({ text: "92\u00b0F" });
+    expect(line.parts[3]).toMatchObject({
+      precipChancePct: 45,
+      text: "45% rain",
+    });
+    expect(line.parts[4]).toMatchObject({ uvIndex: 8, text: "UV 8" });
   });
 
   it("omits what it does not know and calm winds have no direction", () => {
-    const line = conditionsLine({ at: 0, windSpeedKph: 2, windFromDeg: 90 });
-    expect(line.parts).toEqual([
-      { kind: "wind", windSpeedKph: 2, priority: 1 },
-    ]);
-    expect(conditionsLine({ at: 0, windSpeedKph: 12 }).parts[0]).toEqual({
-      kind: "wind",
-      windSpeedKph: 12,
-      priority: 1,
+    const line = conditionsLine({
+      at: 0,
+      windSpeedKph: CALM_WIND_KPH - 1,
+      windFromDeg: 90,
     });
+    expect(line.parts).toHaveLength(1);
+    expect(line.parts[0]).toMatchObject({
+      kind: "wind",
+      text: "2 mph",
+      gusty: false,
+    });
+    expect(line.parts[0]?.windFromCompass).toBeUndefined();
+    const noDirection = conditionsLine({ at: 0, windSpeedKph: mphToKph(12) });
+    expect(noDirection.parts[0]).toMatchObject({ text: "12 mph" });
     expect(conditionsLine({ at: 0 }, { sunsetAt: null }).parts).toEqual([]);
   });
 
