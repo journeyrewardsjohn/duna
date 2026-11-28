@@ -15,6 +15,7 @@
     "test": "turbo test",
     "test:watch": "turbo test:watch",
     "test:e2e": "playwright test",
+    "test:personas:coverage": "tsx tests/e2e/personas/coverage.ts",
     "lint": "turbo lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

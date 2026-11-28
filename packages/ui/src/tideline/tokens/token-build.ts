@@ -25,6 +25,18 @@ interface TypeStyle {
   letterSpacing?: string;
 }
 
+/** The brand title role (Jost Medium 500): never below `min`, never on a numeral. */
+interface BrandType {
+  family: string;
+  weight: number;
+  tracking: string;
+  min: string;
+  note?: string;
+}
+
+/** Colour roles a zone repaints, per theme (`light` applies when no theme is set). */
+type ZoneOverrides = Record<string, Record<string, string>>;
+
 export interface TidelineTokenSource {
   name: string;
   version: number | string;
@@ -32,13 +44,19 @@ export interface TidelineTokenSource {
   type: {
     families: Record<string, string>;
     groups: Array<{ name: string; family: string; styles: TypeStyle[] }>;
+    brand?: BrandType;
   };
+  /** Zone overrides, selected with `data-zone` on the `.td` scope. */
+  zones?: Record<string, ZoneOverrides>;
+  /** Token values that replace motion under `prefers-reduced-motion: reduce`. */
+  reducedMotion?: Record<string, string>;
   [group: string]: unknown;
 }
 
 /**
- * Adds the code-side additions to the design source. A token or type style
- * the source already names is left alone: the published file always wins.
+ * Adds the code-side additions to the design source. A token, type style or
+ * reduced-motion value the source already names is left alone: the published
+ * file always wins.
  */
 export function mergeTidelineAdditions(
   source: TidelineTokenSource,
@@ -64,8 +82,249 @@ export function mergeTidelineAdditions(
     const fresh = group.styles.filter((style) => !styles.has(style.name));
     if (fresh.length > 0) merged.type.groups.push({ ...group, styles: fresh });
   }
+  if (additions.reducedMotion) {
+    merged.reducedMotion = {
+      ...additions.reducedMotion,
+      ...merged.reducedMotion,
+    };
+  }
   return merged;
 }
+
+/**
+ * The canonical renames (contract `$duna.canonicalNames.rename`). The design
+ * file's primitive ramps reuse brand words for other colours: its `salt-*` is
+ * a cool grey and its `night-*` a warm brown, while the brand's Salt is
+ * #F4F2EC and Night Court #0E1A22. Each ramp keeps its values under a new
+ * name; the brand colours keep the brand names (`brand-salt`,
+ * `brand-night-court`, ...). Semantic roles never change name.
+ */
+export const TIDELINE_RAMP_RENAMES = {
+  salt: "haze",
+  night: "umber",
+  flare: "solar",
+  sunburst: "hardwood",
+  sun: "dune",
+} as const;
+
+/** Published tokens the code no longer generates, with the reason. */
+export const TIDELINE_RETIRED_TOKENS: Record<string, string> = {
+  "size-icon":
+    "the 18px icon size; Tideline 4.1.1 icons are 14 / 16 / 20 / 24 (size-icon-chip / -inline / -control / -nav)",
+};
+
+/**
+ * Published values the code changes to meet a repository floor, with the
+ * reason. Each one is reported to design; the contract value returns once
+ * design publishes a passing one.
+ */
+export const TIDELINE_VALUE_ADJUSTMENTS: ReadonlyArray<{
+  token: string;
+  theme: string;
+  from: string;
+  to: string;
+  reason: string;
+}> = [
+  {
+    token: "border-control",
+    theme: "light",
+    from: "#8a9399",
+    to: "{haze-400}",
+    reason:
+      "Checkbox, radio and switch edges must reach 3:1 (WCAG 1.4.11) on every light ground; #8a9399 is 2.79:1 on the Salt ground. haze-400 (#7f8a95) is 3.14:1 on Salt and 3.52:1 on white.",
+  },
+];
+
+const RAMP = new RegExp(
+  `^(${Object.keys(TIDELINE_RAMP_RENAMES).join("|")})-(\\d+)$`,
+);
+
+function renameRamp(name: string): string {
+  const match = RAMP.exec(name);
+  if (!match?.[1] || !match[2]) return name;
+  const ramp = match[1] as keyof typeof TIDELINE_RAMP_RENAMES;
+  return `${TIDELINE_RAMP_RENAMES[ramp]}-${match[2]}`;
+}
+
+function renameAliases(value: string): string {
+  return value.replaceAll(
+    /\{([a-z0-9-]+)\}/g,
+    (_match, name: string) => `{${renameRamp(name)}}`,
+  );
+}
+
+const kebab = (name: string) =>
+  name.replaceAll(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+
+interface ContractDuna {
+  zones?: Record<
+    string,
+    {
+      light?: Record<string, string>;
+      dark?: Record<string, string>;
+      shell?: Record<string, string>;
+    }
+  >;
+  iconScale?: Record<string, string>;
+}
+
+/**
+ * Turns the published contract (`docs/design/tideline-4.1.1/tokens.json`)
+ * into the code token source (`packages/ui/src/tideline/tokens/tokens.json`):
+ *
+ * - applies the canonical ramp renames to token names and `{alias}` values;
+ * - drops the retired tokens;
+ * - promotes the `$duna` decisions that carry values into ordinary tokens:
+ *   `iconScale` becomes `size-icon-chip` / `-inline` / `-control` / `-nav`,
+ *   `size-brand-mark-max` and an `icon` group (grid, stroke, caps, joins);
+ *   each zone's `light` / `dark` colours become `zones.<zone>`; each zone
+ *   `shell` measurement becomes `<zone>-<name>` in `size`, and a
+ *   `<name>-light` / `<name>-dark` pair becomes a themed colour `<zone>-<name>`.
+ *
+ * Values never change: a renamed token keeps its published value.
+ */
+export function canonicalTidelineSource(
+  contract: TidelineTokenSource & { $duna?: ContractDuna },
+): TidelineTokenSource {
+  const source = structuredClone(contract) as TidelineTokenSource & {
+    $duna?: ContractDuna;
+  };
+  const themes = source.color.themes.map((theme) => theme.id);
+  for (const [, group] of tokenGroups(source)) {
+    group.tokens = group.tokens
+      .filter((token) => !(token.name in TIDELINE_RETIRED_TOKENS))
+      .map((token) => ({
+        ...token,
+        name: renameRamp(token.name),
+        value:
+          typeof token.value === "string"
+            ? renameAliases(token.value)
+            : Object.fromEntries(
+                Object.entries(token.value).map(([theme, value]) => [
+                  theme,
+                  renameAliases(value),
+                ]),
+              ),
+      }));
+  }
+
+  for (const adjustment of TIDELINE_VALUE_ADJUSTMENTS) {
+    const token = source.color.tokens.find(
+      (entry) => entry.name === adjustment.token,
+    );
+    const current =
+      token && typeof token.value === "object"
+        ? token.value[adjustment.theme]
+        : undefined;
+    if (!token || typeof token.value !== "object") {
+      throw new Error(`Adjustment for unknown token "${adjustment.token}"`);
+    }
+    // Apply only over the value it was written for, so a new design value wins.
+    if (current?.toLowerCase() === adjustment.from) {
+      token.value[adjustment.theme] = adjustment.to;
+    }
+  }
+
+  const duna = source.$duna ?? {};
+  const size = source.size;
+  if (!isTokenGroup(size)) throw new Error("The contract has no size group");
+  const sizeNames = new Set(size.tokens.map((token) => token.name));
+  const addSize = (name: string, value: string, usage: string) => {
+    if (sizeNames.has(name)) return;
+    sizeNames.add(name);
+    size.tokens.push({ name, value, usage } as TokenEntry);
+  };
+
+  const icon: TokenEntry[] = [];
+  for (const [key, value] of Object.entries(duna.iconScale ?? {})) {
+    if (PX.test(value)) {
+      const name =
+        key === "brandMarkMaxInControl"
+          ? "size-brand-mark-max"
+          : `size-icon-${kebab(key)}`;
+      addSize(name, value, `$duna.iconScale.${key}`);
+    } else {
+      icon.push({
+        name: `icon-${kebab(key)}`,
+        value,
+        usage: `$duna.iconScale.${key}`,
+      } as TokenEntry);
+    }
+  }
+  if (icon.length > 0) source.icon = { note: "$duna.iconScale", tokens: icon };
+
+  // A zone keeps only the values that differ from its theme (the player
+  // zone's Salt ground is already the default, so it adds nothing).
+  const published = new Map(
+    source.color.tokens.map((token) => [token.name, token.value]),
+  );
+  const zones: Record<string, ZoneOverrides> = {};
+  for (const [zone, spec] of Object.entries(duna.zones ?? {})) {
+    const overrides: ZoneOverrides = {};
+    for (const theme of themes) {
+      const values = (spec as Record<string, unknown>)[theme];
+      if (!values || typeof values !== "object") continue;
+      const changed = Object.entries(values as Record<string, string>).filter(
+        ([role, value]) => {
+          const current = published.get(role);
+          const themeValue =
+            current === undefined || typeof current === "string"
+              ? current
+              : (current[theme] ?? current[DEFAULT_THEME]);
+          return themeValue?.toLowerCase() !== value.toLowerCase();
+        },
+      );
+      if (changed.length > 0) overrides[theme] = Object.fromEntries(changed);
+    }
+    if (Object.keys(overrides).length > 0) zones[zone] = overrides;
+
+    const pairs = new Map<string, Record<string, string>>();
+    for (const [key, value] of Object.entries(spec.shell ?? {})) {
+      const themed = /^(.+)-(light|dark)$/.exec(key);
+      if (themed?.[1] && themed[2] && HEX.test(value)) {
+        const entry = pairs.get(themed[1]) ?? {};
+        entry[themed[2]] = value;
+        pairs.set(themed[1], entry);
+      } else if (PX.test(value)) {
+        addSize(`${zone}-${key}`, value, `$duna.zones.${zone}.shell.${key}`);
+      }
+    }
+    for (const [key, value] of pairs) {
+      const light = value.light ?? value.dark;
+      const dark = value.dark ?? value.light;
+      if (!light || !dark) continue;
+      source.color.tokens.push({
+        name: `${zone}-${key}`,
+        value: Object.fromEntries(
+          themes.map((theme) => [theme, theme === "light" ? light : dark]),
+        ),
+        usage: `$duna.zones.${zone}.shell.${key}-light / -dark`,
+      } as TokenEntry);
+    }
+  }
+  if (Object.keys(zones).length > 0) source.zones = zones;
+  return {
+    $generated: `Do not edit. \`pnpm tideline:tokens\` writes this file from ${TIDELINE_CONTRACT_TOKENS} with the canonical renames (${Object.entries(
+      TIDELINE_RAMP_RENAMES,
+    )
+      .map(([from, to]) => `${from}-* to ${to}-*`)
+      .join(", ")}), the retired tokens removed (${Object.keys(
+      TIDELINE_RETIRED_TOKENS,
+    ).join(
+      ", ",
+    )}), the contrast adjustments applied (${TIDELINE_VALUE_ADJUSTMENTS.map(
+      (adjustment) =>
+        `${adjustment.token} ${adjustment.theme} ${adjustment.from} to ${adjustment.to}`,
+    ).join(
+      ", ",
+    )}; see TIDELINE_VALUE_ADJUSTMENTS) and the $duna zone and icon decisions promoted to tokens.`,
+    ...source,
+  };
+}
+
+/** The design contract's token file, relative to the repository root. */
+export const TIDELINE_CONTRACT_TOKENS =
+  "docs/design/tideline-4.1.1/tokens.json";
 
 /** Prefix for every generated custom property. */
 export const TIDELINE_PREFIX = "td";
@@ -74,8 +333,7 @@ export const TIDELINE_ROOT = ".td";
 /** Themes that are a zone (a meaning) as well as a `data-theme` value. */
 const ZONE_THEMES = new Set(["live"]);
 const DEFAULT_THEME = "light";
-const GENERATED_NOTE =
-  "Generated by `pnpm tideline:tokens` from tokens.json. Do not edit by hand.";
+const GENERATED_NOTE = `Generated by \`pnpm tideline:tokens\` from ${TIDELINE_CONTRACT_TOKENS} (via tokens.json). Do not edit by hand.`;
 
 const cssVar = (name: string) => `--${TIDELINE_PREFIX}-${name}`;
 
@@ -196,6 +454,61 @@ export function resolveTidelineColors(
   );
 }
 
+/**
+ * Resolved colours for every zone and theme: the theme's colours with the
+ * zone's overrides on top. A zone without a value for a theme keeps the
+ * theme's own value (HQ in the live theme keeps the live ground).
+ */
+export function resolveTidelineZoneColors(
+  source: TidelineTokenSource,
+): Record<string, Record<string, Record<string, string>>> {
+  const colors = resolveTidelineColors(source);
+  return Object.fromEntries(
+    Object.entries(source.zones ?? {}).map(([zone, overrides]) => [
+      zone,
+      Object.fromEntries(
+        themeIds(source).map((theme) => [
+          theme,
+          { ...colors[theme], ...overrides[theme] },
+        ]),
+      ),
+    ]),
+  );
+}
+
+/** Each zone's repainted roles, per theme, as resolved values. */
+function zoneOverrides(
+  source: TidelineTokenSource,
+): Record<string, Record<string, Record<string, string>>> {
+  const colors = resolveTidelineColors(source);
+  return Object.fromEntries(
+    Object.entries(source.zones ?? {}).map(([zone, overrides]) => {
+      const roles = [
+        ...new Set(Object.values(overrides).flatMap((o) => Object.keys(o))),
+      ];
+      for (const role of roles) {
+        if (!(role in (colors[DEFAULT_THEME] ?? {}))) {
+          throw new Error(`Zone "${zone}" repaints unknown role "${role}"`);
+        }
+      }
+      return [
+        zone,
+        Object.fromEntries(
+          themeIds(source).map((theme) => [
+            theme,
+            Object.fromEntries(
+              roles.map((role) => [
+                role,
+                overrides[theme]?.[role] ?? colors[theme]![role]!,
+              ]),
+            ),
+          ]),
+        ),
+      ];
+    }),
+  );
+}
+
 /** Duna's readability floor: no product text below 12px. */
 export const TYPE_FLOOR_PX = 12;
 
@@ -280,17 +593,68 @@ export function buildTidelineTokensCss(source: TidelineTokenSource): string {
     return `  ${themeSelector(theme).replaceAll("\n", "\n  ")} {\n${declarations(lines)}\n  }`;
   });
 
+  // A zone repaints a few roles. Its plain selector serves the default
+  // theme; each other theme gets a more specific block that restores (or
+  // sets) that theme's value, so the zone never leaks light values into dark.
+  for (const [zone, byTheme] of Object.entries(zoneOverrides(source))) {
+    for (const theme of themes) {
+      const values = byTheme[theme] ?? {};
+      const ground = values.ground ?? colors[theme]?.ground;
+      const scheme =
+        ground && hexChannels(ground) && relativeLuminance(ground) < 0.2
+          ? "dark"
+          : "light";
+      const selector =
+        theme === DEFAULT_THEME
+          ? `${TIDELINE_ROOT}[data-zone="${zone}"]`
+          : `${TIDELINE_ROOT}[data-zone="${zone}"][data-theme="${theme}"]`;
+      const lines: Array<[string, string]> = [
+        ["color-scheme", scheme],
+        ...Object.entries(values).map(
+          ([role, value]) => [cssVar(role), value] as [string, string],
+        ),
+      ];
+      blocks.push(`  ${selector} {\n${declarations(lines)}\n  }`);
+    }
+  }
+
+  const brand = source.type.brand;
+  if (brand) {
+    base.push([cssVar("type-brand-weight"), String(brand.weight)]);
+    base.push([cssVar("type-brand-tracking"), brand.tracking]);
+    base.push([cssVar("type-brand-min"), brand.min]);
+  }
+
+  const reduced = Object.entries(source.reducedMotion ?? {});
+  for (const [name] of reduced) {
+    if (!known.has(name)) {
+      throw new Error(`Reduced motion names unknown token "${name}"`);
+    }
+  }
+  const reducedBlock =
+    reduced.length > 0
+      ? [
+          `  @media (prefers-reduced-motion: reduce) {`,
+          `    ${TIDELINE_ROOT} {`,
+          ...reduced.map(([name, value]) => `      ${cssVar(name)}: ${value};`),
+          `    }`,
+          `  }`,
+        ]
+      : [];
+
   return [
     `/* Tideline ${source.version} tokens. ${GENERATED_NOTE} */`,
     `@layer tideline {`,
     `  ${TIDELINE_ROOT} {\n${declarations(base)}\n  }`,
     ...blocks,
+    ...reducedBlock,
     `}`,
     ``,
   ].join("\n");
 }
 
 const PX = /^(-?\d+(?:\.\d+)?)px$/;
+const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 const MS = /^(-?\d+(?:\.\d+)?)ms$/;
 const EM = /^(-?\d+(?:\.\d+)?)em$/;
 const NUMBER = /^-?\d+(?:\.\d+)?$/;
@@ -367,6 +731,25 @@ export function buildTidelineTokensTs(source: TidelineTokenSource): string {
     type: Object.fromEntries(
       typeStyles(source).map((style) => [style.name, nativeTypeStyle(style)]),
     ),
+    ...(source.type.brand
+      ? {
+          brandType: {
+            family: "brand",
+            fontWeight: source.type.brand.weight,
+            letterSpacingEm: Number(
+              EM.exec(source.type.brand.tracking)?.[1] ?? 0,
+            ),
+            minFontSize: nativeValue(source.type.brand.min),
+          },
+        }
+      : {}),
+    zone: zoneOverrides(source),
+    reducedMotion: Object.fromEntries(
+      Object.entries(source.reducedMotion ?? {}).map(([name, value]) => [
+        name,
+        nativeValue(value),
+      ]),
+    ),
   };
 
   return [
@@ -379,12 +762,23 @@ export function buildTidelineTokensTs(source: TidelineTokenSource): string {
     `export type TidelineColorRole = keyof TidelineTokens["color"]["${DEFAULT_THEME}"];`,
     `export type TidelineTypeStyle = keyof TidelineTokens["type"];`,
     ``,
-    `/** The resolved colour set for a theme; the live zone wins over the preference. */`,
+    `export type TidelineZone = "live" | keyof TidelineTokens["zone"];`,
+    ``,
+    `/**`,
+    ` * The resolved colour set for a theme and zone. The live zone wins over the`,
+    ` * preference; another zone (HQ) repaints its roles on top of the theme.`,
+    ` */`,
     `export function tidelineColors(`,
     `  theme: TidelineTheme = "${DEFAULT_THEME}",`,
-    `  zone?: string,`,
-    `): TidelineTokens["color"][TidelineTheme] {`,
-    `  return tidelineTokens.color[zone === "live" ? "live" : theme];`,
+    `  zone?: TidelineZone | (string & {}),`,
+    `): Record<TidelineColorRole, string> {`,
+    `  if (zone === "live") return tidelineTokens.color.live;`,
+    `  const overrides =`,
+    `    zone && zone in tidelineTokens.zone`,
+    `      ? tidelineTokens.zone[zone as keyof TidelineTokens["zone"]][theme]`,
+    `      : undefined;`,
+    `  const colors = tidelineTokens.color[theme];`,
+    `  return overrides ? { ...colors, ...overrides } : colors;`,
     `}`,
     ``,
   ].join("\n");

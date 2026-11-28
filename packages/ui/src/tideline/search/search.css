@@ -34,8 +34,8 @@
       display: inline-grid;
       flex: none;
       place-items: center;
-      width: var(--td-size-icon);
-      height: var(--td-size-icon);
+      width: var(--td-size-icon-control);
+      height: var(--td-size-icon-control);
     }
 
     .td-search__input {
@@ -110,13 +110,15 @@
       color: var(--td-danger);
     }
 
+    /* Offline is a risk, not a live state: warning, never Solar (R5). */
+
     .td-search[data-state="offline"] {
       .td-search__box {
-        box-shadow: inset 0 0 0 2px var(--td-live);
+        box-shadow: inset 0 0 0 2px var(--td-warning);
       }
 
       .td-search__message {
-        color: var(--td-live-ink);
+        color: var(--td-warning);
       }
     }
 

@@ -21,6 +21,13 @@ const hqServerCommand = process.env.CI
   ? `pnpm --filter @duna/hq exec next start --port ${hqPort} --hostname 127.0.0.1`
   : `pnpm --filter @duna/hq exec next dev --port ${hqPort} --hostname 127.0.0.1`;
 
+// The persona suite (tests/e2e/personas) signs in as a chosen demo persona
+// through a test-only cookie. The servers honour it only with this variable,
+// only in demo mode and never on a production deployment
+// (packages/api/src/demo-persona.ts).
+const personaSwitch = { DUNA_DEMO_PERSONAS: "enabled" };
+const personaSuite = "**/personas/**";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   // Visual baselines and CSS coverage have their own config and are not part
@@ -46,13 +53,14 @@ export default defineConfig({
     {
       command: webServerCommand,
       port: webPort,
-      env: { NEXT_PUBLIC_HQ_URL: hqBaseUrl },
+      env: { NEXT_PUBLIC_HQ_URL: hqBaseUrl, ...personaSwitch },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
     {
       command: hqServerCommand,
       port: hqPort,
+      env: personaSwitch,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
@@ -60,6 +68,7 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
+      testIgnore: personaSuite,
       use: {
         ...devices["Desktop Chrome"],
         extraHTTPHeaders: clientHeaders(2),
@@ -67,6 +76,7 @@ export default defineConfig({
     },
     {
       name: "tablet",
+      testIgnore: personaSuite,
       use: {
         ...devices["iPad (gen 7)"],
         browserName: "chromium",
@@ -75,10 +85,23 @@ export default defineConfig({
     },
     {
       name: "mobile",
+      testIgnore: personaSuite,
       use: {
         ...devices["iPhone 15"],
         browserName: "chromium",
         extraHTTPHeaders: clientHeaders(4),
+      },
+    },
+    {
+      // Persona journeys (Q0): one desktop width, its own project so the
+      // viewport suites above are unchanged. Run alone with
+      // `pnpm test:e2e --project=personas`.
+      name: "personas",
+      testDir: "./tests/e2e/personas",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
+        extraHTTPHeaders: clientHeaders(5),
       },
     },
   ],

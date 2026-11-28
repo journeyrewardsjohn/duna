@@ -1,7 +1,7 @@
 /* Tideline Surface, Card, Chip, Badge, Notice, Kbd, toolbar and EmptyState. Rules: see styles.css and docs/design/tideline-components.md. */
 @layer tideline {
   .td {
-    /* The phone ramp: Archivo at normal width so names never wrap. */
+    /* The phone ramp. */
 
     @media (max-width: 599px) {
       .td-empty__title {
@@ -323,7 +323,7 @@
 
     .td-badge--live {
       background: var(--td-live);
-      color: var(--td-tide-950);
+      color: var(--td-brand-night-court);
     }
 
     .td-badge--dot {

@@ -61,7 +61,7 @@
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: var(--td-energy);
+      background: var(--td-energy-ink);
     }
 
     .td-tslot {

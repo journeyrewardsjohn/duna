@@ -132,23 +132,27 @@ describe("Tideline stylesheet rules", () => {
     expect(all).not.toContain("--td-type-tab-label");
   });
 
-  it("allows no new !important", () => {
-    // Legacy exceptions, to be removed once the apps' global CSS is layered:
-    // base hides closed UI SDK content before its CSS loads; button locks the
-    // primary label colour against unlayered host rules.
-    const allowed: Record<string, number> = { base: 1, button: 2 };
+  it("uses no important declarations", () => {
+    // The cascade layer and specificity win instead; legacy-bridge.css hands
+    // properties back from unlayered host CSS.
     for (const { name, css } of stylesheets) {
-      const count = css.match(/!important/g)?.length ?? 0;
-      expect(count, `${name}.css uses !important`).toBe(allowed[name] ?? 0);
+      expect(css, `${name}.css`).not.toMatch(/!\s*important/i);
     }
+    expect(stripComments(read("legacy-bridge.css"))).not.toMatch(
+      /!\s*important/i,
+    );
   });
 
-  it("locks the primary label colour for links and children", () => {
+  it("sets the primary label colour for links and children", () => {
     const button = stylesheets.find(({ name }) => name === "button")!.css;
     expect(button).toMatch(
-      /a\.td-btn--primary:is\(:link, :visited, :hover, :active\)/,
+      /a\.td-btn--primary:is\(:link, :visited, :hover, :active, :focus\)/,
     );
     expect(button).toContain("-webkit-text-fill-color: var(--td-on-action);");
+    // Against unlayered host CSS the bridge hands both properties back.
+    const bridge = stripComments(read("legacy-bridge.css"));
+    expect(bridge).toContain("color: revert-layer;");
+    expect(bridge).toContain("-webkit-text-fill-color: revert-layer;");
   });
 
   it("gives every loop a reduced-motion resting state in its own family", () => {
