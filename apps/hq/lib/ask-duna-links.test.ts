@@ -4,7 +4,7 @@ import { getAskDunaInternalHref } from "./ask-duna-links";
 describe("Ask Duna internal navigation", () => {
   it("keeps product paths, query strings and fragments in HQ", () => {
     for (const href of [
-      "/settings/theme",
+      "/setup/identity",
       "/settings?section=business#details",
       "/ask/30000000-0000-4000-8000-000000000001",
     ])

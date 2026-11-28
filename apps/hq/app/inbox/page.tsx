@@ -245,7 +245,7 @@ export default async function OrganizationMessagesPage({
   ];
   return (
     <OperatorShell
-      active="messages"
+      active="inbox"
       messageDraftCount={workspace.messageDrafts.length}
       messageUnreadCount={inbox.totalUnread}
       organization={dashboard.organization}
@@ -260,7 +260,7 @@ export default async function OrganizationMessagesPage({
             </p>
           </div>
           <div>
-            <Link className={styles.newButton} href="/messages?compose=new">
+            <Link className={styles.newButton} href="/inbox?compose=new">
               <Plus aria-hidden size={17} /> New message
             </Link>
           </div>
@@ -276,7 +276,7 @@ export default async function OrganizationMessagesPage({
               {inbox.totalUnread > 0 && <i>{inbox.totalUnread}</i>}
             </header>
             <form
-              action="/messages"
+              action="/inbox"
               className={styles.inboxSearch}
               role="search"
             >
@@ -300,7 +300,7 @@ export default async function OrganizationMessagesPage({
                 <Link
                   key={item}
                   aria-current={activeFilter === item ? "page" : undefined}
-                  href={`/messages?view=inbox&filter=${item}&q=${encodeURIComponent(query)}`}
+                  href={`/inbox?view=inbox&filter=${item}&q=${encodeURIComponent(query)}`}
                 >
                   {item === "all"
                     ? "All"
@@ -320,7 +320,7 @@ export default async function OrganizationMessagesPage({
                       ? styles.active
                       : undefined
                   }
-                  href={`/messages?thread=${conversation.id}&filter=${activeFilter}&q=${encodeURIComponent(query)}`}
+                  href={`/inbox?thread=${conversation.id}&filter=${activeFilter}&q=${encodeURIComponent(query)}`}
                   key={conversation.id}
                 >
                   <span className={styles.avatar}>
@@ -363,7 +363,7 @@ export default async function OrganizationMessagesPage({
           {compose === "new" ? (
             <section className={styles.composePanel}>
               <header>
-                <Link href="/messages?view=inbox" aria-label="Close composer">
+                <Link href="/inbox?view=inbox" aria-label="Close composer">
                   <ArrowLeft aria-hidden size={19} />
                 </Link>
                 <span>
@@ -410,7 +410,7 @@ export default async function OrganizationMessagesPage({
                 <Link
                   aria-label="Back to inbox"
                   className={styles.backLink}
-                  href="/messages?view=inbox"
+                  href="/inbox?view=inbox"
                 >
                   <ArrowLeft aria-hidden size={19} />
                 </Link>
@@ -425,7 +425,7 @@ export default async function OrganizationMessagesPage({
                     {detail.conversation.context?.label ?? "Organization"}
                   </small>
                 </span>
-                <Link href="/messages?compose=new">
+                <Link href="/inbox?compose=new">
                   <Plus aria-hidden size={16} /> New
                 </Link>
               </header>
@@ -525,7 +525,7 @@ export default async function OrganizationMessagesPage({
               <MessageSquareText aria-hidden size={30} />
               <h2>Start the first conversation.</h2>
               <p>Choose a real Duna audience and share something useful.</p>
-              <Link href="/messages?compose=new">
+              <Link href="/inbox?compose=new">
                 New message <ChevronRight aria-hidden size={16} />
               </Link>
             </section>

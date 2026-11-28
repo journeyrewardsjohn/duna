@@ -15,13 +15,13 @@ export default async function AudiencesPage() {
     caller.operator.audienceBuilder(),
   ]);
   return (
-    <OperatorShell active="audiences" organization={dashboard.organization}>
+    <OperatorShell active="marketing" organization={dashboard.organization}>
       <main className="hq-page module-page audience-page">
         <PageHeader
           actions={
             <Link
               className={buttonClassName({ size: "large" })}
-              href="/audiences/create"
+              href="/marketing/audiences/create"
             >
               <Plus aria-hidden size={18} /> Create audience
             </Link>

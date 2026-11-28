@@ -4,8 +4,8 @@ import { canAccessWorkspace } from "@/lib/workspace-options";
 
 function returnTo(result: string | undefined): string {
   return result === "refresh"
-    ? "/payments?stripe=refresh"
-    : "/payments?stripe=return";
+    ? "/money?stripe=refresh"
+    : "/money?stripe=return";
 }
 
 export default async function StripeOrganizationReturnPage({
@@ -24,7 +24,7 @@ export default async function StripeOrganizationReturnPage({
     redirect(`/sign-in?returnTo=${encodeURIComponent(recoveryPath)}`);
   }
   if (!organizationId || !(await canAccessWorkspace(organizationId))) {
-    redirect("/onboarding?error=workspace");
+    redirect("/setup/start?error=workspace");
   }
 
   await switchToOrganization(organizationId, { returnTo: destination });

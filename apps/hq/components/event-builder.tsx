@@ -1,5 +1,6 @@
 "use client";
 
+import { hqLeaguesPath } from "@duna/core/hq-routes";
 import type {
   EventDraftEditor,
   OperatorWorkspace,
@@ -2013,7 +2014,7 @@ export function EventBuilder({
     <main className="event-builder">
       <header className="event-builder__header">
         <div>
-          <Link href={kind === "league" ? "/leagues" : "/events"}>
+          <Link href={kind === "league" ? hqLeaguesPath : "/events"}>
             <ArrowLeft aria-hidden size={16} /> Back to{" "}
             {kind === "league" ? "leagues" : "events"}
           </Link>
@@ -3808,7 +3809,7 @@ export function EventBuilder({
                   </p>
                 </div>
                 {!workspace.organization.stripeChargesEnabled && paid && (
-                  <Link href="/payments">Configure Money</Link>
+                  <Link href="/money">Configure Money</Link>
                 )}
               </article>
               {isPublishedEdit && (
@@ -3868,8 +3869,10 @@ export function EventBuilder({
                       href={
                         isPublishedEdit && state.entityId
                           ? `/events/${state.entityId}`
-                          : `${kind === "league" ? "/leagues" : "/events"}${
-                              state.entityId ? `?draft=${state.entityId}` : ""
+                          : `${kind === "league" ? hqLeaguesPath : "/events"}${
+                              state.entityId
+                                ? `${kind === "league" ? "&" : "?"}draft=${state.entityId}`
+                                : ""
                             }`
                       }
                     >

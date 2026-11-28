@@ -48,7 +48,7 @@ export const knownA11yFindings: readonly A11yAllowance[] = [
     reason: "H7: the practice plan builder's block search has no label.",
   },
   {
-    page: /\/audiences(?:$|[?#/])/,
+    page: /\/marketing\/audiences(?:$|[?#/])/,
     match: /searchbox without a name/,
     reason: "H13: the Audiences search field has no label.",
   },

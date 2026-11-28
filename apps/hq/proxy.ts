@@ -62,11 +62,11 @@ async function routeProxy(request: NextRequest): Promise<NextResponse> {
   if (
     result.session.user &&
     !result.session.organizationId &&
-    !routeMatches(pathname, "/onboarding") &&
+    !routeMatches(pathname, "/setup/start") &&
     !isPublicHqRoute(pathname)
   ) {
     return handleAuthkitProxy(request, result.headers, {
-      redirect: new URL("/onboarding", request.url),
+      redirect: new URL("/setup/start", request.url),
     });
   }
   return handleAuthkitProxy(request, result.headers);

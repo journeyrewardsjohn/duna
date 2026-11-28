@@ -75,7 +75,7 @@ export function VenueCreateWorkspace({
 
   useEffect(() => {
     if (state.status === "success" && state.entityId) {
-      router.push(`/locations/${state.entityId}?created=true`);
+      router.push(`/setup/places/${state.entityId}?created=true`);
     }
   }, [router, state.entityId, state.status]);
 
@@ -131,7 +131,7 @@ export function VenueCreateWorkspace({
         <Link
           aria-label="Back to venues"
           className="venue-workspace-back"
-          href="/locations"
+          href="/setup/places"
         >
           <ArrowLeft aria-hidden size={19} />
         </Link>

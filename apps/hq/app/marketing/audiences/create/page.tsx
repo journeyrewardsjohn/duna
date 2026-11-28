@@ -31,13 +31,13 @@ export default async function CreateAudiencePage() {
     })),
   ];
   return (
-    <OperatorShell active="audiences" organization={dashboard.organization}>
+    <OperatorShell active="marketing" organization={dashboard.organization}>
       <main className="hq-page module-page audience-page">
         <PageHeader
           actions={
             <Link
               className={buttonClassName({ tone: "secondary" })}
-              href="/audiences"
+              href="/marketing/audiences"
             >
               <ArrowLeft aria-hidden size={17} /> Back to audiences
             </Link>

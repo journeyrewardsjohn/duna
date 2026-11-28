@@ -32,7 +32,7 @@ export default async function VenueLayoutPage({
   if (layoutWorkspace.venue.id !== venueId) notFound();
   return (
     <OperatorShell
-      active="locations"
+      active="setup"
       immersive={layoutWorkspace.layouts.length > 0}
       messageDraftCount={operatorWorkspace.messageDrafts.length}
       organization={dashboard.organization}

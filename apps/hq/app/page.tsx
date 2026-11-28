@@ -14,7 +14,7 @@ export default async function HqPage() {
   ]);
   return (
     <OperatorShell
-      active="overview"
+      active="today"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

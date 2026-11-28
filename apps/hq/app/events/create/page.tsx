@@ -1,3 +1,4 @@
+import { hqLeaguesPath } from "@duna/core/hq-routes";
 import { HqCreationFlow } from "@duna/ui";
 import type { Metadata } from "next";
 import { EventBuilder } from "@/components/event-builder";
@@ -41,7 +42,7 @@ export default async function CreateEventPage({
 
   return (
     <OperatorShell
-      active={(eventDraft?.kind ?? type) === "league" ? "leagues" : "events"}
+      active="events"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
@@ -57,7 +58,7 @@ export default async function CreateEventPage({
         ])}
         title={type === "league" ? "Create league" : "Create event"}
         noun={type === "league" ? "league" : "event"}
-        backHref={type === "league" ? "/leagues" : "/events"}
+        backHref={type === "league" ? hqLeaguesPath : "/events"}
         backLabel={type === "league" ? "Leagues" : "Events"}
         initialManual={Boolean(
           eventDraft || title || summary || venue || starts,

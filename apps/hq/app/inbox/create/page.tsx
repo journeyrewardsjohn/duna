@@ -7,6 +7,6 @@ export default async function CreateMessagePage({
 }) {
   const { recipient } = await searchParams;
   redirect(
-    `/messages?compose=new${recipient ? `&recipient=${encodeURIComponent(recipient)}` : ""}`,
+    `/inbox?compose=new${recipient ? `&recipient=${encodeURIComponent(recipient)}` : ""}`,
   );
 }

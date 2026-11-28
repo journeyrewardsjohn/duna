@@ -1,17 +1,32 @@
-import { notFound, redirect } from "next/navigation";
+import { hqOperatorModuleSlugs } from "@duna/core/hq-routes";
+import { notFound } from "next/navigation";
 import { ModulePanel } from "@/components/module-panels";
-import { operatorModules, type OperatorModule } from "@/components/navigation";
+import {
+  operatorModules,
+  operatorPanelArea,
+  type OperatorPanel,
+} from "@/components/navigation";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
 
+/** List pages served here: schedule, people, team, events, offerings, marketing, reports. */
+function servedModule(module: string) {
+  return (hqOperatorModuleSlugs as readonly string[]).includes(module)
+    ? operatorModules.find((entry) => entry.slug === module)
+    : undefined;
+}
+
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   readonly params: Promise<{ module: string }>;
+  readonly searchParams: Promise<{ type?: string }>;
 }) {
   const { module } = await params;
-  const item = operatorModules.find((entry) => entry.slug === module);
-  return { title: item?.label ?? "HQ" };
+  const { type } = await searchParams;
+  if (module === "events" && type === "league") return { title: "Leagues" };
+  return { title: servedModule(module)?.label ?? "HQ" };
 }
 
 export default async function OperatorModulePage({
@@ -19,32 +34,21 @@ export default async function OperatorModulePage({
   searchParams,
 }: {
   readonly params: Promise<{ module: string }>;
-  readonly searchParams: Promise<{ draft?: string; stripe?: string }>;
+  readonly searchParams: Promise<{ draft?: string; type?: string }>;
 }) {
   const { module } = await params;
-  const { draft, stripe } = await searchParams;
-  const item = operatorModules.find((entry) => entry.slug === module);
-  if (!item || module === "overview") notFound();
-  if (module === "ai") redirect("/ask");
+  const { draft, type } = await searchParams;
+  const item = servedModule(module);
+  if (!item) notFound();
+  // A league is an event type: /events?type=league shows the leagues panel.
+  const panel: OperatorPanel =
+    item.slug === "events" && type === "league" ? "leagues" : item.slug;
   const caller = await getServerCaller();
-  if (module === "payments" && stripe === "return") {
-    try {
-      await caller.operator.refreshStripeOnboarding({
-        idempotencyKey: crypto.randomUUID(),
-      });
-    } catch (error) {
-      console.error("Stripe onboarding status refresh failed.", error);
-    }
-  }
   const [dashboard, workspace, ticketApprovals, matches] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
     (async () => {
-      if (
-        module !== "events" &&
-        module !== "leagues" &&
-        module !== "payments"
-      ) {
+      if (panel !== "events" && panel !== "leagues") {
         return [];
       }
       try {
@@ -67,25 +71,25 @@ export default async function OperatorModulePage({
       ? caller.operator.scorableMatches()
       : Promise.resolve([]),
   ]);
-  const activeChild =
-    module === "products"
+  const activeType =
+    panel === "offerings"
       ? "all-products"
-      : module === "events"
+      : panel === "events"
         ? "all-events"
-        : module === "leagues"
+        : panel === "leagues"
           ? "leagues"
           : undefined;
   return (
     <OperatorShell
-      active={module === "leagues" ? "events" : (module as OperatorModule)}
-      activeChild={activeChild}
+      active={operatorPanelArea(panel)}
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
       <ModulePanel
+        activeType={activeType}
         dashboard={dashboard}
         focusedDraftId={draft}
-        module={module as OperatorModule}
+        module={panel}
         matches={matches}
         ticketApprovals={ticketApprovals}
         workspace={workspace}

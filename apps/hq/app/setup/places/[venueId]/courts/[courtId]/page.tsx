@@ -36,7 +36,7 @@ export default async function CourtManagementPage({
   if (!venue || !court) notFound();
   return (
     <OperatorShell
-      active="locations"
+      active="setup"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

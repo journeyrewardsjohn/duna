@@ -22,7 +22,7 @@ export default async function MemberProfilePage({
   }
   return (
     <OperatorShell
-      active="members"
+      active="people"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

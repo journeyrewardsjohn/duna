@@ -28,7 +28,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-import OrganizationOnboardingPage from "@/app/onboarding/page";
+import OrganizationOnboardingPage from "@/app/setup/start/page";
 import { renderElementForTest, renderForTest } from "@/lib/render-for-test";
 import { OperatorOverview } from "./operator-overview";
 
@@ -109,7 +109,7 @@ describe("business onboarding experience", () => {
 
     const setupLinks = overview
       .elements("a")
-      .filter((link) => link.href === "/payments/setup");
+      .filter((link) => link.href === "/money/setup");
     // The Payments metric and the attention item both open secure setup.
     expect(setupLinks.length).toBeGreaterThanOrEqual(2);
     expect(overview.text).toContain("Open secure setup");

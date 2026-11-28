@@ -22,7 +22,7 @@ export default async function AskDunaPage({
   const caller = await getServerCaller();
   const workspace = await caller.operator.workspace();
   return (
-    <OperatorShell active="ai" organization={workspace.organization}>
+    <OperatorShell active="ask" organization={workspace.organization}>
       <AskDunaWorkspace
         key={`${actor.personId}:${actor.organizationId}:${parts[0] ?? "new"}`}
         history={parts[0] === "history"}

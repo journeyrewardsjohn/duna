@@ -84,8 +84,8 @@ export async function sendOrganizationMessage(
   } catch (error) {
     return actionError(error, "The message could not be sent. Try again.");
   }
-  revalidatePath("/messages");
-  redirect(`/messages?thread=${conversationId}`);
+  revalidatePath("/inbox");
+  redirect(`/inbox?thread=${conversationId}`);
 }
 
 export async function createOrganizationConversation(
@@ -152,6 +152,6 @@ export async function createOrganizationConversation(
       "The conversation could not be created. Review the audience and try again.",
     );
   }
-  revalidatePath("/messages");
-  redirect(`/messages?thread=${conversationId}`);
+  revalidatePath("/inbox");
+  redirect(`/inbox?thread=${conversationId}`);
 }

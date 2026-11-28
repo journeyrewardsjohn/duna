@@ -59,13 +59,13 @@ function scheduleAvailability(
 }
 
 function quickActionDestination(label: string): string {
-  if (label === "Add person") return "/members";
-  if (label === "Send update") return "/messages";
-  if (label === "Reconcile") return "/payments";
+  if (label === "Add person") return "/people";
+  if (label === "Send update") return "/inbox";
+  if (label === "Reconcile") return "/money";
   if (label === "Run check-in") return "/events";
   if (label === "Create event") return "/events/create";
-  if (label === "Create product") return "/products/create";
-  return "/calendar";
+  if (label === "Create product") return "/offerings/create";
+  return "/schedule";
 }
 
 export function OperatorOverview({
@@ -104,7 +104,7 @@ export function OperatorOverview({
     <main className="hq-page hq-overview-page">
       <HqWorkPrompt date={today} />
       <nav className="hq-work-actions" aria-label="Common tasks">
-        <Link href="/calendar">
+        <Link href="/schedule">
           <CalendarPlus size={17} aria-hidden />
           Schedule
         </Link>
@@ -112,11 +112,11 @@ export function OperatorOverview({
           <ChevronRight size={17} aria-hidden />
           Create event
         </Link>
-        <Link href="/members">
+        <Link href="/people">
           <UsersRound size={17} aria-hidden />
           People
         </Link>
-        <Link href="/payments">
+        <Link href="/money">
           <CreditCard size={17} aria-hidden />
           Money
         </Link>
@@ -128,7 +128,7 @@ export function OperatorOverview({
               <div>
                 <h2>Today</h2>
               </div>
-              <Link href="/calendar">
+              <Link href="/schedule">
                 Full calendar <ArrowRight aria-hidden size={15} />
               </Link>
             </header>
@@ -240,7 +240,7 @@ export function OperatorOverview({
               dashboard.alerts.map((alert) => (
                 <Link
                   key={alert.id}
-                  href={alert.id === "stripe" ? "/payments/setup" : "/calendar"}
+                  href={alert.id === "stripe" ? "/money/setup" : "/schedule"}
                 >
                   <span>
                     <strong>{alert.title}</strong>
@@ -379,7 +379,7 @@ export function OperatorOverview({
                     <Link
                       className="hq-analytics-metric hq-analytics-metric--link"
                       data-tone={metric.tone}
-                      href="/payments/setup"
+                      href="/money/setup"
                       key={metric.label}
                     >
                       {cardContent}
@@ -494,8 +494,8 @@ export function OperatorOverview({
                       detail: topAlert.detail,
                       href:
                         topAlert.id === "stripe"
-                          ? "/payments/setup"
-                          : "/calendar",
+                          ? "/money/setup"
+                          : "/schedule",
                     },
                   ]
                 : nearlyFull[0]

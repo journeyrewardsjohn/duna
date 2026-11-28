@@ -20,7 +20,7 @@ export default async function MemberHealthDetailsPage({
   if (!profile) notFound();
   return (
     <OperatorShell
-      active="members"
+      active="people"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

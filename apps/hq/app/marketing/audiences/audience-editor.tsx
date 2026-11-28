@@ -475,7 +475,7 @@ export function AudienceEditor({
               router.refresh();
             } else {
               setCreateKey(crypto.randomUUID());
-              router.push(`/audiences/${saved.id}`);
+              router.push(`/marketing/audiences/${saved.id}`);
             }
           } catch (error) {
             setNotice(

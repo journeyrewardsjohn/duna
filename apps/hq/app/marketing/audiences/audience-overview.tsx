@@ -143,7 +143,7 @@ export function AudienceOverview({
                   return (
                     <tr key={audience.id}>
                       <td data-label="Audience">
-                        <Link href={`/audiences/${audience.id}`}>
+                        <Link href={`/marketing/audiences/${audience.id}`}>
                           <strong>{audience.name}</strong>
                           <span>
                             Revision {audience.revision} ·{" "}
@@ -212,7 +212,7 @@ export function AudienceOverview({
                         <Link
                           aria-label={`Open ${audience.name}`}
                           className="audience-overview__open"
-                          href={`/audiences/${audience.id}`}
+                          href={`/marketing/audiences/${audience.id}`}
                         >
                           <ArrowUpRight aria-hidden size={18} />
                         </Link>
@@ -235,7 +235,7 @@ export function AudienceOverview({
             action={
               <Link
                 className={buttonClassName({ size: "large" })}
-                href="/audiences/create"
+                href="/marketing/audiences/create"
               >
                 <Plus aria-hidden size={18} /> Create your first audience
               </Link>

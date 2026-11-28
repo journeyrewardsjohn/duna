@@ -22,7 +22,7 @@ export default async function ProductBuilderPage({
 
   return (
     <OperatorShell
-      active="products"
+      active="offerings"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

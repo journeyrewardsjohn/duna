@@ -33,7 +33,7 @@ test.describe("CO-1 Sign up and open the club's workspace", () => {
   test("CO-1.3 HQ's first run opens for the new organisation", async ({
     page,
   }) => {
-    await page.goto(hq("/onboarding"));
+    await page.goto(hq("/setup/start"));
     await expectPageReady(page, "Start your Duna workspace.");
     await expectNoLayoutShift(page);
   });
@@ -63,7 +63,7 @@ test.describe("CO-2 Set up the club from its website", () => {
 
 test.describe("CO-3 Connect payments (Duna Pay)", () => {
   test("CO-3.1 Money leads to Duna Pay setup", async ({ page }) => {
-    await page.goto(hq("/payments/setup"));
+    await page.goto(hq("/money/setup"));
     await expectPageReady(page, "Configure money once.");
     await expect(
       page.getByRole("button", { name: "Prepare secure Stripe link" }),
@@ -83,7 +83,7 @@ test.describe("CO-4 Add places and courts", () => {
   test("CO-4.1 Start adding a venue by describing it or by hand", async ({
     page,
   }) => {
-    await page.goto(hq("/locations/create"));
+    await page.goto(hq("/setup/places/create"));
     await expectPageReady(page, "Add venue");
     await expect(
       page.getByRole("textbox", { name: "What would you like to create?" }),
@@ -182,7 +182,7 @@ test.describe("CO-9 Refund a booking", () => {
   test("CO-9.1 Find the booking's payment in Money › Transactions", async ({
     page,
   }) => {
-    await page.goto(hq("/payments/transactions"));
+    await page.goto(hq("/money/transactions"));
     await expectPageReady(page, "Transactions");
     await expect(
       page.getByRole("searchbox", { name: "Search transactions" }),
@@ -194,12 +194,12 @@ test.describe("CO-9 Refund a booking", () => {
     ).toBeVisible();
   });
   test("CO-9.2 Open the transaction", async ({ page }) => {
-    await page.goto(hq("/payments/transactions"));
+    await page.goto(hq("/money/transactions"));
     await page
       .getByRole("link", { name: /^Open .* transaction$/ })
       .first()
       .click();
-    await expect(page).toHaveURL(/\/payments\/transactions\/[^/]+$/);
+    await expect(page).toHaveURL(/\/money\/transactions\/[^/]+$/);
     await expectPageReady(page);
   });
   test.fixme("CO-9.3 Refund it with a strong confirm that restates amount, person and consequence [H10, B2]", async () => {

@@ -289,7 +289,7 @@ function MoneyHero({
             Open Stripe account <ArrowUpRight size={14} />
           </a>
         ) : (
-          <a href="/payments/setup">
+          <a href="/money/setup">
             {money.connect.connected
               ? "Manage connection"
               : "Finish Stripe setup"}{" "}
@@ -522,7 +522,7 @@ export function MoneyWorkspace({
             </button>
             <a
               className="money-movement-card"
-              href={money.connect.settingsUrl ?? "/payments/setup"}
+              href={money.connect.settingsUrl ?? "/money/setup"}
               rel={money.connect.settingsUrl ? "noreferrer" : undefined}
               target={money.connect.settingsUrl ? "_blank" : undefined}
             >
@@ -1384,7 +1384,7 @@ export function MoneyWorkspace({
               </button>
               <a
                 className="hq-button hq-button--primary"
-                href={money.connect.settingsUrl ?? "/payments/setup"}
+                href={money.connect.settingsUrl ?? "/money/setup"}
                 rel={money.connect.settingsUrl ? "noreferrer" : undefined}
                 target={money.connect.settingsUrl ? "_blank" : undefined}
               >

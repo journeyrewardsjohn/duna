@@ -37,7 +37,7 @@ export default async function VenueManagementPage({
       : "overview";
   return (
     <OperatorShell
-      active="locations"
+      active="setup"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

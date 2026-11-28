@@ -160,7 +160,6 @@ export async function setDemoDataAction(
     revalidatePath("/admin");
     revalidatePath("/admin/flags");
     revalidatePath("/events");
-    revalidatePath("/leagues");
     return {
       status: "success",
       message: result.enabled

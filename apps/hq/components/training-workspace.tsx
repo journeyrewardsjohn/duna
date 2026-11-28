@@ -518,7 +518,7 @@ function ProgramsView({
             forcing coaches to edit commerce.
           </p>
         </div>
-        <Link href="/products/create?type=service&subtype=program">
+        <Link href="/offerings/create?type=service&subtype=program">
           Create a Program offer <ArrowRight aria-hidden size={16} />
         </Link>
       </section>

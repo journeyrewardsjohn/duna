@@ -65,17 +65,17 @@ async function createWorkspace(formData: FormData) {
   "use server";
 
   const { user } = await withAuth();
-  if (!user) redirect("/sign-in?returnTo=/onboarding");
+  if (!user) redirect("/sign-in?returnTo=/setup/start");
   const name = String(formData.get("name") ?? "")
     .trim()
     .slice(0, 100);
-  if (name.length < 2) redirect("/onboarding?error=name");
+  if (name.length < 2) redirect("/setup/start?error=name");
   const plan = String(formData.get("plan") ?? "coach") as HqPlan;
   const interval = formData.get("interval") === "year" ? "year" : "month";
-  if (!planIds.has(plan)) redirect("/onboarding?error=plan");
+  if (!planIds.has(plan)) redirect("/setup/start?error=plan");
   const volleyballType = String(formData.get("volleyballType") ?? "");
   if (!["beach", "indoor", "both"].includes(volleyballType)) {
-    redirect("/onboarding?error=volleyballType");
+    redirect("/setup/start?error=volleyballType");
   }
   const volleyballTypes =
     volleyballType === "both"
@@ -84,7 +84,7 @@ async function createWorkspace(formData: FormData) {
         ? (["indoor"] as const)
         : (["beach"] as const);
   const termsAccepted = formData.get("termsAccepted") === "on";
-  if (!termsAccepted) redirect("/onboarding?error=terms");
+  if (!termsAccepted) redirect("/setup/start?error=terms");
 
   const workos = getWorkOS();
   const organization = await workos.organizations.createOrganization({ name });
@@ -115,7 +115,7 @@ async function createWorkspace(formData: FormData) {
     returnTo:
       plan === "coach"
         ? "/setup"
-        : `/onboarding/complete?plan=${plan}&interval=${interval}&checkoutId=${crypto.randomUUID()}`,
+        : `/setup/start/complete?plan=${plan}&interval=${interval}&checkoutId=${crypto.randomUUID()}`,
   });
 }
 
@@ -123,7 +123,7 @@ async function chooseWorkspace(formData: FormData) {
   "use server";
 
   const { user } = await withAuth();
-  if (!user) redirect("/sign-in?returnTo=/onboarding");
+  if (!user) redirect("/sign-in?returnTo=/setup/start");
   const organizationId = String(formData.get("organizationId") ?? "");
   const memberships =
     await getWorkOS().userManagement.listOrganizationMemberships({
@@ -132,7 +132,7 @@ async function chooseWorkspace(formData: FormData) {
   const allowed = memberships.data.some(
     (membership) => membership.organizationId === organizationId,
   );
-  if (!allowed) redirect("/onboarding?error=workspace");
+  if (!allowed) redirect("/setup/start?error=workspace");
   await switchToOrganization(organizationId, { returnTo: "/" });
 }
 

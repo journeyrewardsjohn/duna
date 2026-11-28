@@ -24,7 +24,7 @@ export default async function ProductDraftReadyPage({
 
   return (
     <OperatorShell
-      active="products"
+      active="offerings"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

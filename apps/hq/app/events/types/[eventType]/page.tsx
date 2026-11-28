@@ -40,11 +40,11 @@ export default async function EventTypePage({
   return (
     <OperatorShell
       active="events"
-      activeChild={item.slug}
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
       <ModulePanel
+        activeType={item.slug}
         dashboard={dashboard}
         eventKinds={item.eventKinds}
         matches={matches}

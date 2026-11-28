@@ -15,7 +15,7 @@ describe("HQ Audience overview", () => {
     expect(overview.text).toContain("Build a reusable group of people");
     const start = overview
       .elements("a")
-      .filter((link) => link.href === "/audiences/create");
+      .filter((link) => link.href === "/marketing/audiences/create");
     expect(start).toHaveLength(1);
     expect(overview.text).toContain("Create your first audience");
     // No table, search, or result count for records that do not exist.

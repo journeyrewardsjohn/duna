@@ -104,7 +104,7 @@ test.describe("HQ neutral surface theme", () => {
   for (const theme of ["light", "dark"] as const) {
     test(`resolves the ${theme} operator surfaces`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-      await page.goto(`${hq}/calendar`);
+      await page.goto(`${hq}/schedule`);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       const body = page.locator("body");
 
@@ -130,7 +130,7 @@ test.describe("HQ card inset", () => {
   test("Money cards share one responsive inset and stay inside the page", async ({
     page,
   }) => {
-    await page.goto(`${hq}/payments`);
+    await page.goto(`${hq}/money`);
     const cards = page.locator(".money-workspace .hq-card");
     await expect(cards.first()).toBeVisible();
 
@@ -188,7 +188,7 @@ test.describe("HQ empty states", () => {
   test("keep venue match states compact and evenly padded", async ({
     page,
   }) => {
-    await page.goto(`${hq}/calendar`);
+    await page.goto(`${hq}/schedule`);
     const empty = page.locator(".venue-match-operations__empty");
     await expect(empty).toBeVisible();
     if (width(page) > 680) {
@@ -222,7 +222,7 @@ test.describe("HQ calendar typography", () => {
   test("keeps every schedule label at 10px or larger in each view", async ({
     page,
   }) => {
-    await page.goto(`${hq}/calendar`);
+    await page.goto(`${hq}/schedule`);
     const calendar = page.locator(".schedule-calendar");
     await expect(calendar).toBeVisible();
 
@@ -258,7 +258,7 @@ test.describe("HQ calendar typography", () => {
   test("keeps guided session month labels at calendar scale", async ({
     page,
   }) => {
-    await page.goto(`${hq}/products/create`);
+    await page.goto(`${hq}/offerings/create`);
     // The date range picker sits inside a product stage whose headings are
     // display-sized; month labels must not inherit that scale.
     const fixture = await mount(
@@ -284,7 +284,7 @@ test.describe("HQ venue and settings readability", () => {
       page,
     }) => {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-      await page.goto(`${hq}/settings/theme`);
+      await page.goto(`${hq}/setup/identity`);
       const asset = page.locator(".theme-asset").first();
       await expect(asset).toBeVisible();
 
@@ -315,7 +315,7 @@ test.describe("HQ venue and settings readability", () => {
   test("offers uploads beside brand URLs without a media-type dropdown", async ({
     page,
   }) => {
-    await page.goto(`${hq}/settings/theme`);
+    await page.goto(`${hq}/setup/identity`);
     const editor = page.locator(".theme-kit-editor");
     await expect(editor).toBeVisible();
 
@@ -332,7 +332,7 @@ test.describe("HQ venue and settings readability", () => {
   test("gives manual venue setup an image upload and readable controls", async ({
     page,
   }) => {
-    await page.goto(`${hq}/locations/create`);
+    await page.goto(`${hq}/setup/places/create`);
     await page.getByRole("button", { name: /Create manually/ }).click();
     const form = page.locator("main");
     await expect(form.getByText("What kind of place is this?")).toBeVisible();
@@ -400,18 +400,18 @@ test.describe("HQ tournament launch workspace", () => {
 
 test.describe("HQ Audience product experience", () => {
   test("exposes one unmistakable creation action", async ({ page }) => {
-    await page.goto(`${hq}/audiences`);
+    await page.goto(`${hq}/marketing/audiences`);
     const create = page.getByRole("link", { name: "Create audience" });
     await expect(create).toHaveCount(1);
     await expect(create).toHaveClass(/duna-button--primary/);
     await create.click();
-    await expect(page).toHaveURL(`${hq}/audiences/create`);
+    await expect(page).toHaveURL(`${hq}/marketing/audiences/create`);
   });
 
   test("builds typed rules without exposing internal identifiers", async ({
     page,
   }) => {
-    await page.goto(`${hq}/audiences/create`);
+    await page.goto(`${hq}/marketing/audiences/create`);
     const builder = page.locator(".audience-builder");
     await builder.getByRole("radio", { name: /Live rules/ }).click();
 
@@ -442,7 +442,7 @@ test.describe("HQ Audience product experience", () => {
   test("gives people identity and a live preview while selecting", async ({
     page,
   }) => {
-    await page.goto(`${hq}/audiences/create`);
+    await page.goto(`${hq}/marketing/audiences/create`);
     const builder = page.locator(".audience-builder");
     await builder.getByRole("radio", { name: /Rules \+ people/ }).click();
 
@@ -464,7 +464,7 @@ test.describe("HQ Audience product experience", () => {
   test("stacks the builder and converts the overview table on narrow screens", async ({
     page,
   }) => {
-    await page.goto(`${hq}/audiences/create`);
+    await page.goto(`${hq}/marketing/audiences/create`);
     await expect
       .poll(async () =>
         tracks(
@@ -477,7 +477,7 @@ test.describe("HQ Audience product experience", () => {
       .toBe(width(page) <= 900 ? 1 : 2);
     await noPageOverflow(page);
 
-    await page.goto(`${hq}/audiences`);
+    await page.goto(`${hq}/marketing/audiences`);
     const table = page.locator(".audience-overview__table table");
     await expect(table).toHaveCSS(
       "display",

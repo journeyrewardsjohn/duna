@@ -31,9 +31,9 @@ async function continueToStripe(formData: FormData) {
     uploadPackQuantity: Number(formData.get("uploadPackQuantity") ?? 0),
     livePackQuantity: Number(formData.get("livePackQuantity") ?? 0),
     payAsYouGo: formData.get("payAsYouGo") === "on",
-    successUrl: hqUrl("/onboarding/complete?billing=success"),
+    successUrl: hqUrl("/setup/start/complete?billing=success"),
     cancelUrl: hqUrl(
-      `/onboarding/complete?billing=cancelled&plan=${plan}&interval=${interval}&checkoutId=${idempotencyKey}`,
+      `/setup/start/complete?billing=cancelled&plan=${plan}&interval=${interval}&checkoutId=${idempotencyKey}`,
     ),
     idempotencyKey,
   });

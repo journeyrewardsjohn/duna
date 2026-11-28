@@ -28,7 +28,7 @@ export default async function CreateProductPage({
 
   return (
     <OperatorShell
-      active="products"
+      active="offerings"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
@@ -41,7 +41,7 @@ export default async function CreateProductPage({
         ])}
         title="Create offer"
         noun="offer"
-        backHref="/products"
+        backHref="/offerings"
         backLabel="Offers"
         initialManual={Boolean(
           source || (type && ["service", "plan", "good"].includes(type)),
@@ -57,7 +57,7 @@ export default async function CreateProductPage({
             <Link
               aria-label="Back to products"
               className="operator-create-page__back"
-              href="/products"
+              href="/offerings"
             >
               <ArrowLeft aria-hidden size={20} />
             </Link>

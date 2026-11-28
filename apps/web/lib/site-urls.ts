@@ -23,4 +23,4 @@ const configuredHqUrl =
 
 export const DUNA_HQ_URL = resolveDunaHqUrl(configuredHqUrl);
 
-export const DUNA_HQ_SIGNUP_URL = `${DUNA_HQ_URL}/sign-up?returnTo=${encodeURIComponent("/onboarding?source=website")}`;
+export const DUNA_HQ_SIGNUP_URL = `${DUNA_HQ_URL}/sign-up?returnTo=${encodeURIComponent("/setup/start?source=website")}`;

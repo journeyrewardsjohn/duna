@@ -15,7 +15,7 @@ export default async function ProgramsPage() {
     (item) => item.type === "service" && item.subtype === "program",
   );
   return (
-    <OperatorShell active="activities" organization={dashboard.organization}>
+    <OperatorShell active="training" organization={dashboard.organization}>
       <main className={`hq-page ${styles.workspace}`}>
         <Link href="/activities" className="hq-button hq-button--ghost">
           <ArrowLeft size={16} aria-hidden /> Activities
@@ -26,7 +26,7 @@ export default async function ProgramsPage() {
             <p>Manage enrollment, pricing and scheduled sessions.</p>
           </div>
           <Link
-            href="/products/create"
+            href="/offerings/create"
             className="hq-button hq-button--primary"
           >
             <Plus size={18} aria-hidden /> Create an offering
@@ -36,7 +36,7 @@ export default async function ProgramsPage() {
           {programs.length ? (
             programs.map((program) => (
               <Link
-                href={`/products/${program.id}`}
+                href={`/offerings/${program.id}`}
                 className={styles.row}
                 key={program.id}
               >
@@ -67,8 +67,8 @@ export default async function ProgramsPage() {
               Design a training program
             </Link>
             <Link href="/training">Training plans</Link>
-            <Link href="/calendar">Sessions & attendance</Link>
-            <Link href="/members">Players & families</Link>
+            <Link href="/schedule">Sessions & attendance</Link>
+            <Link href="/people">Players & families</Link>
           </nav>
         </section>
       </main>

@@ -1,10 +1,5 @@
 {
-  "app/[module]/page.tsx": {
-    "no-console": {
-      "count": 1
-    }
-  },
-  "app/messages/actions.ts": {
+  "app/inbox/actions.ts": {
     "no-console": {
       "count": 1
     }

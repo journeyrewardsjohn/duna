@@ -22,7 +22,7 @@ export default async function CreateCourtPage({
   if (!venue) notFound();
   return (
     <OperatorShell
-      active="locations"
+      active="setup"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
@@ -31,7 +31,7 @@ export default async function CreateCourtPage({
           <Link
             aria-label={`Back to ${venue.name}`}
             className="venue-workspace-back"
-            href={`/locations/${venue.id}?section=courts`}
+            href={`/setup/places/${venue.id}?section=courts`}
           >
             <ArrowLeft aria-hidden size={19} />
           </Link>

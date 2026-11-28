@@ -60,7 +60,7 @@ export async function createPromoCodeAction(
         error instanceof Error ? error.message : "Promo code was not created.",
     };
   } finally {
-    revalidatePath("/promo-codes");
+    revalidatePath("/marketing/promo-codes");
   }
 }
 
@@ -70,7 +70,7 @@ export async function deactivatePromoCodeAction(formData: FormData) {
     promoCodeId: String(formData.get("promoCodeId")),
     idempotencyKey: crypto.randomUUID(),
   });
-  revalidatePath("/promo-codes");
+  revalidatePath("/marketing/promo-codes");
 }
 
 export async function duplicatePromoCodeAction(formData: FormData) {
@@ -80,5 +80,5 @@ export async function duplicatePromoCodeAction(formData: FormData) {
     code: String(formData.get("code") ?? "").trim(),
     idempotencyKey: crypto.randomUUID(),
   });
-  revalidatePath("/promo-codes");
+  revalidatePath("/marketing/promo-codes");
 }

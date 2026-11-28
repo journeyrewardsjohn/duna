@@ -7,7 +7,7 @@ export default function InvitePersonPage() {
     <OperatorCreatePage
       description="Invite a player, member, parent, coach, or operator without taking ownership of their identity."
       eyebrow="People · focused workspace"
-      module="members"
+      module="people"
       title="Invite the right person, safely."
     />
   );

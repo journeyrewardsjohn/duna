@@ -52,8 +52,8 @@ describe("guided product draft workflow", () => {
     expect(page.text).toContain("Publish Live");
 
     const links = page.elements("a").map((link) => link.href);
-    expect(links).toContain(`/products/${itemId}`);
-    expect(links).toContain("/products");
+    expect(links).toContain(`/offerings/${itemId}`);
+    expect(links).toContain("/offerings");
     expect(page.text).toContain("Edit draft");
     expect(page.text).toContain("See all products");
   });

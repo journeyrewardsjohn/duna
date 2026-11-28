@@ -401,7 +401,7 @@ function CourtRulesEditor({
         <header>
           <strong>Pricing and duration</strong>
           <Link
-            href={`/locations/${court.venueId}?section=courts#court-pricing`}
+            href={`/setup/places/${court.venueId}?section=courts#court-pricing`}
           >
             Manage rate plans
           </Link>
@@ -1044,7 +1044,7 @@ export function CourtManagementWorkspace({
         <Link
           aria-label={`Back to ${venue.name}`}
           className="venue-workspace-back"
-          href={`/locations/${venue.id}?section=courts`}
+          href={`/setup/places/${venue.id}?section=courts`}
         >
           <ArrowLeft aria-hidden size={19} />
         </Link>

@@ -35,7 +35,7 @@ export const visualRoutes: readonly VisualRoute[] = [
   // Today
   { name: "home", path: "/", page: "/" },
   { name: "setup", path: "/setup", page: "/setup" },
-  { name: "calendar", path: "/calendar", page: "/[module]" },
+  { name: "calendar", path: "/schedule", page: "/[module]" },
   { name: "activities", path: "/activities", page: "/activities" },
   { name: "ask", path: "/ask", page: "/ask/[[...conversation]]" },
   {
@@ -45,41 +45,41 @@ export const visualRoutes: readonly VisualRoute[] = [
   },
 
   // Run: venues
-  { name: "locations", path: "/locations", page: "/[module]" },
+  { name: "locations", path: "/setup/places", page: "/setup/places" },
   {
     name: "locations-create",
-    path: "/locations/create",
-    page: "/locations/create",
+    path: "/setup/places/create",
+    page: "/setup/places/create",
   },
   {
     name: "location-detail",
-    path: `/locations/${venue}`,
-    page: "/locations/[venueId]",
+    path: `/setup/places/${venue}`,
+    page: "/setup/places/[venueId]",
   },
   {
     name: "location-layout",
-    path: `/locations/${venue}/layout`,
-    page: "/locations/[venueId]/layout",
+    path: `/setup/places/${venue}/layout`,
+    page: "/setup/places/[venueId]/layout",
   },
   {
     name: "court-create",
-    path: `/locations/${venue}/courts/create`,
-    page: "/locations/[venueId]/courts/create",
+    path: `/setup/places/${venue}/courts/create`,
+    page: "/setup/places/[venueId]/courts/create",
   },
   {
     name: "court-detail",
-    path: `/locations/${venue}/courts/${court}`,
-    page: "/locations/[venueId]/courts/[courtId]",
+    path: `/setup/places/${venue}/courts/${court}`,
+    page: "/setup/places/[venueId]/courts/[courtId]",
   },
 
   // Run: people and staff
-  { name: "members", path: "/members", page: "/[module]" },
+  { name: "members", path: "/people", page: "/[module]" },
   {
     name: "member-detail",
-    path: `/members/${member}`,
-    page: "/members/[personId]",
+    path: `/people/${member}`,
+    page: "/people/[personId]",
   },
-  { name: "members-invite", path: "/members/invite", page: "/members/invite" },
+  { name: "members-invite", path: "/people/invite", page: "/people/invite" },
   { name: "team", path: "/team", page: "/[module]" },
   { name: "team-invite", path: "/team/invite", page: "/team/invite" },
 
@@ -128,26 +128,26 @@ export const visualRoutes: readonly VisualRoute[] = [
   { name: "programs", path: "/programs", page: "/programs" },
 
   // Run: products
-  { name: "products", path: "/products", page: "/[module]" },
+  { name: "products", path: "/offerings", page: "/[module]" },
   {
     name: "products-create",
-    path: "/products/create",
-    page: "/products/create",
+    path: "/offerings/create",
+    page: "/offerings/create",
   },
   {
     name: "products-services",
-    path: "/products/types/services",
-    page: "/products/types/[productType]",
+    path: "/offerings/types/services",
+    page: "/offerings/types/[productType]",
   },
   {
     name: "products-plans",
-    path: "/products/types/plans",
-    page: "/products/types/[productType]",
+    path: "/offerings/types/plans",
+    page: "/offerings/types/[productType]",
   },
   {
     name: "products-goods",
-    path: "/products/types/goods",
-    page: "/products/types/[productType]",
+    path: "/offerings/types/goods",
+    page: "/offerings/types/[productType]",
   },
 
   // Run: events and leagues
@@ -183,66 +183,60 @@ export const visualRoutes: readonly VisualRoute[] = [
     path: `/events/${tournament}`,
     page: "/events/[sessionId]",
   },
-  { name: "leagues", path: "/leagues", page: "/[module]" },
-  {
-    name: "leagues-create",
-    path: "/leagues/create",
-    page: "/leagues/create",
-    landsOn: "/events/create?type=league",
-  },
+  { name: "leagues", path: "/events?type=league", page: "/[module]" },
 
   // Run: inbox and audiences
-  { name: "messages", path: "/messages", page: "/messages" },
+  { name: "messages", path: "/inbox", page: "/inbox" },
   {
     name: "messages-create",
-    path: "/messages/create",
-    page: "/messages/create",
-    landsOn: "/messages?compose=new",
+    path: "/inbox/create",
+    page: "/inbox/create",
+    landsOn: "/inbox?compose=new",
   },
-  { name: "audiences", path: "/audiences", page: "/audiences" },
+  { name: "audiences", path: "/marketing/audiences", page: "/marketing/audiences" },
   {
     name: "audiences-create",
-    path: "/audiences/create",
-    page: "/audiences/create",
+    path: "/marketing/audiences/create",
+    page: "/marketing/audiences/create",
   },
   {
     name: "audience-detail",
-    path: `/audiences/${audience}`,
-    page: "/audiences/[audienceId]",
+    path: `/marketing/audiences/${audience}`,
+    page: "/marketing/audiences/[audienceId]",
   },
 
   // Grow
   { name: "website", path: "/website", page: "/website" },
-  { name: "payments", path: "/payments", page: "/payments" },
+  { name: "payments", path: "/money", page: "/money" },
   {
     name: "payments-setup",
-    path: "/payments/setup",
-    page: "/payments/setup",
+    path: "/money/setup",
+    page: "/money/setup",
   },
   {
     name: "payments-transactions",
-    path: "/payments/transactions",
-    page: "/payments/transactions",
+    path: "/money/transactions",
+    page: "/money/transactions",
   },
   {
     name: "payments-transaction-detail",
-    path: `/payments/transactions/${transaction}`,
-    page: "/payments/transactions/[transactionId]",
+    path: `/money/transactions/${transaction}`,
+    page: "/money/transactions/[transactionId]",
   },
   {
     name: "payments-disputes",
-    path: "/payments/disputes",
-    page: "/payments/disputes",
+    path: "/money/disputes",
+    page: "/money/disputes",
   },
   {
     name: "payments-payout-settings",
-    path: "/payments/payout-settings",
-    page: "/payments/payout-settings",
+    path: "/money/payouts",
+    page: "/money/payouts",
   },
   {
     name: "payments-refund-policies",
-    path: "/payments/refund-policies",
-    page: "/payments/refund-policies",
+    path: "/money/refund-policies",
+    page: "/money/refund-policies",
   },
   { name: "marketing", path: "/marketing", page: "/[module]" },
   {
@@ -254,13 +248,13 @@ export const visualRoutes: readonly VisualRoute[] = [
 
   // Configure and account
   { name: "settings", path: "/settings", page: "/settings" },
-  { name: "settings-theme", path: "/settings/theme", page: "/settings/theme" },
+  { name: "settings-theme", path: "/setup/identity", page: "/setup/identity" },
   { name: "account", path: "/account", page: "/account" },
-  { name: "onboarding", path: "/onboarding", page: "/onboarding" },
+  { name: "onboarding", path: "/setup/start", page: "/setup/start" },
   {
     name: "onboarding-complete",
-    path: "/onboarding/complete",
-    page: "/onboarding/complete",
+    path: "/setup/start/complete",
+    page: "/setup/start/complete",
     landsOn: "/setup",
   },
 
@@ -287,15 +281,15 @@ export interface SkippedPage {
 /** `page.tsx` routes that cannot render a real surface in demo mode. */
 export const skippedPages: readonly SkippedPage[] = [
   {
-    page: "/products/[itemId]",
+    page: "/offerings/[itemId]",
     reason: "The demo catalog is empty, so no product record resolves.",
   },
   {
-    page: "/products/[itemId]/builder",
+    page: "/offerings/[itemId]/builder",
     reason: "The demo catalog is empty, so no product record resolves.",
   },
   {
-    page: "/products/[itemId]/draft-ready",
+    page: "/offerings/[itemId]/draft-ready",
     reason: "The demo catalog is empty, so no product record resolves.",
   },
   {
@@ -315,11 +309,11 @@ export const skippedPages: readonly SkippedPage[] = [
     reason: "operator.activityDetail requires the connected database.",
   },
   {
-    page: "/members/[personId]/health",
+    page: "/people/[personId]/health",
     reason: "operator.memberHealthProfile requires the connected database.",
   },
   {
-    page: "/promo-codes",
+    page: "/marketing/promo-codes",
     reason: "Promo codes require the connected database; the page throws.",
   },
   {

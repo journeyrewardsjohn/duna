@@ -41,7 +41,7 @@ describe("Stripe organization return", () => {
 
     expect(mocks.canAccessWorkspace).toHaveBeenCalledWith(organizationId);
     expect(mocks.switchToOrganization).toHaveBeenCalledWith(organizationId, {
-      returnTo: "/payments?stripe=return",
+      returnTo: "/money?stripe=return",
     });
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
@@ -50,7 +50,7 @@ describe("Stripe organization return", () => {
     await open({ organizationId, result: "refresh" });
 
     expect(mocks.switchToOrganization).toHaveBeenCalledWith(organizationId, {
-      returnTo: "/payments?stripe=refresh",
+      returnTo: "/money?stripe=refresh",
     });
   });
 
@@ -80,14 +80,14 @@ describe("Stripe organization return", () => {
     mocks.canAccessWorkspace.mockResolvedValue(false);
 
     await expect(open({ organizationId })).rejects.toThrow(
-      "redirect:/onboarding?error=workspace",
+      "redirect:/setup/start?error=workspace",
     );
     expect(mocks.switchToOrganization).not.toHaveBeenCalled();
   });
 
   it("refuses a return URL without an organization", async () => {
     await expect(open({})).rejects.toThrow(
-      "redirect:/onboarding?error=workspace",
+      "redirect:/setup/start?error=workspace",
     );
     expect(mocks.canAccessWorkspace).not.toHaveBeenCalled();
     expect(mocks.switchToOrganization).not.toHaveBeenCalled();

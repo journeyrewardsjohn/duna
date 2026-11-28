@@ -1010,7 +1010,7 @@ export function TrainingProgramDesigner({
                   ) : (
                     <Link
                       className="hq-button hq-button--secondary"
-                      href="/products/create?type=service&subtype=program"
+                      href="/offerings/create?type=service&subtype=program"
                     >
                       Create Program offer
                     </Link>

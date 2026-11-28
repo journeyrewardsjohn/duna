@@ -60,7 +60,7 @@ export const hq: SurfaceContract = {
     },
     {
       kind: "includes",
-      file: "apps/hq/app/audiences/audience-editor.tsx",
+      file: "apps/hq/app/marketing/audiences/audience-editor.tsx",
       values: [
         "All rules",
         "Any rule",

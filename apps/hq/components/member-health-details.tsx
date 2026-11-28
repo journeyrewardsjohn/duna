@@ -62,7 +62,7 @@ export function MemberHealthDetails({
     <main className="hq-page member-health-details">
       <Link
         className="member-profile-back"
-        href={`/members/${profile.subject.id}`}
+        href={`/people/${profile.subject.id}`}
       >
         <ArrowLeft aria-hidden size={16} /> Back to player profile
       </Link>

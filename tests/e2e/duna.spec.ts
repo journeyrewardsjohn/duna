@@ -1074,7 +1074,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible({ timeout: navigationTimeout });
   await page.goto(`${hqBaseUrl}/`);
 
-  await page.goto(`${hqBaseUrl}/locations`);
+  await page.goto(`${hqBaseUrl}/setup/places`);
   await expect(page.getByRole("heading", { name: "Venues" })).toBeVisible();
   const venueWorkspace = page.getByRole("link", {
     name: "Open venue workspace",
@@ -1083,7 +1083,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await clickAndWaitForUrl(
     page,
     venueWorkspace,
-    /\/locations\/10000000-0000-4000-8000-000000000101$/,
+    /\/setup\/places\/10000000-0000-4000-8000-000000000101$/,
   );
   await expect(
     page.getByRole("heading", { name: "Beach Elite Training Center" }).first(),
@@ -1156,7 +1156,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await clickAndWaitForUrl(
     page,
     page.getByRole("link", { name: /Championship Court/ }),
-    /\/locations\/10000000-0000-4000-8000-000000000101\/courts\/10000000-0000-4000-8000-000000000103$/,
+    /\/setup\/places\/10000000-0000-4000-8000-000000000101\/courts\/10000000-0000-4000-8000-000000000103$/,
   );
   await expect(
     page.getByRole("heading", { name: "Championship Court" }),
@@ -1187,7 +1187,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expectNoHorizontalOverflow(page);
 
   await page.goto(
-    `${hqBaseUrl}/locations/10000000-0000-4000-8000-000000000101/layout`,
+    `${hqBaseUrl}/setup/places/10000000-0000-4000-8000-000000000101/layout`,
   );
   await expect(page.getByText("Venue layout studio")).toBeVisible();
   await expect(
@@ -1216,7 +1216,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto(`${hqBaseUrl}/locations/create`);
+  await page.goto(`${hqBaseUrl}/setup/places/create`);
   await page
     .getByRole("button", { name: "Create manually →", exact: true })
     .click();
@@ -1232,7 +1232,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto(`${hqBaseUrl}/calendar`);
+  await page.goto(`${hqBaseUrl}/schedule`);
   await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
   await expect(
     page.getByText("Championship Court", { exact: true }),
@@ -1273,7 +1273,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto(`${hqBaseUrl}/leagues`);
+  await page.goto(`${hqBaseUrl}/events?type=league`);
   await expect(page.getByRole("heading", { name: "Leagues" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Create league/ })).toBeVisible();
   await expect(page.getByText(/1 connected/)).toBeVisible();
@@ -1292,7 +1292,7 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     page.getByRole("heading", { name: "League", exact: true }),
   ).toBeVisible();
 
-  await page.goto(`${hqBaseUrl}/ai`);
+  await page.goto(`${hqBaseUrl}/ask`);
   await expect(page).toHaveURL(/\/ask$/);
   await expect(
     page.getByRole("heading", { name: /What can I take off your plate/ }),

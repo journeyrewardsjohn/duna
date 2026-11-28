@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   hqAdminModuleSlugs,
   hqHref,
+  hqLeaguesPath,
   hqModuleHref,
   hqOperatorModuleSlugs,
   hqRoutes,
@@ -63,6 +64,46 @@ describe("HQ route map", () => {
     }
   });
 
+  it("fails for an entry whose page.tsx does not exist", () => {
+    // The first check above is what keeps entries honest; prove it bites.
+    const withGhost = [...templates, "/no-such-hq-page"];
+    expect(withGhost.filter((template) => !filesystem.has(template))).toEqual(
+      ["/no-such-hq-page"],
+    );
+  });
+
+  it("keeps no address the IA retired (docs/plan/s2-route-map.md)", () => {
+    // Old prefixes moved without aliases. /activities and /programs stay
+    // until package B4 removes them; /stripe/return is a provider address.
+    const retired = [
+      "/audiences",
+      "/calendar",
+      "/leagues",
+      "/locations",
+      "/members",
+      "/messages",
+      "/onboarding",
+      "/payments",
+      "/products",
+      "/promo-codes",
+      "/settings/theme",
+    ];
+    const concrete = [
+      ...templates,
+      ...hqOperatorModuleSlugs.map((slug) => hqModuleHref(slug)),
+      hqLeaguesPath,
+    ];
+    for (const path of concrete) {
+      for (const prefix of retired) {
+        expect(
+          path === prefix || path.startsWith(`${prefix}/`),
+          `${path} uses the retired ${prefix}`,
+        ).toBe(false);
+      }
+    }
+    expect(hqLeaguesPath.split("?")[0]).toBe(hqModuleHref("events"));
+  });
+
   it("treats only the gallery as development-only", () => {
     expect(isHqDevOnlyRoute("/tideline")).toBe(true);
     expect(isHqDevOnlyRoute("/tideline/book-lesson")).toBe(true);
@@ -73,13 +114,14 @@ describe("HQ route map", () => {
 
   it("builds encoded concrete paths", () => {
     expect(hqHref("home")).toBe("/");
-    expect(hqHref("payments")).toBe("/payments");
+    expect(hqHref("money")).toBe("/money");
     expect(
       hqHref("eventDivision", { sessionId: "s 1", divisionId: "d/2" }),
     ).toBe("/events/s%201/divisions/d%2F2");
     expect(hqHref("ask")).toBe("/ask");
     expect(hqHref("ask", { conversation: "abc" })).toBe("/ask/abc");
-    expect(hqModuleHref("calendar")).toBe("/calendar");
+    expect(hqModuleHref("schedule")).toBe("/schedule");
+    expect(hqHref("place", { venueId: "v1" })).toBe("/setup/places/v1");
     expect(() =>
       hqHref("member", { personId: "" } as { personId: string }),
     ).toThrow(TypeError);

@@ -30,7 +30,7 @@ export default async function ProductDetailPage({
 
   return (
     <OperatorShell
-      active="products"
+      active="offerings"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >

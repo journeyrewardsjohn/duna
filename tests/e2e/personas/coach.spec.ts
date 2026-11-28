@@ -68,7 +68,7 @@ test.describe("CH-6 Get paid", () => {
   test.fixme("CH-6.1 See my sessions, pay period and expected pay [H5, B3b]", async () => {});
   test.fixme("CH-6.2 Receive contractor payouts to my own account [B3c]", async () => {});
   test.fixme("CH-6.3 A coach who opens Money sees 'You need access', not an error page [H10]", async () => {
-    // Evidence on main: /payments and its sub-pages render "This page
+    // Evidence on main: /money (was /payments) and its sub-pages render "This page
     // couldn't load" for the coach role in demo mode.
   });
 });

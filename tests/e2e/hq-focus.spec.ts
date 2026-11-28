@@ -75,7 +75,7 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
   page,
 }) => {
   const { writes } = await installAskDunaFixture(page);
-  await page.goto(`${hqBaseUrl}/members`);
+  await page.goto(`${hqBaseUrl}/people`);
   await page.getByText("Ask Duna about this page", { exact: true }).click();
   const prompt = page.getByRole("textbox", { name: "Ask Duna about people" });
   await prompt.fill("Find the people who need a follow-up.");
@@ -83,14 +83,14 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
   await expect(
     page.getByRole("button", { name: "Approve change" }),
   ).toBeVisible();
-  await expect(page).toHaveURL(`${hqBaseUrl}/members`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/people`);
   expect(
     writes.find((row) => row.path === "conversations")?.body,
   ).toMatchObject({
-    page: "/members",
+    page: "/people",
     title: "Find the people who need a follow-up.",
   });
-  await page.goto(`${hqBaseUrl}/members`);
+  await page.goto(`${hqBaseUrl}/people`);
   const more = page.locator(".hq-work-navigation-more");
   if ((page.viewportSize()?.width ?? 1440) <= 1100) {
     await page.getByRole("button", { name: "Search HQ", exact: true }).click();

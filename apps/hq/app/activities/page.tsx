@@ -1,3 +1,4 @@
+import { hqLeaguesPath } from "@duna/core/hq-routes";
 import Link from "next/link";
 import { OperatorShell } from "@/components/operator-shell";
 import { getServerCaller } from "@/lib/api";
@@ -20,20 +21,20 @@ const activities = [
   {
     title: "Leagues",
     description: "Teams, fixtures, standings and playoffs.",
-    href: "/leagues",
+    href: hqLeaguesPath,
     action: "Manage leagues",
   },
   {
     title: "Courts & rentals",
     description: "Court availability, reservations and rentals.",
-    href: "/calendar",
+    href: "/schedule",
     action: "Open schedule",
   },
   {
     title: "Lessons & coaching",
     description:
       "Group and private sessions, coach availability and bookable services.",
-    href: "/products/types/services",
+    href: "/offerings/types/services",
     action: "Manage lessons",
   },
   {
@@ -45,14 +46,14 @@ const activities = [
   {
     title: "Memberships & packs",
     description: "Memberships, session packs and credits.",
-    href: "/products/types/plans",
+    href: "/offerings/types/plans",
     action: "Manage memberships",
   },
   {
     title: "Shop & equipment",
     description:
       "Manage merchandise, equipment, inventory and rental products.",
-    href: "/products/types/goods",
+    href: "/offerings/types/goods",
     action: "Open shop",
   },
 ] as const;
@@ -60,14 +61,14 @@ export default async function ActivitiesPage() {
   const caller = await getServerCaller();
   const dashboard = await caller.operator.dashboard();
   return (
-    <OperatorShell active="activities" organization={dashboard.organization}>
+    <OperatorShell active="events" organization={dashboard.organization}>
       <main className={`hq-page ${styles.workspace}`}>
         <header className={styles.heading}>
           <div>
             <h1>Activities</h1>
             <p>Manage programs, competitions, bookings and products.</p>
           </div>
-          <Link className="hq-button hq-button--secondary" href="/calendar">
+          <Link className="hq-button hq-button--secondary" href="/schedule">
             View schedule
           </Link>
         </header>
@@ -110,9 +111,9 @@ export default async function ActivitiesPage() {
           </div>
           <nav aria-label="Supporting activity tools">
             <Link href="/team">Staff</Link>
-            <Link href="/locations">Venues & courts</Link>
+            <Link href="/setup/places">Venues & courts</Link>
             <Link href="/training">Training studio</Link>
-            <Link href="/products">All offerings</Link>
+            <Link href="/offerings">All offerings</Link>
           </nav>
         </section>
       </main>

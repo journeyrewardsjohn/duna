@@ -65,7 +65,7 @@ export default async function OrganizationSetupPage() {
                   {nextStep.actionLabel} <ArrowRight aria-hidden size={16} />
                 </Link>
               ) : (
-                <Link className="hq-button hq-button--primary" href="/calendar">
+                <Link className="hq-button hq-button--primary" href="/schedule">
                   Open today’s schedule <ArrowRight aria-hidden size={16} />
                 </Link>
               )}

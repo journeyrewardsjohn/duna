@@ -689,7 +689,7 @@ describe("Ask Duna capability boundaries", () => {
       organizationSetup: getOrganizationSetupReadiness(workspace),
       workspace: { truncated: true },
     });
-    expect(JSON.stringify(result)).toContain("/settings/theme");
+    expect(JSON.stringify(result)).toContain("/setup/identity");
     expect(caller.mock.calls[0]![0]).toMatchObject({ actor: operator });
     expect(read).toHaveBeenCalledTimes(1);
     await expect(

@@ -35,15 +35,15 @@ export default async function ProductTypePage({
 
   return (
     <OperatorShell
-      active="products"
-      activeChild={item.slug}
+      active="offerings"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
       <ModulePanel
         dashboard={dashboard}
         matches={[]}
-        module="products"
+        activeType={item.slug}
+        module="offerings"
         pageCopy={{
           eyebrow: "Products · dedicated workspace",
           title: item.title,

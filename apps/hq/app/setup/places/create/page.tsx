@@ -13,7 +13,7 @@ export default async function CreateLocationPage() {
   ]);
   return (
     <OperatorShell
-      active="locations"
+      active="setup"
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
@@ -21,7 +21,7 @@ export default async function CreateLocationPage() {
         key={dashboard.organization.id}
         title="Add venue"
         noun="venue"
-        backHref="/locations"
+        backHref="/setup/places"
         backLabel="Venues"
         examples={[
           "Help me add a venue with two outdoor sand courts.",

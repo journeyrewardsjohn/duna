@@ -12,7 +12,7 @@ export default async function PromoCodesPage() {
   ]);
   return (
     <OperatorShell
-      active="promo-codes"
+      active="marketing"
       messageDraftCount={0}
       organization={dashboard.organization}
     >
