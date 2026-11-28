@@ -293,3 +293,16 @@ test("an old court reservation address opens Schedule", async ({ page }) => {
   await expect(page).toHaveURL(/\/schedule\?open=court-booking/);
   await expect(page.getByText("That isn't on the schedule")).toBeVisible();
 });
+
+test("an offering's group session opens the one session panel (Offerings')", async ({
+  page,
+}) => {
+  // The participation fixtures sit in the week of 8 December 2026.
+  await openSchedule(page, "?date=2026-12-09&view=day");
+  await page
+    .getByRole("button", { name: /^Group session: Wednesday small group/ })
+    .click();
+  const panel = page.getByRole("dialog", { name: "Wednesday small group" });
+  await expect(panel.getByText("Who's booked")).toBeVisible();
+  await expect(page).toHaveURL(/open=catalog-occurrence/);
+});

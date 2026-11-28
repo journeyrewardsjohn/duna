@@ -137,6 +137,7 @@ export async function resolveCatalogItemRule(input: {
   readonly item: Pick<Item, "type" | "configuration" | "organizationId">;
   readonly capacity: number;
   readonly clubDefault?: ClubParticipationDefault;
+  /** Pass the key (even as undefined) when already loaded: no query then. */
   readonly refundWindowMinutes?: number;
 }): Promise<{
   readonly rule?: ResolvedParticipationRule;
@@ -162,8 +163,9 @@ export async function resolveCatalogItemRule(input: {
     kind: "service",
     capacity: input.capacity,
     refundWindowMinutes:
-      input.refundWindowMinutes ??
-      (await clubRefundWindowMinutes(input.item.organizationId)),
+      "refundWindowMinutes" in input
+        ? input.refundWindowMinutes
+        : await clubRefundWindowMinutes(input.item.organizationId),
   });
   // An inert inherited rule changes nothing; treat it as none.
   if (
@@ -253,22 +255,51 @@ function positive(value: unknown, fallback: number): number {
 export async function occurrencePlaces(
   occurrenceId: string,
   now: Date,
-): Promise<{
+): Promise<OccurrencePlaces> {
+  const rows = await occurrenceBookingRows([occurrenceId]);
+  return placesFromRows(rows, now);
+}
+
+export interface OccurrencePlaces {
   readonly confirmed: number;
   readonly held: number;
   readonly bookings: readonly OccurrencePlaceBooking[];
-}> {
-  const rows = await getDatabase()
+}
+
+export type OccurrenceBookingRow = {
+  readonly fulfillment: typeof catalogFulfillments.$inferSelect;
+  readonly order: typeof orders.$inferSelect;
+};
+
+/** Active bookings of many sessions in ONE query, in booking order. */
+export async function occurrenceBookingRows(
+  occurrenceIds: readonly string[],
+): Promise<readonly OccurrenceBookingRow[]> {
+  if (occurrenceIds.length === 0) return [];
+  return getDatabase()
     .select({ fulfillment: catalogFulfillments, order: orders })
     .from(catalogFulfillments)
     .innerJoin(orders, eq(catalogFulfillments.orderId, orders.id))
     .where(
       and(
-        eq(catalogFulfillments.catalogSessionOccurrenceId, occurrenceId),
+        inArray(catalogFulfillments.catalogSessionOccurrenceId, [
+          ...occurrenceIds,
+        ]),
         inArray(catalogFulfillments.status, [...ACTIVE_BOOKING_STATUSES]),
       ),
     )
     .orderBy(asc(catalogFulfillments.createdAt), asc(catalogFulfillments.id));
+}
+
+/**
+ * Every active booking of a session. ONE count for both questions: places
+ * taken (`confirmed + held`, for capacity) and the group (`confirmed`, for
+ * the minimum and the price). Pure: rows of one session in, places out.
+ */
+export function placesFromRows(
+  rows: readonly OccurrenceBookingRow[],
+  now: Date,
+): OccurrencePlaces {
   const bookings = rows.map(({ fulfillment, order }) => {
     const paymentMethod =
       typeof fulfillment.details.paymentMethod === "string"
@@ -483,38 +514,166 @@ export function bookerNotices(input: {
  * (snapshot, or the live rule before anyone booked), the decision, places
  * and the 289 state shape every existing contract carries.
  */
+export interface CatalogSessionPicture {
+  readonly rule: ResolvedParticipationRule;
+  readonly source: ParticipationRuleSource | "snapshot";
+  readonly decision?: ParticipationDecisionRow;
+  readonly lockAt: Date;
+  readonly confirmed: number;
+  readonly held: number;
+  readonly bookings: readonly OccurrencePlaceBooking[];
+  readonly waitlistCount: number;
+  readonly state: OccurrenceParticipationState;
+}
+
 export async function catalogSessionPicture(input: {
   readonly occurrence: Occurrence;
   readonly item: Item;
   readonly now: Date;
-}): Promise<
-  | {
-      readonly rule: ResolvedParticipationRule;
-      readonly source: ParticipationRuleSource | "snapshot";
-      readonly decision?: ParticipationDecisionRow;
-      readonly lockAt: Date;
-      readonly confirmed: number;
-      readonly held: number;
-      readonly bookings: readonly OccurrencePlaceBooking[];
-      readonly waitlistCount: number;
-      readonly state: OccurrenceParticipationState;
-    }
-  | undefined
-> {
+}): Promise<CatalogSessionPicture | undefined> {
   const decision = await loadDecision(input.occurrence.id);
-  let rule: ResolvedParticipationRule | undefined;
-  let source: ParticipationRuleSource | "snapshot" = "snapshot";
-  if (decision) {
-    rule = decisionRule(decision, input.occurrence.capacity);
-  } else {
-    const live = await resolveCatalogItemRule({
+  let live:
+    | { rule?: ResolvedParticipationRule; source: ParticipationRuleSource }
+    | undefined;
+  if (!decision) {
+    live = await resolveCatalogItemRule({
       item: input.item,
       capacity: input.occurrence.capacity,
     });
-    rule = live.rule;
-    source = live.source;
+    if (!live.rule) return undefined;
   }
-  if (!rule) return undefined;
+  return pictureFrom({
+    occurrence: input.occurrence,
+    item: input.item,
+    decision,
+    live,
+    places: await occurrencePlaces(input.occurrence.id, input.now),
+    waitlistCount: await countWaiting(input.occurrence.id),
+    now: input.now,
+  });
+}
+
+/**
+ * The same picture for many sessions of one club with a fixed number of
+ * queries, whatever the number of sessions (the staff session lists).
+ * Read-only: unlike `ensureCatalogDecision`, nothing is written.
+ */
+export async function catalogSessionPictures(input: {
+  readonly organizationId: string;
+  readonly rows: readonly {
+    readonly occurrence: Occurrence;
+    readonly item: Item;
+  }[];
+  readonly bookingRows: readonly OccurrenceBookingRow[];
+  readonly now: Date;
+}): Promise<ReadonlyMap<string, CatalogSessionPicture>> {
+  const ids = input.rows.map((row) => row.occurrence.id);
+  const pictures = new Map<string, CatalogSessionPicture>();
+  if (ids.length === 0) return pictures;
+  const database = getDatabase();
+  const [decisions, waiting] = await Promise.all([
+    database
+      .select()
+      .from(participationDecisions)
+      .where(
+        and(
+          eq(participationDecisions.subjectType, CATALOG_SUBJECT),
+          inArray(participationDecisions.subjectId, ids),
+        ),
+      ),
+    database
+      .select({
+        subjectId: participationWaitlistEntries.subjectId,
+        quantity: participationWaitlistEntries.quantity,
+      })
+      .from(participationWaitlistEntries)
+      .where(
+        and(
+          eq(participationWaitlistEntries.subjectType, CATALOG_SUBJECT),
+          inArray(participationWaitlistEntries.subjectId, ids),
+          inArray(participationWaitlistEntries.status, ["waiting", "offered"]),
+        ),
+      ),
+  ]);
+  const decisionBySubject = new Map(
+    decisions.map((decision) => [decision.subjectId, decision]),
+  );
+  const waitingBySubject = new Map<string, number>();
+  for (const row of waiting) {
+    waitingBySubject.set(
+      row.subjectId,
+      (waitingBySubject.get(row.subjectId) ?? 0) + row.quantity,
+    );
+  }
+  const rowsBySubject = new Map<string, OccurrenceBookingRow[]>();
+  for (const row of input.bookingRows) {
+    const id = row.fulfillment.catalogSessionOccurrenceId;
+    if (!id) continue;
+    const list = rowsBySubject.get(id) ?? [];
+    list.push(row);
+    rowsBySubject.set(id, list);
+  }
+  const undecided = input.rows.some(
+    (row) => !decisionBySubject.has(row.occurrence.id),
+  );
+  const [clubDefault, refundWindowMinutes] = undecided
+    ? await Promise.all([
+        loadClubParticipationDefault(input.organizationId),
+        clubRefundWindowMinutes(input.organizationId),
+      ])
+    : [undefined, undefined];
+  for (const { occurrence, item } of input.rows) {
+    const decision = decisionBySubject.get(occurrence.id);
+    let live:
+      | { rule?: ResolvedParticipationRule; source: ParticipationRuleSource }
+      | undefined;
+    if (!decision) {
+      live = await resolveCatalogItemRule({
+        item,
+        capacity: occurrence.capacity,
+        clubDefault,
+        refundWindowMinutes,
+      });
+      if (!live.rule) continue;
+    }
+    pictures.set(
+      occurrence.id,
+      pictureFrom({
+        occurrence,
+        item,
+        decision,
+        live,
+        places: placesFromRows(
+          rowsBySubject.get(occurrence.id) ?? [],
+          input.now,
+        ),
+        waitlistCount: waitingBySubject.get(occurrence.id) ?? 0,
+        now: input.now,
+      }),
+    );
+  }
+  return pictures;
+}
+
+function pictureFrom(input: {
+  readonly occurrence: Occurrence;
+  readonly item: Item;
+  readonly decision?: ParticipationDecisionRow;
+  readonly live?: {
+    readonly rule?: ResolvedParticipationRule;
+    readonly source: ParticipationRuleSource;
+  };
+  readonly places: OccurrencePlaces;
+  readonly waitlistCount: number;
+  readonly now: Date;
+}): CatalogSessionPicture {
+  const { decision, places, waitlistCount } = input;
+  const rule = decision
+    ? decisionRule(decision, input.occurrence.capacity)
+    : input.live!.rule!;
+  const source: ParticipationRuleSource | "snapshot" = decision
+    ? "snapshot"
+    : input.live!.source;
   const lockAt = decision
     ? effectiveLockAt(decision)
     : participationLockAt({
@@ -526,8 +685,6 @@ export async function catalogSessionPicture(input: {
           rule,
         }),
       });
-  const places = await occurrencePlaces(input.occurrence.id, input.now);
-  const waitlistCount = await countWaiting(input.occurrence.id);
   const state = occurrenceParticipationState({
     rules: {
       minParticipants: rule.minParticipants,

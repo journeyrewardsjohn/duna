@@ -28,6 +28,7 @@ import {
   coachAvailabilityAction,
   moveItemAction,
 } from "@/app/(next)/(hq)/schedule/actions";
+import { SessionSheet } from "../participation/session-sheet";
 import { ClosureSheet, type ClosureDraft } from "./closure-sheet";
 import { CreateSheet, type CreateDraft } from "./create-sheet";
 import { ItemPanel } from "./item-panel";
@@ -240,6 +241,11 @@ export function ScheduleScreen({
   const openItem = query.open
     ? (items.find((item) => itemKey(item) === query.open) ?? null)
     : null;
+
+  const openSession =
+    openItem?.source === "catalog-occurrence"
+      ? (data.sessions[openItem.id] ?? null)
+      : null;
 
   const canCheckIn = useCallback(
     (item: ScheduleItem) =>
@@ -966,10 +972,29 @@ export function ScheduleScreen({
         </>
       )}
 
+      {/* One session panel in HQ: an offering's group session opens Offerings' own. */}
+      <SessionSheet
+        currency="USD"
+        now={new Date(nowMs).toISOString()}
+        onOpenChange={(open) => {
+          if (!open) go({ open: undefined }, true);
+        }}
+        open={openSession !== null}
+        permissions={{
+          money: permissions.refund,
+          sessions: permissions.change,
+        }}
+        sameOffering={Object.values(data.sessions).filter(
+          (session) =>
+            session.catalogItemId !== undefined &&
+            session.catalogItemId === openSession?.catalogItemId,
+        )}
+        session={openSession}
+      />
       <ItemPanel
         courts={allCourts}
         inventory={data.inventory}
-        item={openItem}
+        item={openSession ? null : openItem}
         members={data.people}
         nowMs={nowMs}
         onChanged={refresh}

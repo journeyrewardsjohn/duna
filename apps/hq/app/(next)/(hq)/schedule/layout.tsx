@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import "@/components/participation/participation.css";
 import "@/components/schedule/schedule.css";
 
 /** Also set here so the title holds while a filter change re-renders the page. */

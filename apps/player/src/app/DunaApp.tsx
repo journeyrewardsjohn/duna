@@ -46,7 +46,6 @@ import { PlayerArtworkModal, ProfileEditorModal } from "../../profile-studio";
 import { usePlayerRuntime } from "../../runtime";
 import type { VideoTransferStatus } from "../../video-studio";
 import { VisionSecondScreen } from "../../vision-second-screen";
-import type { WatchScoreDraft } from "../../watch-scoring";
 import { CoachProfileModal } from "../features/coaches/CoachProfileModal";
 import type { MobileCoach } from "../features/coaches/coach-format";
 import type { CourtBookingRequest } from "../features/courts/court-types";
@@ -62,7 +61,14 @@ import {
 import { PlayerLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
 import { BookingModal } from "../features/events/BookingModal";
 import type { HomeQuickAction } from "../features/home/home-quick-action";
-import { WatchScoreInbox } from "../features/matches/WatchScoreInbox";
+import { LiveMatchProvider } from "../features/score/LiveMatchContext";
+import {
+  LiveResumeCard,
+  LiveScoreScreen,
+} from "../features/score/LiveScoreScreen";
+import { rememberSummary } from "../features/score/match-cache";
+import { draftFromWatch, type ScoreDraft } from "../features/score/score-draft";
+import { WatchDraftSheet } from "../features/score/WatchDraftSheet";
 import { PickupModal } from "../features/pickup/PickupModal";
 import { colors } from "../shared/palette";
 import {
@@ -74,7 +80,11 @@ import {
 import { NewSheet } from "./NewSheet";
 import { NEW_ACTION, TABS, type TabKey } from "./router";
 import { SCREENS } from "./screens";
-import { ShellContext, type ShellNavigation } from "./ShellContext";
+import {
+  RouteEntryContext,
+  ShellContext,
+  type ShellNavigation,
+} from "./ShellContext";
 import {
   initialShellState,
   isRouteActive,
@@ -99,6 +109,8 @@ export function quickActionNavigation(
       return { type: "open", route: "messages" };
     case "upload-score":
       return { type: "open", route: "score" };
+    case "score-match":
+      return { type: "open", route: "live" };
     case "record-video":
       return { type: "open", route: "video" };
     case "find-coach":
@@ -150,7 +162,7 @@ export function DunaApp() {
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
   const [artworkStudioOpen, setArtworkStudioOpen] = useState(false);
-  const [watchScoreDraft, setWatchScoreDraft] = useState<WatchScoreDraft>();
+  const [scoreDraft, setScoreDraft] = useState<ScoreDraft>();
   const [videoTransfer, setVideoTransfer] = useState<VideoTransferStatus>();
   const [visionRemoteToken, setVisionRemoteToken] = useState<string>();
   // Development-only Layout lab and Foundations gallery: preview builds only.
@@ -280,9 +292,25 @@ export function DunaApp() {
     const localMatch = matches.find(
       (match) => match.id === pendingMatchOpen.matchId,
     );
+    if (localMatch && !pendingMatchOpen.shareToken) {
+      rememberSummary(localMatch);
+      dispatch({ type: "open", route: "result", targetId: localMatch.id });
+      setPendingMatchOpen(undefined);
+      return;
+    }
     if (localMatch) {
       setSelectedMatch(localMatch);
       setSelectedMatchShareToken(pendingMatchOpen.shareToken);
+      setPendingMatchOpen(undefined);
+      return;
+    }
+    if (runtime.client && !pendingMatchOpen.shareToken) {
+      // A signed-in player's match opens as its result (it loads there).
+      dispatch({
+        type: "open",
+        route: "result",
+        targetId: pendingMatchOpen.matchId,
+      });
       setPendingMatchOpen(undefined);
       return;
     }
@@ -349,11 +377,11 @@ export function DunaApp() {
     };
   }, [runtime.client, runtime.mode]);
 
-  // The score form only keeps a Watch draft while it is open.
+  // "Add a result" keeps its draft only while it is open.
   const scoreOpen = isRouteActive(state, "score");
   useEffect(() => {
-    if (!scoreOpen && watchScoreDraft) setWatchScoreDraft(undefined);
-  }, [scoreOpen, watchScoreDraft]);
+    if (!scoreOpen && scoreDraft) setScoreDraft(undefined);
+  }, [scoreOpen, scoreDraft]);
 
   const openEventAtIndex = useCallback(
     (index: number) => {
@@ -368,12 +396,16 @@ export function DunaApp() {
     setExternalEventDetail(event);
   }, []);
   const openMatch = useCallback((match: MatchSummary) => {
+    rememberSummary(match);
+    dispatch({ type: "open", route: "result", targetId: match.id });
+  }, []);
+  const openMatchDetails = useCallback((match: MatchSummary) => {
     setSelectedMatch(match);
     setSelectedMatchShareToken(undefined);
   }, []);
 
   const runAction = useCallback((action: HomeQuickAction) => {
-    if (action === "upload-score") setWatchScoreDraft(undefined);
+    if (action === "upload-score") setScoreDraft(undefined);
     const navigation = quickActionNavigation(action);
     if (navigation === "create-match") setCreateMatchOpen(true);
     else dispatch(navigation);
@@ -408,7 +440,9 @@ export function DunaApp() {
           const match = matches.find(
             (candidate) => candidate.id === target.matchId,
           );
-          if (match) {
+          if (match && !target.shareToken) {
+            openMatch(match);
+          } else if (match) {
             setSelectedMatch(match);
             setSelectedMatchShareToken(target.shareToken);
           } else {
@@ -431,7 +465,7 @@ export function DunaApp() {
           : `${dunaWebUrl}${href.startsWith("/") ? href : `/${href}`}`,
       );
     },
-    [events, matches, openEventAtIndex],
+    [events, matches, openEventAtIndex, openMatch],
   );
 
   const shell = useMemo<ShellNavigation>(
@@ -449,6 +483,7 @@ export function DunaApp() {
       openEventAtIndex,
       registerForEvent: setEventIndex,
       openMatch,
+      openMatchDetails,
       openOrganization: setOrganizationSlug,
       openVenue: setOrganizationVenueId,
       openCourtBooking: setCourtBookingRequest,
@@ -458,9 +493,13 @@ export function DunaApp() {
       openPath,
       unreadMessages,
       setUnreadMessages,
-      watchScoreDraft,
+      scoreDraft,
       reviewWatchScore: (draft) => {
-        setWatchScoreDraft(draft);
+        setScoreDraft(draftFromWatch(draft));
+        dispatch({ type: "open", route: "score" });
+      },
+      addResult: (draft) => {
+        setScoreDraft(draft);
         dispatch({ type: "open", route: "score" });
       },
       onVideoTransfer: setVideoTransfer,
@@ -472,10 +511,11 @@ export function DunaApp() {
       openEvent,
       openEventAtIndex,
       openMatch,
+      openMatchDetails,
       openPath,
       runAction,
+      scoreDraft,
       unreadMessages,
-      watchScoreDraft,
     ],
   );
 
@@ -521,275 +561,293 @@ export function DunaApp() {
   return (
     <DevicePostureProvider>
       <ShellContext.Provider value={shell}>
-        <PlayerProfileProvider palette={colors}>
-          <HealthHistorySyncAgent
-            paused={isRouteActive(state, "health")}
-            runtime={runtime}
-          />
-          {runtime.dashboard ? (
-            <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
-          ) : null}
-          <StatusBar style={statusBar === "light" ? "light" : "dark"} />
-          <View style={styles.fill}>
-            <NavigationChrome
-              centerAction={{
-                key: NEW_ACTION.key,
-                title: NEW_ACTION.title,
-                systemImage: NEW_ACTION.systemImage,
-                onPress: () => {
-                  haptics.confirmed(1);
-                  setNewSheetOpen(true);
-                },
-              }}
-              hidden={tabletop || Boolean(windowRoute)}
-              onSelect={(key) => {
-                // iPad's sidebar-adaptable tab bar reports its first tab once
-                // while it mounts; that echo is not a person's choice (it
-                // would open Find, and its location prompt, at launch).
-                if (Date.now() - mountedAt.current < 1_500) return;
-                dispatch({ type: "select-tab", tab: key as TabKey });
-              }}
-              selected={state.tab}
-              tabs={TABS.map((tab) => ({
-                key: tab.key,
-                title: tab.title,
-                systemImage: tab.systemImage,
-                content: (
-                  <TabRoot
-                    onTabletopChange={setTabletop}
-                    state={state}
-                    tab={tab.key}
-                  />
-                ),
-              }))}
+        <LiveMatchProvider active={windowRoute?.key === "live"}>
+          <PlayerProfileProvider palette={colors}>
+            <HealthHistorySyncAgent
+              paused={isRouteActive(state, "health")}
+              runtime={runtime}
             />
-            {windowRoute?.key === "messages" ? (
-              <View style={[StyleSheet.absoluteFill, styles.window]}>
-                <ThemeOverride theme="light">
-                  <SafeAreaProvider style={styles.fill}>
-                    {SCREENS.messages(windowRoute, shell)}
-                  </SafeAreaProvider>
-                </ThemeOverride>
-              </View>
+            {runtime.dashboard ? (
+              <PlayerCalendarAutoSync bookings={runtime.dashboard.bookings} />
             ) : null}
-            {/* Ask Duna stays mounted so its conversation survives closing it. */}
-            <View
-              pointerEvents={windowRoute?.key === "ai" ? "auto" : "none"}
-              style={[
-                StyleSheet.absoluteFill,
-                windowRoute?.key === "ai" ? styles.window : styles.hidden,
-              ]}
-            >
-              <PlayerDunaAiScreen
-                active={windowRoute?.key === "ai"}
-                initialPrompt={aiInitialPrompt}
-                onClose={() => dispatch({ type: "close-window" })}
-                onInitialPromptConsumed={() => setAiInitialPrompt(undefined)}
+            <StatusBar style={statusBar === "light" ? "light" : "dark"} />
+            <View style={styles.fill}>
+              <NavigationChrome
+                centerAction={{
+                  key: NEW_ACTION.key,
+                  title: NEW_ACTION.title,
+                  systemImage: NEW_ACTION.systemImage,
+                  onPress: () => {
+                    haptics.confirmed(1);
+                    setNewSheetOpen(true);
+                  },
+                }}
+                hidden={tabletop || Boolean(windowRoute)}
+                onSelect={(key) => {
+                  // iPad's sidebar-adaptable tab bar reports its first tab once
+                  // while it mounts; that echo is not a person's choice (it
+                  // would open Find, and its location prompt, at launch).
+                  if (Date.now() - mountedAt.current < 1_500) return;
+                  dispatch({ type: "select-tab", tab: key as TabKey });
+                }}
+                selected={state.tab}
+                tabs={TABS.map((tab) => ({
+                  key: tab.key,
+                  title: tab.title,
+                  systemImage: tab.systemImage,
+                  content: (
+                    <TabRoot
+                      onTabletopChange={setTabletop}
+                      state={state}
+                      tab={tab.key}
+                    />
+                  ),
+                }))}
+              />
+              {windowRoute?.key === "live" ? (
+                <View
+                  style={[StyleSheet.absoluteFill, styles.window]}
+                  testID="live-window"
+                >
+                  <SafeAreaProvider style={styles.fill}>
+                    <RouteEntryContext.Provider value={windowRoute}>
+                      <LiveScoreScreen />
+                    </RouteEntryContext.Provider>
+                  </SafeAreaProvider>
+                </View>
+              ) : (
+                <LiveResumeCard
+                  onResume={() => dispatch({ type: "open", route: "live" })}
+                />
+              )}
+              {windowRoute?.key === "messages" ? (
+                <View style={[StyleSheet.absoluteFill, styles.window]}>
+                  <ThemeOverride theme="light">
+                    <SafeAreaProvider style={styles.fill}>
+                      {SCREENS.messages(windowRoute, shell)}
+                    </SafeAreaProvider>
+                  </ThemeOverride>
+                </View>
+              ) : null}
+              {/* Ask Duna stays mounted so its conversation survives closing it. */}
+              <View
+                pointerEvents={windowRoute?.key === "ai" ? "auto" : "none"}
+                style={[
+                  StyleSheet.absoluteFill,
+                  windowRoute?.key === "ai" ? styles.window : styles.hidden,
+                ]}
+              >
+                <PlayerDunaAiScreen
+                  active={windowRoute?.key === "ai"}
+                  initialPrompt={aiInitialPrompt}
+                  onClose={() => dispatch({ type: "close-window" })}
+                  onInitialPromptConsumed={() => setAiInitialPrompt(undefined)}
+                  onOpenBooking={setBookingId}
+                  onOpenEvent={(eventId, action, href) => {
+                    const index = events.findIndex(
+                      (event) => event.id === eventId,
+                    );
+                    if (index < 0) {
+                      openPath(href);
+                      return;
+                    }
+                    if (action === "book-event") setEventIndex(index);
+                    else openEventAtIndex(index);
+                  }}
+                  onOpenMatch={(matchId, href) => {
+                    const match = matches.find(
+                      (candidate) => candidate.id === matchId,
+                    );
+                    if (match) openMatch(match);
+                    else if (href) openPath(href);
+                    else setPendingMatchOpen({ matchId });
+                  }}
+                  onOpenMessages={() =>
+                    dispatch({ type: "open", route: "messages" })
+                  }
+                  onOpenPath={openPath}
+                  onOpenVenue={setOrganizationVenueId}
+                  palette={{
+                    canvas: dunaAppColors.card,
+                    surface: dunaAppColors.card,
+                    surfaceAlt: dunaAppColors.subtle,
+                    border: dunaAppColors.hairline,
+                    text: dunaAppColors.ink,
+                    muted: dunaAppColors.textSecondary,
+                    accent: dunaAppColors.ink,
+                    onAccent: dunaAppColors.card,
+                    positive: colors.positive,
+                    warning: colors.warning,
+                    danger: colors.danger,
+                  }}
+                  pathname="/app/ai"
+                />
+              </View>
+              {videoTransfer ? (
+                <VideoTransferBanner
+                  onDismiss={() => setVideoTransfer(undefined)}
+                  onPress={() => {
+                    setVideoTransfer(undefined);
+                    dispatch({ type: "open", route: "video" });
+                  }}
+                  status={videoTransfer}
+                />
+              ) : null}
+              <NewSheet
+                onAction={runAction}
+                onClose={() => setNewSheetOpen(false)}
+                visible={newSheetOpen}
+              />
+              {visionRemoteToken && (runtime.publicClient ?? runtime.client) ? (
+                <VisionSecondScreen
+                  client={(runtime.publicClient ?? runtime.client)!}
+                  onClose={() => setVisionRemoteToken(undefined)}
+                  token={visionRemoteToken}
+                />
+              ) : null}
+              <BookingModal
+                eventIndex={eventIndex}
+                eventOverride={registrationEventOverride}
+                onClose={() => {
+                  setEventIndex(null);
+                  setRegistrationEventOverride(undefined);
+                }}
+              />
+              <NativeEventDetails
+                bookingId={selectedEventBooking?.id}
+                client={runtime.client}
+                event={selectedEventDetail}
+                onClose={() => {
+                  setEventDetailIndex(null);
+                  setExternalEventDetail(undefined);
+                }}
                 onOpenBooking={setBookingId}
-                onOpenEvent={(eventId, action, href) => {
+                onRegister={(registrationEvent) => {
                   const index = events.findIndex(
-                    (event) => event.id === eventId,
+                    (event) => event.id === registrationEvent.id,
                   );
-                  if (index < 0) {
-                    openPath(href);
+                  if (index >= 0) {
+                    setEventIndex(index);
                     return;
                   }
-                  if (action === "book-event") setEventIndex(index);
-                  else openEventAtIndex(index);
+                  setRegistrationEventOverride(registrationEvent);
                 }}
-                onOpenMatch={(matchId, href) => {
-                  const match = matches.find(
-                    (candidate) => candidate.id === matchId,
+                onScore={() => dispatch({ type: "open", route: "score" })}
+                onVideo={() => dispatch({ type: "open", route: "video" })}
+                visible={Boolean(selectedEventDetail)}
+              />
+              <NativeMatchDetails
+                client={runtime.client}
+                match={selectedMatch}
+                onClose={() => {
+                  setSelectedMatch(undefined);
+                  setSelectedMatchShareToken(undefined);
+                }}
+                publicClient={runtime.publicClient}
+                shareToken={selectedMatchShareToken}
+                transcribeVoice={runtime.transcribeMatchJournalVoice}
+                visible={Boolean(selectedMatch)}
+              />
+              <ProfileEditorModal
+                onClose={() => setProfileEditorOpen(false)}
+                visible={profileEditorOpen}
+              />
+              <PlayerArtworkModal
+                onClose={() => setArtworkStudioOpen(false)}
+                visible={artworkStudioOpen}
+              />
+              <BookingManagementModal
+                booking={selectedBooking as ManagedBooking | undefined}
+                client={runtime.client}
+                onClose={() => setBookingId(undefined)}
+                onUpdated={runtime.refresh}
+                palette={colors}
+                visible={Boolean(selectedBooking)}
+              />
+              <VenueFinderModal
+                onClose={() => setCourtFinderOpen(false)}
+                onSelect={(request) => {
+                  setCourtFinderOpen(false);
+                  setCourtBookingRequest(request);
+                }}
+                visible={courtFinderOpen}
+              />
+              <VenueBookingModal
+                initialDate={courtBookingRequest?.date}
+                initialDurationMinutes={courtBookingRequest?.durationMinutes}
+                initialIntent={courtBookingRequest?.intent}
+                onClose={() => setCourtBookingRequest(undefined)}
+                onOpenMatch={(matchId, matchSlug) =>
+                  openFromVenue(matchId, matchSlug, () =>
+                    setCourtBookingRequest(undefined),
+                  )
+                }
+                venueId={courtBookingRequest?.venueId}
+                visible={Boolean(courtBookingRequest)}
+              />
+              <OrganizationExperienceModal
+                onClose={() => setOrganizationSlug(undefined)}
+                onDismiss={organizationTransition.complete}
+                onOpenCoach={(coach) => {
+                  organizationTransition.schedule({ kind: "coach", coach });
+                  setOrganizationSlug(undefined);
+                }}
+                onOpenEvent={(eventId, eventSlug) => {
+                  const index = (runtime.dashboard?.events ?? []).findIndex(
+                    (event) => event.id === eventId,
                   );
-                  if (match) openMatch(match);
-                  else if (href) openPath(href);
-                  else setPendingMatchOpen({ matchId });
+                  organizationTransition.schedule(
+                    index >= 0
+                      ? { kind: "event", eventIndex: index }
+                      : { kind: "external-event", slug: eventSlug },
+                  );
+                  setOrganizationSlug(undefined);
                 }}
-                onOpenMessages={() =>
-                  dispatch({ type: "open", route: "messages" })
-                }
-                onOpenPath={openPath}
-                onOpenVenue={setOrganizationVenueId}
-                palette={{
-                  canvas: dunaAppColors.card,
-                  surface: dunaAppColors.card,
-                  surfaceAlt: dunaAppColors.subtle,
-                  border: dunaAppColors.hairline,
-                  text: dunaAppColors.ink,
-                  muted: dunaAppColors.textSecondary,
-                  accent: dunaAppColors.ink,
-                  onAccent: dunaAppColors.card,
-                  positive: colors.positive,
-                  warning: colors.warning,
-                  danger: colors.danger,
+                onOpenVenue={(venueId) => {
+                  organizationTransition.schedule({ kind: "venue", venueId });
+                  setOrganizationSlug(undefined);
                 }}
-                pathname="/app/ai"
+                slug={organizationSlug}
+                theme="light"
               />
+              <VenueBookingModal
+                onClose={() => setOrganizationVenueId(undefined)}
+                onOpenMatch={(matchId, matchSlug) =>
+                  openFromVenue(matchId, matchSlug, () =>
+                    setOrganizationVenueId(undefined),
+                  )
+                }
+                venueId={organizationVenueId}
+                visible={Boolean(organizationVenueId)}
+              />
+              <PickupModal
+                onClose={() => setCreateMatchOpen(false)}
+                onReserveCourtVenue={(request) => {
+                  setCreateMatchOpen(false);
+                  setCourtBookingRequest(request);
+                }}
+                visible={createMatchOpen}
+              />
+              <CoachProfileModal
+                coach={organizationCoach}
+                onClose={() => setOrganizationCoach(undefined)}
+                onOpenSession={(session) => {
+                  const index = events.findIndex(
+                    (event) => event.id === session.id,
+                  );
+                  if (index >= 0) {
+                    openEventAtIndex(index);
+                    return;
+                  }
+                  void WebBrowser.openBrowserAsync(
+                    `${dunaWebUrl}/events/${encodeURIComponent(session.slug)}`,
+                  );
+                }}
+              />
+              <WatchDraftSheet onReview={shell.reviewWatchScore} />
             </View>
-            {videoTransfer ? (
-              <VideoTransferBanner
-                onDismiss={() => setVideoTransfer(undefined)}
-                onPress={() => {
-                  setVideoTransfer(undefined);
-                  dispatch({ type: "open", route: "video" });
-                }}
-                status={videoTransfer}
-              />
-            ) : null}
-            <NewSheet
-              onAction={runAction}
-              onClose={() => setNewSheetOpen(false)}
-              visible={newSheetOpen}
-            />
-            {visionRemoteToken && (runtime.publicClient ?? runtime.client) ? (
-              <VisionSecondScreen
-                client={(runtime.publicClient ?? runtime.client)!}
-                onClose={() => setVisionRemoteToken(undefined)}
-                token={visionRemoteToken}
-              />
-            ) : null}
-            <BookingModal
-              eventIndex={eventIndex}
-              eventOverride={registrationEventOverride}
-              onClose={() => {
-                setEventIndex(null);
-                setRegistrationEventOverride(undefined);
-              }}
-            />
-            <NativeEventDetails
-              bookingId={selectedEventBooking?.id}
-              client={runtime.client}
-              event={selectedEventDetail}
-              onClose={() => {
-                setEventDetailIndex(null);
-                setExternalEventDetail(undefined);
-              }}
-              onOpenBooking={setBookingId}
-              onRegister={(registrationEvent) => {
-                const index = events.findIndex(
-                  (event) => event.id === registrationEvent.id,
-                );
-                if (index >= 0) {
-                  setEventIndex(index);
-                  return;
-                }
-                setRegistrationEventOverride(registrationEvent);
-              }}
-              onScore={() => dispatch({ type: "open", route: "score" })}
-              onVideo={() => dispatch({ type: "open", route: "video" })}
-              visible={Boolean(selectedEventDetail)}
-            />
-            <NativeMatchDetails
-              client={runtime.client}
-              match={selectedMatch}
-              onClose={() => {
-                setSelectedMatch(undefined);
-                setSelectedMatchShareToken(undefined);
-              }}
-              publicClient={runtime.publicClient}
-              shareToken={selectedMatchShareToken}
-              transcribeVoice={runtime.transcribeMatchJournalVoice}
-              visible={Boolean(selectedMatch)}
-            />
-            <ProfileEditorModal
-              onClose={() => setProfileEditorOpen(false)}
-              visible={profileEditorOpen}
-            />
-            <PlayerArtworkModal
-              onClose={() => setArtworkStudioOpen(false)}
-              visible={artworkStudioOpen}
-            />
-            <BookingManagementModal
-              booking={selectedBooking as ManagedBooking | undefined}
-              client={runtime.client}
-              onClose={() => setBookingId(undefined)}
-              onUpdated={runtime.refresh}
-              palette={colors}
-              visible={Boolean(selectedBooking)}
-            />
-            <VenueFinderModal
-              onClose={() => setCourtFinderOpen(false)}
-              onSelect={(request) => {
-                setCourtFinderOpen(false);
-                setCourtBookingRequest(request);
-              }}
-              visible={courtFinderOpen}
-            />
-            <VenueBookingModal
-              initialDate={courtBookingRequest?.date}
-              initialDurationMinutes={courtBookingRequest?.durationMinutes}
-              initialIntent={courtBookingRequest?.intent}
-              onClose={() => setCourtBookingRequest(undefined)}
-              onOpenMatch={(matchId, matchSlug) =>
-                openFromVenue(matchId, matchSlug, () =>
-                  setCourtBookingRequest(undefined),
-                )
-              }
-              venueId={courtBookingRequest?.venueId}
-              visible={Boolean(courtBookingRequest)}
-            />
-            <OrganizationExperienceModal
-              onClose={() => setOrganizationSlug(undefined)}
-              onDismiss={organizationTransition.complete}
-              onOpenCoach={(coach) => {
-                organizationTransition.schedule({ kind: "coach", coach });
-                setOrganizationSlug(undefined);
-              }}
-              onOpenEvent={(eventId, eventSlug) => {
-                const index = (runtime.dashboard?.events ?? []).findIndex(
-                  (event) => event.id === eventId,
-                );
-                organizationTransition.schedule(
-                  index >= 0
-                    ? { kind: "event", eventIndex: index }
-                    : { kind: "external-event", slug: eventSlug },
-                );
-                setOrganizationSlug(undefined);
-              }}
-              onOpenVenue={(venueId) => {
-                organizationTransition.schedule({ kind: "venue", venueId });
-                setOrganizationSlug(undefined);
-              }}
-              slug={organizationSlug}
-              theme="light"
-            />
-            <VenueBookingModal
-              onClose={() => setOrganizationVenueId(undefined)}
-              onOpenMatch={(matchId, matchSlug) =>
-                openFromVenue(matchId, matchSlug, () =>
-                  setOrganizationVenueId(undefined),
-                )
-              }
-              venueId={organizationVenueId}
-              visible={Boolean(organizationVenueId)}
-            />
-            <PickupModal
-              onClose={() => setCreateMatchOpen(false)}
-              onReserveCourtVenue={(request) => {
-                setCreateMatchOpen(false);
-                setCourtBookingRequest(request);
-              }}
-              visible={createMatchOpen}
-            />
-            <CoachProfileModal
-              coach={organizationCoach}
-              onClose={() => setOrganizationCoach(undefined)}
-              onOpenSession={(session) => {
-                const index = events.findIndex(
-                  (event) => event.id === session.id,
-                );
-                if (index >= 0) {
-                  openEventAtIndex(index);
-                  return;
-                }
-                void WebBrowser.openBrowserAsync(
-                  `${dunaWebUrl}/events/${encodeURIComponent(session.slug)}`,
-                );
-              }}
-            />
-            <WatchScoreInbox onReview={shell.reviewWatchScore} />
-          </View>
-        </PlayerProfileProvider>
+          </PlayerProfileProvider>
+        </LiveMatchProvider>
       </ShellContext.Provider>
       {layoutLabOpen && runtime.mode === "preview" ? (
         <PlayerLayoutLab onClose={() => setLayoutLabOpen(false)} />

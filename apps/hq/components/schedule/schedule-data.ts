@@ -12,6 +12,10 @@ import { cache } from "react";
 import { getServerCaller } from "@/lib/api";
 import { isPermissionDenied } from "@/lib/permission-denied";
 import { isNotConfiguredAnswer } from "../money/money-data";
+import {
+  sessionFromOccurrence,
+  type SessionView,
+} from "../participation/session-model";
 import { getHqSession, hasScope } from "../shell/hq-session";
 import type { ShellSession } from "../shell/session-types";
 import {
@@ -85,6 +89,8 @@ export interface ScheduleData {
   readonly coaches: readonly CoachFacts[];
   readonly items: readonly ScheduleItem[];
   readonly people: readonly { readonly id: string; readonly name: string }[];
+  /** Group sessions of offerings, for the one session panel (Offerings'). */
+  readonly sessions: Readonly<Record<string, SessionView>>;
   /** Equipment that can be reserved for a session (not for sale, some free). */
   readonly inventory: readonly {
     readonly id: string;
@@ -595,6 +601,7 @@ export const loadSchedule = cache(
     );
 
     // Group sessions of offerings: shown in the shared words.
+    const sessions: Record<string, SessionView> = {};
     try {
       const occurrences = await caller.operator.catalogSessionOccurrences({
         from: new Date(
@@ -608,6 +615,25 @@ export const loadSchedule = cache(
         ...items,
         ...occurrences.map((occurrence) => occurrenceItem(occurrence, now)),
       ];
+      for (const occurrence of occurrences) {
+        sessions[occurrence.id] = sessionFromOccurrence(occurrence, {
+          now,
+          clubName: workspace.organization.name,
+        });
+      }
+      // The calendar shows the same shared words as the session panel.
+      items = items.map((item) => {
+        const view =
+          item.source === "catalog-occurrence" ? sessions[item.id] : undefined;
+        return view
+          ? {
+              ...item,
+              groupStatus: view.status,
+              ...(view.line ? { groupLine: view.line } : {}),
+              groupNeedsPeople: view.display.numbers.needed > 0,
+            }
+          : item;
+      });
     } catch (error) {
       if (!isPermissionDenied(error) && !isNotConfiguredAnswer(error)) {
         log.warn("hq.schedule.sessions_unavailable", {});
@@ -642,6 +668,7 @@ export const loadSchedule = cache(
         coaches,
         items,
         people,
+        sessions,
         inventory: workspace.inventory
           .filter(
             (item) =>

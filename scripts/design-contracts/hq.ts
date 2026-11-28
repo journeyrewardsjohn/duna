@@ -68,6 +68,8 @@ export const hq: SurfaceContract = {
       "apps/hq/components/shell",
       "apps/hq/components/today",
       "apps/hq/components/money",
+      "apps/hq/components/offerings",
+      "apps/hq/components/participation",
       "apps/hq/components/setup",
       "apps/hq/components/schedule",
     ].map((root) => ({

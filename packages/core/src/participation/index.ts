@@ -9,3 +9,4 @@ export * from "./lock";
 export * from "./state";
 export * from "./copy";
 export * from "./display";
+export * from "./sentence";

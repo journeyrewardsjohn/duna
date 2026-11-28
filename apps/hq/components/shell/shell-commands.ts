@@ -168,6 +168,45 @@ const schedule: readonly ShellCommand[] = [
   },
 ];
 
+/** Offerings (H-OFFER): group sessions and the club's booking rule by name. */
+const offerings: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("offeringsAtRisk")}`,
+    label: "Sessions at risk this week",
+    group: "Offerings",
+    icon: "users",
+    keywords: ["needs players", "minimum", "cancel", "merge", "clinic"],
+  },
+  {
+    value: `go:${hqHref("offeringsSettings")}`,
+    label: "Set the club's booking rule",
+    group: "Offerings",
+    icon: "policy",
+    keywords: ["minimum", "group size", "players", "decide", "default"],
+  },
+  {
+    value: `go:${hqHref("offeringCreate")}?kind=services&template=clinic`,
+    label: "New clinic",
+    group: "Offerings",
+    icon: "clinic",
+    keywords: ["group", "lesson", "class"],
+  },
+  {
+    value: `go:${hqHref("offeringCreate")}?kind=plans&template=membership`,
+    label: "New membership",
+    group: "Offerings",
+    icon: "member-card",
+    keywords: ["monthly", "plan", "subscription"],
+  },
+  {
+    value: `go:${hqHref("offeringCreate")}?kind=plans&template=credit-pack`,
+    label: "New credit pack",
+    group: "Offerings",
+    icon: "credit-pack",
+    keywords: ["credits", "pack", "bundle"],
+  },
+];
+
 /** Club setup (H-SETUP): Duna reading the club's website, and its identity. */
 const setup: readonly ShellCommand[] = [
   {
@@ -237,6 +276,7 @@ export const shellCommands: readonly ShellCommand[] = [
   ...create,
   ...schedule,
   ...money,
+  ...offerings,
   ...setup,
   ...run,
 ];
