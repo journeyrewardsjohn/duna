@@ -30,7 +30,6 @@ import {
 import { EventsTable } from "./events-table";
 import { EventHistoryWorkspace } from "./event-history-workspace";
 import { PeopleWorkspace } from "./people-workspace";
-import { TeamWorkspace } from "./team-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
 import { DunaAiWorkspace } from "./duna-ai-workspace";
@@ -428,10 +427,6 @@ function VenuePortfolioPanel({
   );
 }
 
-function TeamPanel({ workspace }: { readonly workspace: OperatorWorkspace }) {
-  return <TeamWorkspace workspace={workspace} />;
-}
-
 function MessagesPanel({
   workspace,
 }: {
@@ -769,16 +764,14 @@ export function ModulePanel({
             ? { href: hqRoutes.placeCreate, label: "Add venue" }
             : module === "people"
               ? { href: hqRoutes.memberInvite, label: "Invite person" }
-              : module === "team"
-                ? { href: hqRoutes.teamInvite, label: "Invite team member" }
-                : module === "marketing"
-                  ? {
-                      href: hqRoutes.marketingCreate,
-                      label: "Create campaign",
-                    }
-                  : module === "money"
-                    ? { href: hqRoutes.moneySetup, label: "Configure money" }
-                    : undefined;
+              : module === "marketing"
+                ? {
+                    href: hqRoutes.marketingCreate,
+                    label: "Create campaign",
+                  }
+                : module === "money"
+                  ? { href: hqRoutes.moneySetup, label: "Configure money" }
+                  : undefined;
   // Until H9 turns them into in-page filters, the old sidebar children are a
   // row of type links inside the Events list.
   const typeLinks =
@@ -835,8 +828,6 @@ export function ModulePanel({
         <VenuePortfolioPanel workspace={workspace} />
       ) : module === "people" ? (
         <PeopleWorkspace workspace={workspace} />
-      ) : module === "team" ? (
-        <TeamPanel workspace={workspace} />
       ) : module === "events" ? (
         <EventsTable
           dashboard={dashboard}

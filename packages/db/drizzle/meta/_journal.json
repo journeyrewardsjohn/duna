@@ -855,6 +855,13 @@
       "when": 1795858371950,
       "tag": "0121_search_upcoming_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1795865923585,
+      "tag": "0122_training_library_indexes",
+      "breakpoints": true
     }
   ]
 }

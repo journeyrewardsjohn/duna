@@ -22,13 +22,22 @@ export const hqRoutes = {
   /** Schedule (H-SCHEDULE): the club calendar, its filters in the query string. */
   schedule: "/schedule",
 
-  // People and play. People, Team, Events, Offerings, Marketing and Reports
-  // lists are served by the generic module page; see hqModuleHref.
+  // People and play. People, Events, Marketing and Reports lists are served
+  // by the generic module page; see hqModuleHref.
   memberInvite: "/people/invite",
   member: "/people/[personId]",
   memberHealth: "/people/[personId]/health",
+  /** Team (H-TEAM): the roster, coverage, pay, and each member as an object. */
+  team: "/team",
   teamInvite: "/team/invite",
+  teamCoverage: "/team/coverage",
+  teamPay: "/team/pay",
+  teamPayRun: "/team/pay/[payRunId]",
   teamMember: "/team/[personId]",
+  teamMemberAvailability: "/team/[personId]/availability",
+  teamMemberSessions: "/team/[personId]/sessions",
+  teamMemberPay: "/team/[personId]/pay",
+  teamMemberAccess: "/team/[personId]/access",
   training: "/training",
   trainingDrillCreate: "/training/drills/create",
   trainingDrillCreateAdvanced: "/training/drills/create/advanced",
@@ -157,7 +166,6 @@ export const hqOperatorModuleSlugs = [
   "marketing",
   "people",
   "reports",
-  "team",
 ] as const;
 
 /** Admin module slugs served by apps/hq/app/admin/[module]/page.tsx. */

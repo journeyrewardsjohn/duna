@@ -18,6 +18,7 @@ import { useRegionLayout } from "@duna/ui/native/layout";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState, type ReactNode } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { EarningsTabRoot } from "../features/earnings";
 import { dunaApiBaseUrl } from "../../mobile-api";
 import { useProRuntime } from "../../runtime";
 import {
@@ -43,15 +44,14 @@ import { SCREENS } from "./screens";
 import { RouteEntryContext, useShell } from "./ShellContext";
 import { PreviewNotice, TopBar } from "./TopBar";
 import { visibleRoute, type RouteEntry, type ShellState } from "./shell-state";
-import { Row, SectionHead, SideBySideContext, usePaneEdges } from "./ui";
+import { Row, SideBySideContext, usePaneEdges } from "./ui";
 
 /**
  * What a hub shows besides its routes: on Students, the Duna Vision Player
- * Studio on the web (kept from the old Today); on Earnings, the club's pulse
- * (the dashboard metrics the old Today showed).
+ * Studio on the web (kept from the old Today). Earnings has its own root
+ * (M-R5), which keeps the club's pulse.
  */
 function HubExtras({ tab }: { readonly tab: TabKey }) {
-  const { dashboard } = useProRuntime();
   if (tab === "people") {
     return (
       <Row
@@ -63,21 +63,6 @@ function HubExtras({ tab }: { readonly tab: TabKey }) {
         testID="hub-row-player-studio"
         title="Duna Vision Player Studio"
       />
-    );
-  }
-  if (tab === "money" && dashboard?.metrics.length) {
-    return (
-      <View style={styles.extras}>
-        <SectionHead title="Club pulse" />
-        {dashboard.metrics.slice(0, 3).map((metric) => (
-          <Row
-            icon="improve"
-            key={metric.label}
-            summary={[metric.label, metric.change].filter(Boolean).join(" · ")}
-            title={metric.value}
-          />
-        ))}
-      </View>
     );
   }
   return null;
@@ -280,6 +265,14 @@ export function TabRoot({
         primary={<SchedulePrimary withAside={plan.sideBySide} />}
       />
     );
+  } else if (tab === "money") {
+    content = (
+      <EarningsTabRoot
+        detail={detail}
+        layout={region.layout}
+        sideBySide={plan.sideBySide}
+      />
+    );
   } else {
     content = (
       <AdaptiveScaffold
@@ -308,5 +301,4 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   back: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
   hubHead: { gap: 4, paddingBottom: 12, paddingTop: 4 },
-  extras: { gap: 4, paddingTop: 12 },
 });

@@ -21,6 +21,11 @@ function markdownEncoding(path: string) {
   };
 }
 
+/** One feed item as structured data (`SportsEvent`, `SportsActivityLocation`, …). */
+export function discoveryItemJsonLd(item: DiscoveryMapItem): JsonLd {
+  return discoveryEntity(item);
+}
+
 function discoveryEntity(item: DiscoveryMapItem): JsonLd {
   const url = absolutePublicUrl(item.href);
   const location =

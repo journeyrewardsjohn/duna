@@ -1,11 +1,15 @@
 /**
- * The home search's state and how it becomes the discovery page's address.
- * Pure (no React, no browser), so it is tested directly. The discovery page
- * (`/discover/results`, read by `lib/discovery-query.ts`) understands:
- * `where` (anywhere | current | place) with `location`, `address`, `lat`,
- * `lng`; `when` (flexible | next-7-days | custom …) with `start` and `end`
- * as ISO instants; `what` as a comma list.
+ * The home search's state and how it becomes the find-a-game page's address
+ * (`/discover`, SITE-4: `components/discover/search-state.ts` owns the
+ * address and still reads every older one). Pure (no React, no browser), so
+ * it is tested directly.
  */
+import {
+  DEFAULT_DISCOVER_STATE,
+  type DiscoverState,
+  discoverHref,
+  WHAT_OPTIONS,
+} from "../../discover/search-state";
 
 export type WhereChoice =
   | { readonly kind: "anywhere" }
@@ -43,7 +47,7 @@ export const WHAT_CATEGORIES = [
   { id: "league", label: "Leagues", discovery: "leagues" },
   { id: "tournament", label: "Tournaments", discovery: "tournaments" },
   { id: "court", label: "Court time", discovery: "court-rentals" },
-  /** Coaching is listed under training on the discovery page today. */
+  /** The old discovery page listed coaching under training. */
   { id: "coach", label: "Coaches", discovery: "training" },
 ] as const;
 
@@ -147,58 +151,48 @@ export function whenRange(
   }
 }
 
-/** The discovery page's address for a search. */
+/** The search as the find-a-game page's state (SITE-4). */
+export function toDiscoverState(state: SearchState): DiscoverState {
+  const { where, when } = state;
+  return {
+    ...DEFAULT_DISCOVER_STATE,
+    where:
+      where.kind === "place"
+        ? {
+            kind: "place",
+            label: where.label,
+            ...(where.address ? { address: where.address } : {}),
+            latitude: where.latitude,
+            longitude: where.longitude,
+            ...(where.venueId ? { venueId: where.venueId } : {}),
+          }
+        : where,
+    when:
+      when.kind === "preset"
+        ? { kind: "preset", preset: when.preset }
+        : when.start <= when.end
+          ? { kind: "dates", from: when.start, to: when.end }
+          : { kind: "dates", from: when.end, to: when.start },
+    what: WHAT_OPTIONS.map((option) => option.id).filter((id) =>
+      (state.what as readonly string[]).includes(id),
+    ),
+    surface: state.surface,
+  };
+}
+
+/**
+ * The find-a-game page's address for a search (`/discover?…`, read by
+ * `components/discover/search-state.ts`). `now` is kept for callers of the
+ * old signature: the address now carries days, not instants, so it no
+ * longer depends on the visitor's clock.
+ */
 export function discoveryHref(
   state: SearchState,
   now: Date = new Date(),
-  path = "/discover/results",
+  path = "/discover",
 ): string {
-  const query = new URLSearchParams();
-  const { where } = state;
-  if (where.kind === "anywhere") {
-    query.set("where", "anywhere");
-  } else if (where.kind === "near-me") {
-    query.set("where", "current");
-    query.set("location", "Current location");
-    query.set("lat", where.latitude.toFixed(5));
-    query.set("lng", where.longitude.toFixed(5));
-  } else {
-    query.set("where", "place");
-    query.set("location", where.label);
-    query.set("lat", where.latitude.toFixed(5));
-    query.set("lng", where.longitude.toFixed(5));
-    if (where.address) query.set("address", where.address);
-  }
-
-  if (state.when.kind === "preset" && state.when.preset === "week") {
-    const range = whenRange(state.when, now)!;
-    query.set("when", "next-7-days");
-    query.set("start", range.start.toISOString());
-    query.set("end", range.end.toISOString());
-  } else {
-    const range = whenRange(state.when, now);
-    if (range) {
-      query.set("when", "custom");
-      query.set("start", range.start.toISOString());
-      query.set("end", range.end.toISOString());
-    } else {
-      query.set("when", "flexible");
-    }
-  }
-
-  const what = [
-    ...new Set(
-      state.what.map(
-        (id) =>
-          WHAT_CATEGORIES.find((category) => category.id === id)!.discovery,
-      ),
-    ),
-  ];
-  query.set("what", what.length > 0 ? what.join(",") : "for-you");
-  // Discovery has no surface filter yet (search package SITE-3); the choice
-  // travels in the address so that page can read it when it does.
-  if (state.surface !== "any") query.set("surface", state.surface);
-  return `${path}?${query.toString()}`;
+  void now;
+  return discoverHref(toDiscoverState(state), path);
 }
 
 /** What the Where row says. */

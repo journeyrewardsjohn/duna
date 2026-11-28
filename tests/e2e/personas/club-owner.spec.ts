@@ -219,23 +219,44 @@ test.describe("CO-5 Publish a lesson and a program", () => {
 });
 
 test.describe("CO-6 Invite a coach", () => {
-  test("CO-6.1 Start a coach's invitation: name, role and how it is delivered", async ({
+  test("CO-6.1 Start a coach's invitation: name, contact, role and classification", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Team");
+    await page.getByRole("link", { name: "Invite someone" }).first().click();
+    await expectPageReady(page, "Invite someone");
+    await page.getByRole("textbox", { name: "Name" }).fill("Jordan Coach");
+    await expect(page.getByRole("radio", { name: /^Coach/ })).toBeChecked();
+    await expect(
+      page.getByRole("radio", { name: "Contractor (1099)" }),
+    ).toBeChecked();
+    await expect(page.getByText(/with your own adviser/).first()).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Review invitation" }),
+    ).toBeVisible();
+  });
+  test("CO-6.2 Review who, how and as what, then send once", async ({
     page,
   }) => {
     await page.goto(hq("/team/invite"));
-    await expectPageReady(page, "Invite the right teammate.");
-    await fillForm(page, { "Full name": "Jordan Coach" });
-    await expect(page.getByRole("combobox", { name: "Role" })).toBeVisible();
+    await expectPageReady(page, "Invite someone");
+    await page.getByRole("textbox", { name: "Name" }).fill("Jordan Coach");
+    await page
+      .getByRole("textbox", { name: /Email or mobile/ })
+      .fill("jordan@example.com");
+    await page.getByRole("button", { name: "Review invitation" }).click();
+    const review = page.getByRole("region", { name: "Check before it goes" });
+    await expect(review).toContainText("by email to jordan@example.com");
+    await expect(review).toContainText("Coach");
+    await review
+      .getByRole("button", { name: "Send invitation to Jordan" })
+      .click();
+    // Demo has no connected database or delivery provider: the honest state.
     await expect(
-      page.getByRole("combobox", { name: "How should they receive it?" }),
+      page
+        .getByText(/isn't configured yet|Invitation sent|Invitation created/)
+        .first(),
     ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Create private link" }),
-    ).toBeVisible();
-  });
-  test.fixme("CO-6.2 Create the link, or send it by email or text after a confirm [H5, B7]", async () => {
-    // Expected: tier 1 confirm naming the channel and the recipient; per-
-    // person delivery row; "not configured yet" without a channel provider.
   });
   test.fixme("CO-6.3 The coach accepts and shows as active in Team [H5]", async () => {});
 });
@@ -427,7 +448,44 @@ test.describe("CO-13 Identity chrome", () => {
 });
 
 test.describe("CO-14 Pay the team", () => {
-  test.fixme("CO-14.1 Run a pay period for coaches and export it [B3b, H5]", async () => {});
+  test("CO-14.1 Run a pay period for coaches and export it", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Team");
+    await page
+      .getByRole("navigation", { name: "Team" })
+      .getByRole("link", { name: "Pay" })
+      .click();
+    await expectPageReady(page, "Team pay");
+    await pressAndConfirm(
+      page,
+      page.getByRole("button", { name: "Work out pay" }).first(),
+      "confirm",
+      { confirmButton: "Work out pay" },
+    );
+    await expectPageReady(page, "Pay run");
+    await pressAndConfirm(
+      page,
+      page.getByRole("button", { name: "Approve the pay run" }),
+      "strong",
+      {
+        confirmButton: "Approve the pay run",
+        restates: ["Approval is final", "$", "Theo Park"],
+      },
+    );
+    await expect(
+      page.getByLabel("Totals").getByText("Approved", { exact: true }),
+    ).toBeVisible();
+    await pressAndConfirm(
+      page,
+      page.getByRole("button", { name: "Create the file" }),
+      "confirm",
+      { confirmButton: "Create the file" },
+    );
+    await expect(
+      page.getByRole("link", { name: /Download the file/ }),
+    ).toBeVisible();
+  });
 });
 
 test.describe("CO-15 Group sessions that fill up", () => {

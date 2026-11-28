@@ -377,6 +377,15 @@ mark, when, title, club, price, "Needs N more"); side notes "Not seeing your cou
 "How this search works". Map view toggle (existing map). Empty: "No games match in [place] [when]." with
 "Search any time" and "Add a court and score".
 
+As built (SITE-4, 28 November 2026): `/discover` and `/venues/[venueId]` in `app/(next)/(site)`, with
+signed-in twins `/app/discover` and `/app/venues/[venueId]` in the Player shell, all on
+`components/discover/**`. The address is the search (`components/discover/search-state.ts` documents
+every parameter and still reads the old `/discover/results` and `/discover/map` query strings, which
+308 to `/discover` unchanged, the map one with `view=map`). Results are server-rendered from
+`public.discoveryMap`, grouped by day then time, with the price all-in, the group state from
+`participationDisplay` and the light from the sun; the map (lazy, clustered, satellite close in,
+"Search this area") sits beside the list on wide screens and under a three-detent sheet on phones.
+
 ### 3.3 `/add-score`, 3.4 `/run-your-club`, 3.5 `/coaches`, 3.6 `/pricing`, 3.7 `/pro`
 
 Copy exactly as in the prototype views of the same names (all strings there are final candidates), with

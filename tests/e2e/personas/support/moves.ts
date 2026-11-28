@@ -21,7 +21,7 @@ export const hqAreas = {
   Schedule: hqRoutes.schedule,
   Inbox: hqRoutes.inbox,
   People: hqModuleHref("people"),
-  Team: hqModuleHref("team"),
+  Team: hqRoutes.team,
   Training: hqRoutes.training,
   Events: hqModuleHref("events"),
   Offerings: hqRoutes.offerings,
@@ -38,7 +38,7 @@ export type HqArea = keyof typeof hqAreas;
 /** Player web verbs (Find / Play / Improve / Connect) and the other homes. */
 export const playerAreas = {
   Home: "/app",
-  Find: "/discover",
+  Find: "/app/discover",
   Play: "/app/play",
   Improve: "/app/video",
   Connect: "/app/messages",
