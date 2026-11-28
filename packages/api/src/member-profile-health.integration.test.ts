@@ -178,7 +178,9 @@ function expectNoValues(profile: object) {
   const json = JSON.stringify(profile);
   expect(json).not.toContain(String(STEPS));
   expect(json).not.toContain(String(ACTIVE_ENERGY));
-  expect(json).not.toContain(`:${RESTING_HEART_RATE}`);
+  // A JSON value ("key":47), never a clock time: a bare ":47" matched the
+  // minute of any timestamp and failed whenever CI ran at HH:47.
+  expect(json).not.toMatch(new RegExp(`":${RESTING_HEART_RATE}(?![\\d.])`));
   expect(json).not.toMatch(
     /metrics|restingHeartRate|readinessScore|heartRate|observedAt|steps/,
   );
