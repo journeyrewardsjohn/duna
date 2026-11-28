@@ -1119,6 +1119,9 @@ export async function resolveParticipationCancelRequest(input: {
     readonly refundStatus: ParticipationCancellationResult["refundStatus"];
   }[];
   readonly coachNotified: boolean;
+  /** B7: for the Concierge hand-off (never sent from here). */
+  readonly requestedByPersonId: string;
+  readonly subjectId: string;
 }> {
   requireParticipationDatabase();
   const database = getDatabase();
@@ -1168,6 +1171,8 @@ export async function resolveParticipationCancelRequest(input: {
         refundStatus: entry.refundStatus,
       })),
       coachNotified: false,
+      requestedByPersonId: request.requestedByPersonId,
+      subjectId: request.subjectId,
     };
   }
   await closeCancelRequest({ ...input, status: "declined" });
@@ -1181,6 +1186,8 @@ export async function resolveParticipationCancelRequest(input: {
     status: "declined",
     cancellations: [],
     coachNotified: false,
+    requestedByPersonId: request.requestedByPersonId,
+    subjectId: request.subjectId,
   };
 }
 

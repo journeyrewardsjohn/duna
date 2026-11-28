@@ -21,6 +21,7 @@
     "./webhooks": "./src/webhooks.ts",
     "./ask-duna-contracts": "./src/ask-duna-contracts.ts",
     "./sendblue-ingress": "./src/sendblue-ingress.ts",
+    "./concierge-webhooks": "./src/concierge-webhooks.ts",
     "./website-billing": "./src/website-billing.ts",
     "./sendblue-outbox": "./src/sendblue-outbox.ts",
     "./website-service": "./src/website-service.ts",

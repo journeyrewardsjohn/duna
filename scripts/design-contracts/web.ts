@@ -27,8 +27,13 @@ export const web: SurfaceContract = {
     "apps/web/app/(next)/(app)/",
     "apps/web/components/app-shell/",
     "apps/web/lib/app-routes.ts",
+    "apps/web/components/club/",
+    "apps/web/components/event/",
+    "apps/web/components/coach/",
     // Find a game (SITE-4): /discover, /venues/[id] and the /app twins.
     "apps/web/components/discover/",
+    // Play, results, profile and settings for players (P-WEB-1).
+    "apps/web/components/player/",
   ],
   checks: [
     // Find a game (SITE-4): the search, results, map and venue pages moved to
@@ -144,30 +149,126 @@ export const web: SurfaceContract = {
       message:
         "Home's Next up is future-only and group-session words come from the shared copy table",
     },
+    // SITE-5: the pages a club sends its players to, rebuilt in app/(next)
+    // at the same addresses; the old pages and their parts are deleted.
+    ...[
+      "apps/web/app/(legacy)/clubs/[slug]/page.tsx",
+      "apps/web/app/(legacy)/clubs/[slug]/products/[productSlug]/page.tsx",
+      "apps/web/app/(legacy)/events/[slug]/page.tsx",
+      "apps/web/app/(legacy)/coaches/[handle]/page.tsx",
+      "apps/web/components/event-card.tsx",
+      "apps/web/components/coach-card.tsx",
+      "apps/web/components/club-hero-media.tsx",
+      "apps/web/components/catalog-recommendations.tsx",
+    ].map(
+      (path) =>
+        ({
+          kind: "absent",
+          path,
+          message:
+            "Club, offering, event and coach pages live in app/(next)/(site) (SITE-5); the old page and its parts are deleted",
+        }) as const,
+    ),
+    ...[
+      "apps/web/components/club",
+      "apps/web/components/event",
+      "apps/web/components/coach",
+    ].map(
+      (root) =>
+        ({
+          kind: "treeExcludes",
+          root,
+          values: [...legacySheets, "lucide-react"],
+          message: `${root} renders in app/(next): design-system parts and @duna/ui icons only`,
+        }) as const,
+    ),
+    ...(
+      [
+        ["clubs/[slug]", "canonical"],
+        ["clubs/[slug]/products/[productSlug]", "canonical"],
+        ["events/[slug]", "canonical"],
+        ["coaches/[handle]", "canonical"],
+      ] as const
+    ).map(
+      ([route, value]) =>
+        ({
+          kind: "includes",
+          file: `apps/web/app/(next)/(site)/${route}/page.tsx`,
+          values: [value, '"text/markdown"', "application/ld+json"],
+          message: `/${route} keeps its canonical address, Markdown companion and structured data`,
+        }) as const,
+    ),
     {
-      kind: "excludes",
-      file: "apps/web/components/event-card.tsx",
-      values: ["event-card__court-lines"],
-      message: "event-card must not restore synthetic court artwork",
-    },
-    {
-      kind: "excludes",
-      file: "apps/web/app/(legacy)/app/pickup/[slug]/edit/page.tsx",
-      values: ["SiteHeader"],
+      kind: "includes",
+      file: "apps/web/components/club/theme.ts",
+      values: ["guardedAccent", "readsAsSolar", "publishedAt"],
       message:
-        "The pickup editor must not nest the public SiteHeader inside PlayerShell",
+        "A club's colour is an accent with a contrast guard and never reads as Solar (contract R13)",
+    },
+    // Play, hosting, results, profile, settings, onboarding and the
+    // invitation landings (P-WEB-1) moved to app/(next) on components/player;
+    // the old pages and their components are deleted. Live point-by-point
+    // scoring stays on the old design at /app/score/live until it is rebuilt.
+    ...[
+      "apps/web/app/(legacy)/app/play/page.tsx",
+      "apps/web/app/(legacy)/app/matches/page.tsx",
+      "apps/web/app/(legacy)/app/matches/[id]/page.tsx",
+      "apps/web/app/(legacy)/app/score/page.tsx",
+      "apps/web/app/(legacy)/app/profile/page.tsx",
+      "apps/web/app/(legacy)/app/settings/page.tsx",
+      "apps/web/app/(legacy)/app/onboarding/page.tsx",
+      "apps/web/app/(legacy)/app/pickup/new/page.tsx",
+      "apps/web/app/(legacy)/app/pickup/[slug]/edit/page.tsx",
+      "apps/web/app/(legacy)/app/booking-invite/[inviteToken]/page.tsx",
+      "apps/web/app/(legacy)/app/team/claim/[token]/page.tsx",
+      "apps/web/components/pickup-form.tsx",
+      "apps/web/components/pickup-edit-form.tsx",
+      "apps/web/components/player-onboarding.tsx",
+      "apps/web/components/privacy-settings.tsx",
+      "apps/web/components/match-confirmation.tsx",
+    ].map(
+      (path) =>
+        ({
+          kind: "absent",
+          path,
+          message:
+            "This player page lives in app/(next) on components/player (P-WEB-1); the old page is deleted",
+        }) as const,
+    ),
+    {
+      kind: "treeExcludes",
+      root: "apps/web/components/player",
+      values: [
+        ...legacySheets,
+        "lucide-react",
+        '@duna/ui"',
+        "@/components/site/header",
+      ],
+      message:
+        "The player pages render in app/(next): design-system parts and @duna/ui/icons only",
     },
     {
       kind: "includes",
-      file: "apps/web/components/pickup-edit-form.tsx",
+      file: "apps/web/components/player/agenda-model.ts",
       values: [
+        "renderParticipationCopy",
+        "refundIfCancelledNow",
+        "formatParticipationTime",
+      ],
+      message:
+        "Plans show the group state, price and cancellation window in the shared words, from the backend's own fields",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/components/player/pickup/pickup-form.tsx",
+      values: [
+        "participationRuleSentence",
         "Player preview",
-        "locationConfidence",
         "Core details lock",
         "Choose a future start time",
       ],
-      legacy:
-        "legacy: delete when pickup hosting migrates (keep the guided steps in a test)",
+      message:
+        "Hosting a pickup states its group rule in the shared sentence and reviews what players see before publishing",
     },
     ...[
       "apps/web/app/qa-font-system/page.tsx",

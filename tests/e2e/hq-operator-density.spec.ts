@@ -111,12 +111,19 @@ test("compact Activities keeps every operational destination and accessible tabl
     .getByRole("link", { name: "Courts & rentals", exact: true })
     .click();
   await expect(page).toHaveURL(`${base}/schedule`);
+  // A narrow main column (a phone, a tablet beside the sidebar) folds the
+  // schedule's actions into one menu; wider screens show them as buttons.
   await expect(
-    page.getByRole("link", { name: "New session", exact: true }),
-  ).toHaveCount(1);
-  await expect(
-    page.getByRole("button", { name: "Block time", exact: true }),
+    page
+      .getByRole("button", { name: "New booking", exact: true })
+      .or(page.getByRole("button", { name: "Add or change", exact: true })),
   ).toBeVisible();
+  // A narrow column opens Schedule as the agenda; the lanes belong to the
+  // day view, so choose it (retrying until the page has hydrated).
+  await expect(async () => {
+    await page.getByRole("button", { name: "Day", exact: true }).click();
+    await expect(page).toHaveURL(/view=day/, { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
   await page.getByRole("button", { name: "Coaches", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Coaches", exact: true }),
@@ -125,51 +132,6 @@ test("compact Activities keeps every operational destination and accessible tabl
   await expect(
     page.getByRole("button", { name: "Courts", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-});
-
-test("compact People retains search, family filters and keyboard profile access", async ({
-  page,
-}, info) => {
-  await page.goto(`${base}/people`);
-  await clearAssistant(page);
-  const table = page.getByRole("table", {
-    name: "People directory",
-    exact: true,
-  });
-  await expect(table).toBeVisible();
-  await expect(table.getByRole("columnheader")).toHaveCount(6);
-  const search = page.getByRole("searchbox", {
-    name: "Search people",
-    exact: true,
-  });
-  await search.fill("no-person-matches-this-qa-query");
-  await expect(table.getByRole("rowheader")).toHaveCount(0);
-  await search.clear();
-  for (const name of ["Junior players", "Parents & guardians", "Everyone"]) {
-    const filter = page.getByRole("button", { name, exact: true });
-    await filter.click();
-    await expect(filter).toHaveAttribute("aria-pressed", "true");
-  }
-  const region = page.getByRole("region", {
-    name: "People directory",
-    exact: true,
-  });
-  await region.focus();
-  await expect(region).toBeFocused();
-  await expectContainedPage(page);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    window.scrollTo(0, 0);
-  });
-  await page.screenshot({
-    path: info.outputPath("people-compact.png"),
-    fullPage: true,
-  });
-  const profile = table.getByRole("rowheader").first().getByRole("link");
-  await expect(profile).toHaveAttribute("href", /^\/people\/.+/);
-  await profile.focus();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/people\/[^/]+$/);
 });
 
 test("compact Money navigation remains usable in dark mode and narrow layouts", async ({

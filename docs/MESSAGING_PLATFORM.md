@@ -118,6 +118,34 @@ jurisdiction: no under-18 content is sent to the AI provider unless the
 environment explicitly confirms zero-data-retention eligibility and every minor
 record contains verified parental consent.
 
+## Duna Concierge (B7)
+
+Concierge is the threaded, multi-channel layer on top of this platform
+([`docs/product/concierge.md`](product/concierge.md)). It adds no exception
+to any rule above:
+
+- A thread is a conversation; existing conversations are read as threads in
+  place (nothing copied). Rosters stay server-resolved; a bookable catalog
+  session is now a supported `lesson` audience (its active bookings, or the
+  people a club cancellation affected).
+- A person confirms every outgoing message: a Send review lists each
+  recipient with exactly one channel (one frozen destination; never several
+  channels "to improve the odds") or the reason they cannot be reached, and
+  `confirmSend` is valid only for the reviewed content hash and the live
+  roster. AI drafts are labelled and never send.
+- Guardians are in the same thread and are the ones contacted outside Duna;
+  juniors are reached in-app only, and youth messages are still held until
+  SafeSport screening clears them (outside deliveries wait too).
+- Staff post as the club, attributed to the person.
+- Outside channels (email, iMessage, WhatsApp) are ON in code and say "not
+  configured" until the owner approves and sets production values; no
+  provider is activated by code. Inbound replies are verified, deduplicated,
+  re-checked against membership and screening, and quarantined when they
+  cannot be routed safely; STOP is honoured at once per channel.
+- Messaging is not a marketing channel: there is no campaign, audience
+  import or bulk-list feature; audiences are only the people connected to a
+  thing.
+
 ## Required environment
 
 ```text

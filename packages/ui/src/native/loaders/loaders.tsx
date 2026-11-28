@@ -19,6 +19,7 @@ import {
 } from "../../brand/geometry";
 import { MARK_RATIO, useMarkColor } from "../brand/marks";
 import { useReducedMotion } from "../motion/reduced-motion";
+import { runWithWatchdog, settleValues } from "../motion/watchdog";
 import { useTheme } from "../theme/ThemeProvider";
 import { nativeTokens } from "../tokens";
 import { Text } from "../type/Text";
@@ -343,19 +344,31 @@ export function SetBySetLoader({
   ).current;
   const previous = useRef(done);
   useEffect(() => {
+    const cancels: (() => void)[] = [];
     for (let crest = 0; crest < 3; crest += 1) {
       const step = 2 - crest;
       if (step >= previous.current && step < done && !reduceMotion) {
         scales[crest]!.setValue(0);
-        Animated.timing(scales[crest]!, {
-          toValue: 1,
-          duration: duration.rise,
-          easing: Easing.bezier(0.2, 0.8, 0.2, 1),
-          useNativeDriver: native,
-        }).start();
+        cancels.push(
+          runWithWatchdog(
+            Animated.timing(scales[crest]!, {
+              toValue: 1,
+              duration: duration.rise,
+              easing: Easing.bezier(0.2, 0.8, 0.2, 1),
+              useNativeDriver: native,
+            }),
+            {
+              timeline: duration.rise,
+              settle: settleValues([[scales[crest]!, 1]]),
+            },
+          ),
+        );
       }
     }
     previous.current = done;
+    return () => {
+      for (const cancel of cancels) cancel();
+    };
   }, [done, reduceMotion, scales]);
   const colorsFor = [0, 1, 2].map((crest) =>
     2 - crest >= steps
@@ -408,12 +421,15 @@ export function PullToRefreshIndicator({
       pop.setValue(1);
       return;
     }
-    Animated.timing(pop, {
-      toValue: 1,
-      duration: duration.rise,
-      easing: Easing.bezier(0.2, 0.8, 0.2, 1),
-      useNativeDriver: native,
-    }).start();
+    return runWithWatchdog(
+      Animated.timing(pop, {
+        toValue: 1,
+        duration: duration.rise,
+        easing: Easing.bezier(0.2, 0.8, 0.2, 1),
+        useNativeDriver: native,
+      }),
+      { timeline: duration.rise, settle: settleValues([[pop, 1]]) },
+    );
   }, [pop, reduceMotion, refreshing]);
   const crest = (from: number) =>
     pop.interpolate({

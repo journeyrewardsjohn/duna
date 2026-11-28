@@ -8,6 +8,7 @@
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useReducedMotion } from "../motion";
+import { runWithWatchdog, settleValues } from "../motion/watchdog";
 
 export const FLIP_MS = 620;
 export const FLIP_REDUCED_MS = 200;
@@ -35,8 +36,11 @@ export function CardFlip({
       easing: reduced ? Easing.linear : RISE,
       useNativeDriver: true,
     });
-    animation.start();
-    return () => animation.stop();
+    // A stalled turn must still leave the pass shown and readable.
+    return runWithWatchdog(animation, {
+      timeline: reduced ? FLIP_REDUCED_MS : FLIP_MS,
+      settle: settleValues([[progress, flipped ? 1 : 0]]),
+    });
   }, [flipped, progress, reduced]);
 
   const turn = (from: string, to: string) => ({

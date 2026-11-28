@@ -123,7 +123,8 @@ describe("HQ route map", () => {
     ).toBe("/events/s%201/divisions/d%2F2");
     expect(hqHref("ask")).toBe("/ask");
     expect(hqHref("ask", { conversation: "abc" })).toBe("/ask/abc");
-    expect(hqModuleHref("schedule")).toBe("/schedule");
+    expect(hqHref("schedule")).toBe("/schedule");
+    expect(hqModuleHref("events")).toBe("/events");
     expect(hqHref("place", { venueId: "v1" })).toBe("/setup/places/v1");
     expect(() =>
       hqHref("member", { personId: "" } as { personId: string }),

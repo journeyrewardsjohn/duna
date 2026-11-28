@@ -30,6 +30,8 @@ import {
 } from "@duna/messaging-client";
 import {
   auditLog,
+  catalogFulfillments,
+  catalogSessionOccurrences,
   conversationMessageActions,
   conversationMessageAttachments,
   conversationMessages,
@@ -57,6 +59,8 @@ import {
   registrations,
   reports,
   sessions,
+  trainingProgramParticipants,
+  trainingPrograms,
   venues,
   workflowJobs,
 } from "@duna/db";
@@ -1811,6 +1815,55 @@ async function organizationAudienceForContext(input: {
     return mergeOrganizationAudiencePersonIds(memberRows, staffRows);
   }
   if (input.context.type === "event" || input.context.type === "lesson") {
+    if (
+      input.context.type === "lesson" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        input.context.id,
+      )
+    ) {
+      // Concierge (B7): a lesson thread may be tied to a bookable catalog
+      // session. Its roster is the people holding an active booking now, so
+      // someone who cancels leaves the thread at the next club send.
+      const catalogRows = await database
+        .select({ personId: catalogFulfillments.personId })
+        .from(catalogFulfillments)
+        .innerJoin(
+          catalogSessionOccurrences,
+          eq(
+            catalogFulfillments.catalogSessionOccurrenceId,
+            catalogSessionOccurrences.id,
+          ),
+        )
+        .where(
+          and(
+            eq(catalogSessionOccurrences.id, input.context.id),
+            eq(catalogSessionOccurrences.organizationId, input.organizationId),
+            or(
+              inArray(catalogFulfillments.status, [
+                "held",
+                "pending",
+                "ready",
+                "fulfilled",
+              ]),
+              // A session the club (or its minimum) cancelled keeps the people
+              // it cancelled, so the club can still explain; anyone who had
+              // cancelled themselves before that decision stays out.
+              and(
+                eq(catalogSessionOccurrences.status, "cancelled"),
+                sql`${catalogFulfillments.updatedAt} >= (
+                  SELECT decision.decided_at FROM participation_decisions AS decision
+                  WHERE decision.subject_id = ${catalogSessionOccurrences.id}
+                    AND decision.outcome IN ('cancelled-by-club', 'cancel-under-minimum')
+                  LIMIT 1
+                )`,
+              ),
+            ),
+          ),
+        );
+      if (catalogRows.length > 0) {
+        return [...new Set(catalogRows.map((row) => row.personId))];
+      }
+    }
     const rows = await database
       .select({
         personId: registrations.personId,
@@ -1861,6 +1914,32 @@ async function organizationAudienceForContext(input: {
     return rows.map((row) => row.personId);
   }
   if (input.context.type === "league") {
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        input.context.id,
+      )
+    ) {
+      // Concierge (B7): a league thread may be a training program (B4). Its
+      // roster is the program's active athletes.
+      const athletes = await database
+        .select({ personId: trainingProgramParticipants.personId })
+        .from(trainingProgramParticipants)
+        .innerJoin(
+          trainingPrograms,
+          eq(trainingPrograms.id, trainingProgramParticipants.programId),
+        )
+        .where(
+          and(
+            eq(trainingPrograms.id, input.context.id),
+            eq(trainingPrograms.organizationId, input.organizationId),
+            eq(trainingProgramParticipants.role, "athlete"),
+            eq(trainingProgramParticipants.status, "active"),
+          ),
+        );
+      if (athletes.length > 0) {
+        return [...new Set(athletes.map((row) => row.personId))];
+      }
+    }
     const rows = await database
       .select({ personId: registrations.personId })
       .from(registrations)
@@ -1916,6 +1995,25 @@ async function organizationAudienceForContext(input: {
     "BAD_REQUEST",
     "That context is not available as an organization audience yet.",
   );
+}
+
+/**
+ * Concierge (B7): the people a club message in this context would reach right
+ * now, before blocks and guardians. Read-only; the same resolver a club send
+ * uses to sync the thread, so the Send review and the send cannot disagree.
+ */
+export async function previewOrganizationContextAudience(input: {
+  readonly organizationId: string;
+  readonly context: {
+    readonly type: NonNullable<CreateConversationInput["context"]>["type"];
+    readonly id: string;
+    readonly label: string;
+  };
+}): Promise<readonly string[]> {
+  return organizationAudienceForContext({
+    organizationId: input.organizationId,
+    context: { ...input.context, organizationId: input.organizationId },
+  });
 }
 
 export function mergeOrganizationAudiencePersonIds(

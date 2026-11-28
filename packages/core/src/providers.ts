@@ -155,7 +155,7 @@ export const providerRegistry = {
   whatsapp: {
     label: "Sent.dm (WhatsApp delivery)",
     productionNote:
-      "The Sent.dm key the code already uses for SMS templates, plus an approved WhatsApp sender and templates in Sent.dm. No WhatsApp adapter exists yet (B7).",
+      "The Sent.dm key the code already uses for SMS templates, plus an approved WhatsApp sender, the templates duna_concierge_message and duna_verification_code, and SENT_DM_WEBHOOK_SECRET for replies (Concierge, B7).",
     requires: [["SENT_DM_API_KEY", "SENT_DM_API"]],
     features: ["concierge.channel.whatsapp"],
   },

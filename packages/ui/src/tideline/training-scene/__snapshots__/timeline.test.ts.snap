@@ -1,0 +1,79 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the text alternative > dig-to-transition reads as sentences 1`] = `
+[
+  "Dig to transition attack. Beach court, 16 × 8 m, net 2.24 m.",
+  "Objective: Turn a dug ball into a point: dig high to the middle, pull off and set, transition and attack.",
+  "To start: C (coach on a box) starts at the net on side B, in the middle, on a 0.6 m box, holding a ball; P1 (blocks line, then sets) starts at the net on side A, on the left; P2 (digs, then attacks) starts at the deep centre of side A; P3 (next in, waiting) starts outside the right sideline of side A; P4 (in line, waiting) starts outside the right sideline of side A.",
+  "Step 1 of 4: P1 (blocks line, then sets) jumps to block at the net. C (coach on a box) hits the ball to P2 (digs, then attacks), over the net.",
+  "Step 2 of 4: P2 (digs, then attacks) digs the ball to the net on side A, in the middle, about 4.2 m high. P1 (blocks line, then sets) moves to the front centre of side A. P2 moves to the middle left of side A.",
+  "Step 3 of 4: P1 (blocks line, then sets) sets the ball to the net on side A, on the left, about 4.8 m high.",
+  "Step 4 of 4: P2 (digs, then attacks) attacks the ball to the deep right of side B, over the net.",
+  "Rotation. After each rep: P1 goes from blocks line to digs; P2 goes from digs to in line; P3 goes from next in to blocks line; P4 goes from in line to next in. The same steps then repeat with the new people.",
+]
+`;
+
+exports[`the text alternative > indoor-receive-outside reads as sentences 1`] = `
+[
+  "Three-lane receive to outside attack. Indoor court, 18 × 9 m, net 2.24 m.",
+  "Objective: Three-person serve receive into a high outside set. The left lane attacks every ball.",
+  "To start: P1 (server) starts behind the end line of side B, on the right, holding a ball; P6 (next server, waiting) starts outside the right sideline of side B; P2 (left lane, attacks) starts in zone 5 on side A; P3 (middle lane) starts in zone 6 on side A; P4 (right lane) starts in zone 1 on side A; P5 (setter) starts in zone 2 at the net on side A.",
+  "Step 1 of 4: P1 (server) serves the ball from behind the end line of side B, on the right, to P3 (middle lane), over the net.",
+  "Step 2 of 4: P3 (middle lane) passes the ball to zone 3 at the net on side A, about 4.4 m high. P5 (setter) moves to zone 3 at the net on side A. P2 (left lane, attacks) moves outside the left sideline of side A.",
+  "Step 3 of 4: P5 (setter) sets the ball to zone 4 at the net on side A, about 4.8 m high. P3 (middle lane) moves to zone 4 on side A. P4 (right lane) moves to zone 6 on side A.",
+  "Step 4 of 4: P2 (left lane, attacks) attacks the ball to zone 5 on side B, over the net.",
+  "Rotation. After every 6 reps: P1 goes from server to next server; P6 goes from next server to server; P2 goes from left lane to middle lane; P3 goes from middle lane to right lane; P4 goes from right lane to left lane. The same steps then repeat with the new people.",
+]
+`;
+
+exports[`the text alternative > king-of-the-court reads as sentences 1`] = `
+[
+  "King of the court. Beach court, 16 × 8 m, net 2.24 m.",
+  "Objective: Game pressure: the king side must side out to stay on and score. Challengers must win a rally to take the king side.",
+  "To start: P1 (king side, left) starts at the deep left of side B; P2 (king side, right) starts at the deep right of side B; P3 (challenger, serves) starts behind the end line of side A, on the right, holding a ball; P4 (challenger, blocks) starts at the net on side A, in the middle; P5 (waiting pair, waiting) starts outside the left sideline of side A; P6 (waiting pair, waiting) starts outside the left sideline of side A.",
+  "Step 1 of 4: P3 (challenger, serves) jump-serves the ball from behind the end line of side A, on the right, to P1 (king side, left), over the net.",
+  "Step 2 of 4: P1 (king side, left) passes the ball to the net on side B, in the middle, about 4.4 m high. P2 (king side, right) moves to the front centre of side B. P1 moves to the middle left of side B. P3 (challenger, serves) moves to the deep centre of side A.",
+  "Step 3 of 4: P2 (king side, right) sets the ball to the net on side B, on the left, about 4.8 m high. P4 (challenger, blocks) shuffles to the net on side A, on the right.",
+  "Step 4 of 4: P1 (king side, left) attacks the ball to the deep left of side A, over the net. P4 (challenger, blocks) jumps to block at the net.",
+  "Rotation. After the rally: P3 goes from challenger to waiting pair; P4 goes from challenger to waiting pair; P5 goes from waiting pair to challenger; P6 goes from waiting pair to challenger. The same steps then repeat with the new people.",
+]
+`;
+
+exports[`the text alternative > partner-pepper reads as sentences 1`] = `
+[
+  "Partner pepper. Beach half court (side A in use), 16 × 8 m, net 2.24 m.",
+  "Objective: Ball control with a partner: dig, set, hit, and keep the ball off the sand.",
+  "To start: P1 (partner) starts at the middle left of side A, holding a ball; P2 (partner) starts at the middle right of side A.",
+  "Step 1 of 6: P1 (partner) hits the ball to P2 (partner).",
+  "Step 2 of 6: P2 (partner) digs the ball to P1 (partner), about 4.2 m high.",
+  "Step 3 of 6: P1 (partner) sets the ball to P2 (partner), about 4.8 m high.",
+  "Step 4 of 6: P2 (partner) hits the ball to P1 (partner).",
+  "Step 5 of 6: P1 (partner) digs the ball to P2 (partner), about 4.2 m high.",
+  "Step 6 of 6: P2 (partner) sets the ball to P1 (partner), about 4.8 m high.",
+  "Rotation. After every 10 reps: P1 moves to the middle right of side A; P2 moves to the middle left of side A. The same steps then repeat with the new people.",
+]
+`;
+
+exports[`the text alternative > serve-receive-sideout reads as sentences 1`] = `
+[
+  "Serve receive to side-out. Beach court, 16 × 8 m, net 2.24 m.",
+  "Objective: Pass a served ball to the target, then side out: high set, cross-court attack.",
+  "To start: P1 (server) starts behind the end line of side B, on the right, holding a ball; P4 (next server, waiting) starts behind the end line of side B, on the right; P2 (left passer, then attacks) starts at the deep left of side A; P3 (right passer, then sets) starts at the deep right of side A.",
+  "Step 1 of 4: P1 (server) serves the ball from behind the end line of side B, on the right, to P2 (left passer, then attacks), over the net.",
+  "Step 2 of 4: P2 (left passer, then attacks) passes the ball to the net on side A, in the middle, about 4.4 m high. P3 (right passer, then sets) moves to the front centre of side A. P2 moves to the middle left of side A.",
+  "Step 3 of 4: P3 (right passer, then sets) sets the ball to the net on side A, on the left, about 4.8 m high.",
+  "Step 4 of 4: P2 (left passer, then attacks) attacks the ball to the deep left of side B, over the net.",
+  "Rotation. After every 5 reps: P1 goes from server to next server; P4 goes from next server to server; P2 goes from left passer to right passer; P3 goes from right passer to left passer. The same steps then repeat with the new people.",
+]
+`;
+
+exports[`the text alternative > serving-to-targets reads as sentences 1`] = `
+[
+  "Serving to deep targets. Beach court, 16 × 8 m, net 2.24 m.",
+  "Objective: Serve deep, into the last 2 metres, the same way every time.",
+  "To start: P1 (server) starts behind the end line of side A, in the middle, holding a ball; P2 (next in line, waiting) starts outside the right sideline of side A; P3 (in line, waiting) starts outside the right sideline of side A; P4 (server) starts behind the end line of side B, in the middle, holding a ball; P5 (next in line, waiting) starts outside the right sideline of side B; P6 (in line, waiting) starts outside the right sideline of side B.",
+  "Step 1 of 2: P1 (server) serves the ball from behind the end line of side A, in the middle, to the deep left of side B, over the net.",
+  "Step 2 of 2: P4 (server) serves the ball from behind the end line of side B, in the middle, to the deep right of side A, over the net.",
+  "Rotation. After each rep: P1 goes from server to in line; P2 goes from next in line to server; P3 goes from in line to next in line; P4 goes from server to in line; P5 goes from next in line to server; P6 goes from in line to next in line. The same steps then repeat with the new people.",
+]
+`;

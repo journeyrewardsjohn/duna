@@ -6284,7 +6284,6 @@ body[data-zone="operator"] :is(h1, h2, h3) {
 }
 
 .hq-lead-metric:first-child,
-.people-command-metrics__primary,
 .product-performance-metrics > :first-child {
   color: #f2f0ea;
   border-color: transparent;
@@ -6292,13 +6291,11 @@ body[data-zone="operator"] :is(h1, h2, h3) {
 }
 
 .hq-lead-metric:first-child :where(strong, h2, h3),
-.people-command-metrics__primary :where(strong, h2, h3),
 .product-performance-metrics > :first-child :where(strong, h2, h3) {
   color: #f2f0ea;
 }
 
 .hq-lead-metric:first-child :where(small, span, p),
-.people-command-metrics__primary :where(small, span, p),
 .product-performance-metrics > :first-child :where(small, span, p) {
   color: rgb(242 240 234 / 64%);
 }

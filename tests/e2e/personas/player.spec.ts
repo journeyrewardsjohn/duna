@@ -1,4 +1,5 @@
-import { expect, test } from "./support/fixtures";
+import type { Page } from "@playwright/test";
+import { expect, test, webBaseUrl } from "./support/fixtures";
 import {
   expectNoHorizontalOverflow,
   expectNoLayoutShift,
@@ -11,6 +12,57 @@ import {
  * Player web. The Player app journeys are listed in the document.
  */
 test.use({ persona: "player" });
+
+/** Adds a result from the signed-in page; resolves to its address. */
+async function recordResult(page: Page): Promise<string> {
+  await page.route("**/api/places/autocomplete**", (route) =>
+    route.fulfill({
+      json: {
+        suggestions: [
+          {
+            placeId: "ChIJdockside-test-01",
+            text: "Dockside Sand Courts, Harbor Way",
+            mainText: "Dockside Sand Courts",
+            secondaryText: "Harbor Way",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/places/details**", (route) =>
+    route.fulfill({
+      json: {
+        placeId: "ChIJdockside-test-01",
+        name: "Dockside Sand Courts",
+        address: "1 Harbor Way",
+        latitude: 33.9,
+        longitude: -118.42,
+      },
+    }),
+  );
+  await page.goto("/app/score");
+  await page
+    .getByRole("combobox", { name: "Where did you play" })
+    .fill("Docks");
+  await page
+    .getByRole("option", { name: /Dockside Sand Courts\s*Harbor Way/ })
+    .click();
+  await page.getByRole("button", { name: "Add Theo Park" }).first().click();
+  await page.getByRole("button", { name: "Add Noa Williams" }).last().click();
+  await page.getByRole("button", { name: "Add Elena Torres" }).last().click();
+  await page
+    .getByRole("checkbox", {
+      name: "Everyone on court agreed to record this match.",
+    })
+    .check();
+  await page.getByRole("button", { name: "Save result" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Save result" })
+    .click();
+  await page.waitForURL(/\/app\/matches\/[0-9a-f-]{36}$/);
+  return page.url();
+}
 
 test.describe("PL-1 Find a game", () => {
   test("PL-1.1 Home puts direct actions and Next up first", async ({
@@ -71,6 +123,21 @@ test.describe("PL-1 Find a game", () => {
         .or(page.getByRole("button", { name: "Show satellite" })),
     ).toBeVisible();
   });
+  test("PL-1.5 Opens a coach's profile and books their next opening", async ({
+    page,
+  }) => {
+    await page.goto("/coaches/theopark");
+    await expectPageReady(page, "Theo Park");
+    await page
+      .getByRole("main")
+      .getByRole("link", { name: /^Book / })
+      .first()
+      .click();
+    await expectPageReady(page, "Private lesson with Theo Park");
+    // Measure the page itself, not the page-change slide that brought it.
+    await page.goto(page.url());
+    await expectNoHorizontalOverflow(page);
+  });
 });
 
 test.describe("PL-2 Book a court with friends", () => {
@@ -88,12 +155,44 @@ test.describe("PL-2 Book a court with friends", () => {
 
 test.describe("PL-3 Play", () => {
   test("PL-3.1 Host a pickup and publish it", async ({ page }) => {
+    await page.route("**/api/places/autocomplete**", (route) =>
+      route.fulfill({
+        json: {
+          suggestions: [
+            {
+              placeId: "ChIJdockside-test-01",
+              text: "Dockside Sand Courts, Harbor Way",
+              mainText: "Dockside Sand Courts",
+              secondaryText: "Harbor Way",
+            },
+          ],
+        },
+      }),
+    );
+    await page.route("**/api/places/details**", (route) =>
+      route.fulfill({
+        json: {
+          placeId: "ChIJdockside-test-01",
+          name: "Dockside Sand Courts",
+          address: "1 Harbor Way",
+          latitude: 33.9,
+          longitude: -118.42,
+        },
+      }),
+    );
     await page.goto("/app/pickup/new");
-    await expectPageReady(page, "Host a match.");
-    await page.getByRole("button", { name: "Continue" }).click();
-    await expect(page.getByLabel("Where")).toBeVisible();
-    await page.getByRole("button", { name: "Continue" }).click();
+    await expectPageReady(page, "Host a pickup");
+    await page.getByRole("combobox", { name: "Where" }).fill("Docks");
+    await page
+      .getByRole("option", { name: /Dockside Sand Courts\s*Harbor Way/ })
+      .click();
+    await page.getByRole("button", { name: "Review" }).click();
+    await expect(page.getByText("Player preview")).toBeVisible();
     await page.getByRole("button", { name: "Publish pickup" }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Publish pickup" })
+      .click();
     await expect(
       page.getByRole("heading", { name: /is live\.$/ }),
     ).toBeVisible();
@@ -110,34 +209,52 @@ test.describe("PL-3 Play", () => {
 test.describe("PL-4 Record a result and see the rating", () => {
   test("PL-4.1 Start recording a finished result", async ({ page }) => {
     await page.goto("/app/score");
-    await expectPageReady(page, "How did you play?");
-    await page
-      .getByRole("textbox", { name: "Team A score for set 1" })
-      .fill("21");
-    await page
-      .getByRole("textbox", { name: "Team B score for set 1" })
-      .fill("18");
+    await expectPageReady(page, "Add a result");
     await expect(
-      page.getByRole("button", { name: "Record this match" }),
+      page.getByLabel("Set 1, your side", { exact: true }),
+    ).toHaveValue("21");
+    await expect(
+      page.getByRole("button", { name: "Save result" }),
     ).toBeVisible();
   });
-  test.fixme("PL-4.2 Record the match once everyone agreed, and see it in history [P8]", async () => {
-    // Expected: single-flight submit; the result card shows per-set scores
-    // and the green "Won" check.
+  test("PL-4.2 Record the match once everyone agreed, and see it in history [P8]", async ({
+    page,
+  }) => {
+    const matchUrl = await recordResult(page);
+    await expect(page.getByText("Awaiting confirmation").first()).toBeVisible();
+    await page.goto("/app/matches");
+    await expectPageReady(page, "Your results");
+    await expect(
+      page.locator(`a[href="${new URL(matchUrl).pathname}"]`).first(),
+    ).toBeVisible();
   });
   test("PL-4.3 Match history shows the rating change per match", async ({
     page,
   }) => {
     await page.goto("/app/matches");
-    await expectPageReady(page, "Your matches.");
-    await expect(
-      page.getByRole("tab", { name: /Sand Rating/ }),
-    ).toHaveAttribute("aria-selected", "true");
-    await expect(
-      page.getByRole("link", { name: /SandRating/ }).first(),
-    ).toBeVisible();
+    await expectPageReady(page, "Your results");
+    await expect(page.getByText("+0.08").first()).toBeVisible();
   });
-  test.fixme("PL-4.4 The rating ring shows the new rating and progress to the next half point [P8, C1]", async () => {});
+  test("PL-4.4 The rating ring shows the new rating and progress to the next half point [P8, C1]", async ({
+    page,
+    context,
+  }) => {
+    const matchUrl = await recordResult(page);
+    await context.addCookies([
+      { name: "duna-demo-side", value: "opponent", url: webBaseUrl },
+    ]);
+    await page.goto(matchUrl);
+    await page.getByRole("button", { name: "Confirm result" }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Confirm result" })
+      .click();
+    await expect(page.getByText("Confirmed.", { exact: true })).toBeVisible();
+    await context.clearCookies({ name: "duna-demo-side" });
+    await page.goto(matchUrl);
+    await expect(page.getByText("4.62 → 4.68")).toBeVisible();
+    await expect(page.getByText(/Reached|more match|▲/).first()).toBeVisible();
+  });
 });
 
 test.describe("PL-5 Watch film", () => {

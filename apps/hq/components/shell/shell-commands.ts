@@ -129,6 +129,91 @@ const money: readonly ShellCommand[] = [
   },
 ];
 
+/** Schedule (H-SCHEDULE): the calendar tasks the front desk asks for by name. */
+const schedule: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("schedule")}?intent=date`,
+    label: "Go to date…",
+    group: "Schedule",
+    icon: "schedule",
+    keywords: ["calendar", "day", "jump", "date"],
+  },
+  {
+    // Opens the create sheet, which offers only what works here (blocks
+    // until bookings from HQ are switched on: schedule-capabilities.ts).
+    value: `go:${hqHref("schedule")}?intent=book`,
+    label: "Add to the schedule",
+    group: "Schedule",
+    icon: "court",
+    keywords: [
+      "book a court",
+      "booking",
+      "reserve",
+      "walk-in",
+      "block",
+      "lesson",
+    ],
+  },
+  {
+    value: `go:${hqHref("schedule")}?intent=who`,
+    label: "Who is free at…",
+    group: "Schedule",
+    icon: "users",
+    keywords: ["coach", "available", "availability", "cover"],
+  },
+  {
+    value: `go:${hqHref("schedule")}?intent=close`,
+    label: "Close courts",
+    group: "Schedule",
+    icon: "block",
+    keywords: ["closure", "block", "maintenance", "weather", "stop play"],
+  },
+];
+
+/**
+ * People (H-PEOPLE): finding the club's people. Import and merge join the
+ * list through `shellCommandsFor` when their capability switches are on
+ * (people-capabilities.ts) and the person may change people.
+ */
+const people: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("people")}?focus=search`,
+    label: "Find a person",
+    group: "People",
+    icon: "search",
+    keywords: ["member", "player", "parent", "junior", "search", "lookup"],
+  },
+  {
+    value: `go:${hqHref("people")}?segment=attention`,
+    label: "People who need attention",
+    group: "People",
+    icon: "alert",
+    keywords: ["waiver", "payment failed", "consent", "lapsing"],
+  },
+];
+
+/** People commands that need a capability switch (and `members:write`). */
+export const peopleSwitchedCommands: readonly (ShellCommand & {
+  readonly capability: "import" | "merge";
+})[] = [
+  {
+    value: `go:${hqHref("peopleImport")}`,
+    label: "Import people from a file",
+    group: "People",
+    icon: "users",
+    keywords: ["import", "csv", "spreadsheet", "upload", "members list"],
+    capability: "import",
+  },
+  {
+    value: `go:${hqHref("peopleMerge")}`,
+    label: "Merge duplicate people",
+    group: "People",
+    icon: "users",
+    keywords: ["duplicate", "merge", "combine", "same person"],
+    capability: "merge",
+  },
+];
+
 /** Team (H-TEAM): inviting, cover and pay, by the words people use. */
 const team: readonly ShellCommand[] = [
   {
@@ -267,12 +352,38 @@ const run: readonly ShellCommand[] = [
 export const shellCommands: readonly ShellCommand[] = [
   ...places,
   ...create,
+  ...schedule,
   ...money,
+  ...people,
   ...team,
   ...offerings,
   ...setup,
   ...run,
 ];
+
+/**
+ * Every command for this person: the fixed list plus People's switched
+ * commands whose capability is on (the server decides, from the router).
+ */
+export function shellCommandsFor(
+  switched: { readonly import: boolean; readonly merge: boolean } | undefined,
+): readonly ShellCommand[] {
+  if (!switched) return shellCommands;
+  const extra = peopleSwitchedCommands
+    .filter((command) => switched[command.capability])
+    .map((command): ShellCommand => ({
+      value: command.value,
+      label: command.label,
+      group: command.group,
+      icon: command.icon,
+      keywords: command.keywords,
+    }));
+  if (extra.length === 0) return shellCommands;
+  const at = shellCommands.findIndex((command) => command.group === "Team");
+  return at < 0
+    ? [...shellCommands, ...extra]
+    : [...shellCommands.slice(0, at), ...extra, ...shellCommands.slice(at)];
+}
 
 export type ParsedCommand =
   | { readonly kind: "go"; readonly href: string }

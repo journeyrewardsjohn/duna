@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   rows: vi.fn(),
   process: vi.fn(),
   update: vi.fn(),
+  concierge: vi.fn(),
+}));
+// Concierge (B7) routing is tested in services/concierge; here it finds nothing.
+vi.mock("./services/concierge/inbound", () => ({
+  routeConciergePhoneInbound: mocks.concierge,
 }));
 vi.mock("@duna/db", () => ({
   isDatabaseConfigured: () => mocks.configured,
@@ -51,6 +56,7 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue([{ id: "event-1", processedAt: null, payload: {} }]);
   mocks.update.mockReset();
+  mocks.concierge.mockReset().mockResolvedValue("quarantined-unknown-sender");
   mocks.returning.mockReset();
   mocks.values.mockReset().mockReturnValue({
     onConflictDoNothing: () => ({ returning: mocks.returning }),
