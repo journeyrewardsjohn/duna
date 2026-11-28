@@ -142,7 +142,7 @@ export function useSession(sessionId: string | undefined): {
     if (risk) {
       return {
         status: "ready",
-        detail: sessionFromAtRisk(risk),
+        detail: sessionFromAtRisk(risk, day.timeZone),
         rosterLoading: fetching || (!searched && !failure),
         ...(failure ? { failure } : {}),
       };

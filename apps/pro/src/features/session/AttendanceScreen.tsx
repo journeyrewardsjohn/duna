@@ -40,7 +40,7 @@ import {
   type SessionDetail,
   type SessionPerson,
 } from "./session-model";
-import { useAttendance } from "./use-attendance";
+import { sessionMarks, useAttendance } from "./use-attendance";
 import { useSession } from "./use-session";
 
 interface UndoState {
@@ -154,10 +154,11 @@ function Checklist({
   const [undo, setUndo] = useState<UndoState | null>(null);
 
   const pending = pendingForSession(attendance.state, detail.id);
-  const queued = useMemo(
-    () => new Map(pending.map((mark) => [mark.bookingId, mark.status])),
-    [pending],
+  const marks = useMemo(
+    () => sessionMarks(attendance, detail.id),
+    [attendance, detail.id],
   );
+  const queued = marks.effective;
   const roster = rosterOrder(detail.people).filter(
     (person) => person.active && person.bookingId,
   );
@@ -280,33 +281,33 @@ function Checklist({
           tone="warning"
         />
       ) : null}
-      {pending.length ? (
-        <Notice
-          testID="attendance-saved-on-phone"
-          text={
-            failing
-              ? "Sends when you're back online, in the order you marked."
-              : "Sending now."
-          }
-          title={`Saved on this phone · ${pending.length} mark${pending.length === 1 ? "" : "s"}`}
-          tone={failing ? "warning" : "info"}
+      {/* One line that is always there, so nothing below moves as marks
+          are made and sent (fast tapping never lands on the wrong row). */}
+      <View
+        accessibilityLiveRegion="polite"
+        style={styles.statusLine}
+        testID="attendance-sync"
+      >
+        <Icon
+          name={pending.length ? "clock" : "check"}
+          size="inline"
+          tone={failing ? "warning" : "text-2"}
         />
-      ) : summary.here + summary.absent > 0 ? (
-        <Text tone="text-2" variant="phone-meta" testID="attendance-all-sent">
-          Every mark is saved in Duna.
+        <Text
+          style={styles.flex}
+          tone={failing ? "warning" : "text-2"}
+          variant="phone-meta"
+          weight={600}
+        >
+          {pending.length
+            ? `Saved on this phone · ${pending.length} mark${pending.length === 1 ? "" : "s"} · ${
+                failing ? "sends when you're back online" : "sends in a moment"
+              }`
+            : summary.here + summary.absent > 0
+              ? "Every mark is saved in Duna"
+              : "Marks save on this phone first, then send"}
         </Text>
-      ) : null}
-      {conflicts.map((conflict) => (
-        <Notice
-          action="OK"
-          key={conflict.id}
-          onAction={() => attendance.dismiss(conflict.id)}
-          testID="attendance-conflict"
-          text={conflict.message}
-          title="Duna kept a different answer"
-          tone="warning"
-        />
-      ))}
+      </View>
     </>
   );
 
@@ -316,13 +317,13 @@ function Checklist({
         kind="primary"
         label={`Mark ${unmarkedCount} ${unmarkedCount === 1 ? "person" : "people"} here`}
         onPress={markEveryone}
-        style={styles.grow}
+        style={[styles.grow, styles.tall]}
         testID="attendance-confirm-all-yes"
       />
       <ActionButton
         label="Not yet"
         onPress={() => setConfirmingAll(false)}
-        style={styles.grow}
+        style={[styles.grow, styles.tall]}
       />
     </View>
   ) : (
@@ -363,6 +364,18 @@ function Checklist({
     </Pressable>
   );
 
+  const conflictNotices = conflicts.map((conflict) => (
+    <Notice
+      action="OK"
+      key={conflict.id}
+      onAction={() => attendance.dismiss(conflict.id)}
+      testID="attendance-conflict"
+      text={conflict.message}
+      title="Duna kept a different answer"
+      tone="warning"
+    />
+  ));
+
   const list = (
     <View role="list" style={styles.list} testID="attendance-roster">
       {roster.length === 0 ? (
@@ -378,7 +391,9 @@ function Checklist({
             key={person.key}
             mark={effectiveAttendance(person, queued)}
             onPress={() => markPerson(person)}
-            onPhone={person.bookingId ? queued.has(person.bookingId) : false}
+            onPhone={
+              person.bookingId ? marks.onPhone.has(person.bookingId) : false
+            }
             person={person}
           />
         ))
@@ -450,6 +465,7 @@ function Checklist({
             {status}
             {everyone}
             {list}
+            {conflictNotices}
           </ScrollView>
         }
         tabletop="auto"
@@ -460,8 +476,9 @@ function Checklist({
       <View style={styles.columns}>
         <ScrollView contentContainerStyle={pad} style={styles.column}>
           {counts(true)}
-          {everyone}
           {status}
+          {everyone}
+          {conflictNotices}
         </ScrollView>
         <View style={[styles.divider, { backgroundColor: colors.line }]} />
         <ScrollView contentContainerStyle={pad} style={styles.column}>
@@ -473,9 +490,10 @@ function Checklist({
     content = (
       <ScrollView contentContainerStyle={pad}>
         {counts(false)}
-        {everyone}
         {status}
+        {everyone}
         {list}
+        {conflictNotices}
       </ScrollView>
     );
   }
@@ -483,7 +501,13 @@ function Checklist({
   return (
     <View onLayout={region.onLayout} ref={region.ref} style={styles.fill}>
       {content}
-      <View pointerEvents="box-none" style={styles.undoHost}>
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.undoHost,
+          { left: insets.left + 16, right: insets.right + 16 },
+        ]}
+      >
         {undoBar}
       </View>
     </View>
@@ -581,18 +605,15 @@ function AttendanceRow({
           <Text variant="phone-body" weight={600}>
             {person.displayName}
           </Text>
-          {person.guardianNote || onPhone ? (
+          {person.guardianNote ? (
             <Text tone="text-2" variant="phone-meta">
-              {[
-                person.guardianNote,
-                onPhone ? "Saved on this phone" : undefined,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
+              {person.guardianNote}
             </Text>
           ) : null}
         </View>
         <View style={styles.markCell}>
+          {/* Saved on this phone, not yet in Duna: a small clock, no new line. */}
+          {onPhone ? <Icon name="clock" size="inline" tone="text-2" /> : null}
           <Icon
             name={
               mark === "attended"
@@ -636,6 +657,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   confirmRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  tall: { minHeight: 64 },
+  statusLine: { flexDirection: "row", alignItems: "center", gap: 8 },
   list: { gap: 8 },
   row: {
     minHeight: 60,
@@ -646,14 +669,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderWidth: 1.5,
   },
-  markCell: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // Wide enough for "Not marked" so a row never re-wraps when its mark changes.
+  markCell: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+    minWidth: 140,
+  },
   pressed: { transform: [{ scale: 0.98 }], opacity: 0.86 },
   dim: { opacity: 0.55 },
   columns: { flex: 1, flexDirection: "row" },
   column: { flex: 1 },
   divider: { width: StyleSheet.hairlineWidth },
   tabletopTop: { flex: 1, justifyContent: "center", gap: 12 },
-  undoHost: { position: "absolute", left: 16, right: 16, bottom: 0 },
+  undoHost: { position: "absolute", bottom: 0 },
   undo: {
     minHeight: 56,
     flexDirection: "row",

@@ -388,7 +388,10 @@ export function withAtRisk(
 }
 
 /** A session known only from the at-risk list (no roster loaded yet). */
-export function sessionFromAtRisk(risk: AtRiskSessionInput): SessionDetail {
+export function sessionFromAtRisk(
+  risk: AtRiskSessionInput,
+  fallbackTimeZone = "UTC",
+): SessionDetail {
   const startsAt = Date.parse(risk.startsAt);
   return withAtRisk(
     {
@@ -400,7 +403,7 @@ export function sessionFromAtRisk(risk: AtRiskSessionInput): SessionDetail {
       startsAt,
       // The list carries no end; a session is at least an hour.
       endsAt: startsAt + 60 * 60_000,
-      timeZone: risk.timezone ?? "UTC",
+      timeZone: risk.timezone ?? fallbackTimeZone,
       capacity: risk.capacity,
       cancelled: false,
       group: null,

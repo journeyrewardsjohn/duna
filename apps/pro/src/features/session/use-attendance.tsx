@@ -23,6 +23,7 @@ import { useProRuntime } from "../../../runtime";
 import {
   AttendanceQueue,
   EMPTY_ATTENDANCE_QUEUE,
+  pendingForSession,
   type AttendanceMark,
   type AttendanceQueueState,
   type AttendanceSendResult,
@@ -91,6 +92,11 @@ const previewSender: AttendanceSender = () =>
 
 export interface AttendanceApi {
   readonly state: AttendanceQueueState;
+  /**
+   * Marks Duna accepted in this run of the app ("session:booking" → status):
+   * shown until the roster reloads with them.
+   */
+  readonly applied: ReadonlyMap<string, AttendanceStatus>;
   /** The mark being sent now. */
   readonly sending: string | null;
   readonly mark: (input: {
@@ -119,18 +125,43 @@ export function AttendanceProvider({
     runtime.activeAuthOrganizationId ??
     runtime.dashboard?.organization.id ??
     (preview ? "preview" : "signed-out");
+  const [applied, setApplied] = useState<ReadonlyMap<string, AttendanceStatus>>(
+    () => new Map(),
+  );
   const queue = useMemo(() => {
     const key = `${STORAGE_PREFIX}:${organization}`;
+    const base: AttendanceSender = preview
+      ? previewSender
+      : client
+        ? liveAttendanceSender(client)
+        : async () => ({ kind: "retry" });
+    // Outcome, attempts and delay only: never names, ids or the mark itself.
+    const send: AttendanceSender = async (mark) => {
+      const result = await base(mark);
+      log.info("pro.attendance.send", {
+        outcome: result.kind,
+        attempts: mark.attempts + 1,
+        offlineQueued: mark.attempts > 0,
+        delaySeconds: Math.max(
+          0,
+          Math.round((Date.now() - Date.parse(mark.deviceMarkedAt)) / 1000),
+        ),
+      });
+      if (result.kind === "sent")
+        setApplied((current) =>
+          new Map(current).set(
+            `${mark.sessionId}:${mark.bookingId}`,
+            mark.status,
+          ),
+        );
+      return result;
+    };
     return new AttendanceQueue({
       storage: {
         read: () => AsyncStorage.getItem(key),
         write: (value) => AsyncStorage.setItem(key, value),
       },
-      send: preview
-        ? previewSender
-        : client
-          ? liveAttendanceSender(client)
-          : async () => ({ kind: "retry" }),
+      send,
     });
   }, [client, organization, preview]);
   const [state, setState] = useState<AttendanceQueueState>(
@@ -141,16 +172,13 @@ export function AttendanceProvider({
   useEffect(() => {
     let previous = queue.snapshot();
     const unsubscribe = queue.subscribe((next) => {
-      // Counts only: a mark left the phone, or Duna did not apply one.
-      const sent = previous.marks.length - next.marks.length;
+      // Counts only: Duna answered a mark but kept something else.
       const conflicts = next.conflicts.length - previous.conflicts.length;
       if (conflicts > 0)
         log.warn("pro.attendance.conflict", {
           conflicts,
           queued: next.marks.length,
         });
-      else if (sent > 0)
-        log.info("pro.attendance.sent", { sent, queued: next.marks.length });
       previous = next;
       setState(next);
       setSending(queue.sending());
@@ -169,6 +197,7 @@ export function AttendanceProvider({
   const api = useMemo<AttendanceApi>(
     () => ({
       state,
+      applied,
       sending,
       mark: (input) => {
         const id = Crypto.randomUUID();
@@ -179,7 +208,7 @@ export function AttendanceProvider({
       dismiss: (id) => queue.dismiss(id),
       flush: () => queue.flush(),
     }),
-    [queue, sending, state],
+    [applied, queue, sending, state],
   );
 
   return (
@@ -187,6 +216,33 @@ export function AttendanceProvider({
       {children}
     </AttendanceContext.Provider>
   );
+}
+
+/**
+ * One session's marks as the phone knows them: `effective` (accepted this
+ * run, then still on the phone, newest wins) for display; `onPhone` for the
+ * "saved on this phone" sign.
+ */
+export function sessionMarks(
+  api: Pick<AttendanceApi, "applied" | "state">,
+  sessionId: string,
+): {
+  readonly effective: ReadonlyMap<string, AttendanceStatus>;
+  readonly onPhone: ReadonlySet<string>;
+  readonly pending: number;
+} {
+  const effective = new Map<string, AttendanceStatus>();
+  const prefix = `${sessionId}:`;
+  for (const [key, status] of api.applied) {
+    if (key.startsWith(prefix)) effective.set(key.slice(prefix.length), status);
+  }
+  const pending = pendingForSession(api.state, sessionId);
+  for (const mark of pending) effective.set(mark.bookingId, mark.status);
+  return {
+    effective,
+    onPhone: new Set(pending.map((mark) => mark.bookingId)),
+    pending: pending.length,
+  };
 }
 
 export function useAttendance(): AttendanceApi {

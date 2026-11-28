@@ -37,11 +37,12 @@ export const AT_RISK_HORIZON_MS = 7 * 24 * 60 * 60_000;
 export function atRiskRows(
   sessions: readonly AtRiskSessionInput[],
   now: number,
+  timeZone = "UTC",
   locale = "en-US",
 ): readonly AtRiskRow[] {
   return sessions
     .map((risk) => {
-      const detail = sessionFromAtRisk(risk);
+      const detail = sessionFromAtRisk(risk, timeZone);
       const display = sessionDisplay(detail, now);
       return { risk, detail, display };
     })

@@ -33,8 +33,8 @@ export function AtRiskGroup({
   const day = useDay();
   const shell = useShell();
   const rows = useMemo(
-    () => atRiskRows(day.atRisk, day.now),
-    [day.atRisk, day.now],
+    () => atRiskRows(day.atRisk, day.now, day.timeZone),
+    [day.atRisk, day.now, day.timeZone],
   );
   if (!showStates && day.atRiskStatus !== "ready") return null;
   if (day.atRiskStatus === "loading")

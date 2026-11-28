@@ -77,7 +77,7 @@ import {
   ScoreSheet,
   StopPlaySheet,
 } from "./SessionSheets";
-import { useAttendance } from "./use-attendance";
+import { sessionMarks, useAttendance } from "./use-attendance";
 import { useSession, type SessionLoad } from "./use-session";
 
 const ACTION_ICONS: Readonly<Record<SessionActionKey, GlyphName>> = {
@@ -259,10 +259,11 @@ function ReadySession({
       rosterCount >= 2,
   });
   const pending = pendingForSession(attendance.state, detail.id);
-  const queuedMarks = useMemo(
-    () => new Map(pending.map((mark) => [mark.bookingId, mark.status])),
-    [pending],
+  const marks = useMemo(
+    () => sessionMarks(attendance, detail.id),
+    [attendance, detail.id],
   );
+  const queuedMarks = marks.effective;
   const summary = rosterSummary(detail.people, queuedMarks);
   const venue = day.venues.find((candidate) => candidate.id === detail.venueId);
   const conditions =
@@ -448,7 +449,7 @@ function ReadySession({
             {rosterOrder(detail.people).map((person) => {
               const mark = effectiveAttendance(person, queuedMarks);
               const local = person.bookingId
-                ? queuedMarks.has(person.bookingId)
+                ? marks.onPhone.has(person.bookingId)
                 : false;
               return (
                 <View key={person.key} role="listitem">
