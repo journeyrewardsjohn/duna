@@ -1,54 +1,24 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { operatorModules } from "./navigation";
 
-const setupPage = readFileSync(
-  new URL("../app/setup/page.tsx", import.meta.url),
-  "utf8",
-);
-const overview = readFileSync(
-  new URL("./operator-overview.tsx", import.meta.url),
-  "utf8",
-);
-const navigation = readFileSync(
-  new URL("./navigation.ts", import.meta.url),
-  "utf8",
-);
-const actionCenter = readFileSync(
-  new URL("../../../packages/ui/src/duna-action-center.tsx", import.meta.url),
-  "utf8",
-);
-const operatorShell = readFileSync(
-  new URL("./operator-shell.tsx", import.meta.url),
-  "utf8",
-);
-const settingsCenter = readFileSync(
-  new URL("./settings-center.tsx", import.meta.url),
-  "utf8",
-);
+// Setup on Home, the dedicated guide, mobile navigation, and the shared
+// readiness steps in Settings are checked in the browser journeys.
+describe("HQ setup navigation", () => {
+  it("keeps Get started in the Today group, right after Home", () => {
+    const today = operatorModules.filter((module) => module.group === "Today");
 
-describe("HQ setup experience", () => {
-  it("makes setup visible from navigation, home, and the dedicated guide", () => {
-    expect(navigation).toContain('slug: "setup"');
-    expect(navigation).toContain('label: "Get started"');
-    expect(overview).toContain('className="hq-setup-strip"');
-    expect(setupPage).toContain("getOrganizationSetupReadiness");
-    expect(setupPage).toContain("Ask Duna to guide me");
+    expect(today.map((module) => module.slug).slice(0, 2)).toEqual([
+      "overview",
+      "setup",
+    ]);
+    expect(today.find((module) => module.slug === "setup")).toMatchObject({
+      label: "Get started",
+    });
   });
 
-  it("keeps mobile navigation understandable without hiding secondary tools", () => {
-    expect(operatorShell).toContain("mobilePrimaryModules");
-    expect(operatorShell).toContain("All HQ tools");
-    expect(operatorShell).toContain("More");
-  });
+  it("gives every module a unique route slug", () => {
+    const slugs = operatorModules.map((module) => module.slug);
 
-  it("does not let a late suggestions response erase an active AI question", () => {
-    expect(actionCenter).toContain(
-      'current.some(({ role }) => role === "user")',
-    );
-  });
-
-  it("uses one readiness model across setup, settings, and Duna AI", () => {
-    expect(settingsCenter).toContain("getOrganizationSetupReadiness");
-    expect(settingsCenter).toContain("setupReadiness.steps.map");
+    expect(new Set(slugs).size).toBe(slugs.length);
   });
 });

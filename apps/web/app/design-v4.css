@@ -8,40 +8,47 @@
  */
 
 :root {
-  --duna-web-snow: #fcfcff;
-  --duna-web-white: #fff;
-  --duna-web-charcoal: #18181b;
-  --duna-web-charcoal-press: #464649;
-  --duna-web-grey-600: #6e6e72;
-  --duna-web-grey-500: #909092;
-  --duna-web-grey-300: #b9b9be;
-  --duna-web-hairline: #e4e6ec;
-  --duna-web-border: #d7dae3;
-  --duna-web-surface-grey: #f2f3f6;
-  --duna-web-navy: #142335;
-  --duna-web-navy-2: #2b385c;
-  --duna-web-on-navy: #fcfcff;
-  --duna-web-on-navy-muted: #d3e3f0;
-  --duna-web-logo-surface: #fff;
-  --duna-web-logo-ink: #18181b;
-  --duna-web-mist: #7c95ab;
-  --duna-web-sky-ink: #4a5a6c;
-  --duna-web-sky: #d3e3f0;
-  --duna-web-sky-2: #e4eef6;
-  --duna-web-sky-3: #f3f8fc;
-  --duna-web-sky-border: #c8d8e6;
-  --duna-web-blush: #fecfc0;
-  --duna-web-blush-2: #fbefe8;
-  --duna-web-blush-3: #fdf6f1;
-  --duna-web-blush-border: #f0e3d5;
-  --duna-web-sand: #e6b48c;
-  --duna-web-cream: #faf6f2;
-  --duna-web-cream-2: #fcf8f3;
-  --duna-web-gold: #d6b143;
-  --duna-web-rust: #b0561f;
-  --duna-web-gold-ink: #96792b;
-  --duna-web-live: #c94443;
-  --duna-web-positive: #1e7a46;
+  /* Legacy aliases (F2b): the public palette points at Duna Design System
+     roles, which flip with <html data-theme>; see
+     docs/design/legacy-aliases.md. */
+  --duna-web-snow: var(--td-ground);
+  --duna-web-white: var(--td-surface);
+  --duna-web-charcoal: var(--td-text);
+  --duna-web-charcoal-press: var(--td-action-hover);
+  --duna-web-grey-600: var(--td-text-2);
+  --duna-web-grey-500: var(--td-text-3);
+  --duna-web-grey-300: var(--td-text-disabled);
+  --duna-web-hairline: var(--td-line);
+  --duna-web-border: var(--td-line-strong);
+  --duna-web-surface-grey: var(--td-surface-sunken);
+  --duna-web-navy: var(--td-action);
+  --duna-web-navy-2: var(--td-mesh-night-court-b);
+  --duna-web-on-navy: var(--td-on-action);
+  --duna-web-on-navy-muted: color-mix(
+    in srgb,
+    var(--td-on-action) 76%,
+    transparent
+  );
+  --duna-web-logo-surface: var(--td-surface);
+  --duna-web-logo-ink: var(--td-text);
+  --duna-web-mist: var(--td-text-3);
+  --duna-web-sky-ink: var(--td-text-2);
+  --duna-web-sky: var(--td-info-wash);
+  --duna-web-sky-2: var(--td-info-wash);
+  --duna-web-sky-3: var(--td-surface-subtle);
+  --duna-web-sky-border: var(--td-line-strong);
+  --duna-web-blush: var(--td-energy);
+  --duna-web-blush-2: var(--td-energy-wash);
+  --duna-web-blush-3: var(--td-surface-warm);
+  --duna-web-blush-border: var(--td-line);
+  --duna-web-sand: var(--td-energy);
+  --duna-web-cream: var(--td-surface-warm);
+  --duna-web-cream-2: var(--td-surface-subtle);
+  --duna-web-gold: var(--td-energy);
+  --duna-web-rust: var(--td-energy-ink);
+  --duna-web-gold-ink: var(--td-energy-ink);
+  --duna-web-live: var(--td-live);
+  --duna-web-positive: var(--td-positive);
   --duna-web-font-mono: var(
     --td-font-mono,
     ui-monospace,
@@ -56,11 +63,12 @@
   --duna-web-radius-media: 28px;
   --duna-web-radius-card: 22px;
   --duna-web-radius-item: 14px;
-  --duna-web-shadow-card: 0 16px 44px rgb(20 35 53 / 7%);
-  --duna-web-shadow-hero: 0 40px 100px rgb(20 35 53 / 18%);
-  --duna-web-shadow-panel: 0 48px 110px rgb(20 35 53 / 30%);
+  --duna-web-shadow-card: 0 16px 44px rgb(14 26 34 / 7%);
+  --duna-web-shadow-hero: 0 40px 100px rgb(14 26 34 / 18%);
+  --duna-web-shadow-panel: 0 48px 110px rgb(14 26 34 / 30%);
   --duna-web-glow-blush:
-    0 0 0 1px rgb(254 207 192 / 50%), 0 0 90px 36px rgb(254 207 192 / 35%);
+    0 0 0 1px color-mix(in srgb, var(--td-energy) 50%, transparent),
+    0 0 90px 36px color-mix(in srgb, var(--td-energy) 35%, transparent);
   --duna-web-glow-sky:
     0 0 0 1px rgb(211 227 240 / 60%), 0 0 90px 36px rgb(211 227 240 / 45%);
   --duna-web-grad-hero:
@@ -71,8 +79,8 @@
     ),
     radial-gradient(
       1000px 520px at 86% -10%,
-      rgb(254 207 192 / 80%),
-      rgb(254 207 192 / 0%) 62%
+      color-mix(in srgb, var(--td-energy) 80%, transparent),
+      color-mix(in srgb, var(--td-energy) 0%, transparent) 62%
     ),
     radial-gradient(
       700px 360px at 50% -4%,
@@ -88,8 +96,8 @@
     ),
     radial-gradient(
       900px 480px at 85% -12%,
-      rgb(254 207 192 / 85%),
-      rgb(254 207 192 / 0%) 62%
+      color-mix(in srgb, var(--td-energy) 85%, transparent),
+      color-mix(in srgb, var(--td-energy) 0%, transparent) 62%
     ),
     var(--duna-web-snow);
   --duna-web-grad-app:
@@ -100,20 +108,20 @@
     ),
     radial-gradient(
       1000px 520px at 80% 110%,
-      rgb(254 207 192 / 75%),
-      rgb(254 207 192 / 0%) 62%
+      color-mix(in srgb, var(--td-energy) 75%, transparent),
+      color-mix(in srgb, var(--td-energy) 0%, transparent) 62%
     ),
     var(--duna-web-snow);
   --duna-web-grad-warm:
     radial-gradient(
       1100px 560px at 85% -10%,
-      rgb(254 207 192 / 60%),
-      rgb(254 207 192 / 0%) 60%
+      color-mix(in srgb, var(--td-energy) 60%, transparent),
+      color-mix(in srgb, var(--td-energy) 0%, transparent) 60%
     ),
     radial-gradient(
       900px 500px at 8% 110%,
-      rgb(230 180 140 / 35%),
-      rgb(230 180 140 / 0%) 60%
+      color-mix(in srgb, var(--td-energy) 35%, transparent),
+      color-mix(in srgb, var(--td-energy) 0%, transparent) 60%
     ),
     linear-gradient(165deg, #faf6f2, #fdf9f5);
   --duna-web-grad-sky:
@@ -126,8 +134,8 @@
   --duna-web-grad-navy:
     radial-gradient(
       1000px 520px at 82% -12%,
-      rgb(214 177 67 / 24%),
-      rgb(214 177 67 / 0%) 60%
+      color-mix(in srgb, var(--td-energy) 24%, transparent),
+      color-mix(in srgb, var(--td-energy) 0%, transparent) 60%
     ),
     radial-gradient(
       900px 500px at 10% 115%,
@@ -138,13 +146,13 @@
   --duna-web-grad-club:
     radial-gradient(
       900px 480px at 12% -12%,
-      rgb(214 177 67 / 30%),
-      rgb(214 177 67 / 0%) 60%
+      color-mix(in srgb, var(--td-energy) 30%, transparent),
+      color-mix(in srgb, var(--td-energy) 0%, transparent) 60%
     ),
     radial-gradient(
       800px 440px at 92% 112%,
-      rgb(254 207 192 / 40%),
-      rgb(254 207 192 / 0%) 60%
+      color-mix(in srgb, var(--td-energy) 40%, transparent),
+      color-mix(in srgb, var(--td-energy) 0%, transparent) 60%
     ),
     linear-gradient(160deg, #faf6f2, #fcf8f3);
   --duna-web-grad-footer:
@@ -153,38 +161,15 @@
       rgb(43 56 92 / 90%),
       rgb(43 56 92 / 0%) 60%
     ),
-    var(--duna-web-navy);
+    var(--td-mesh-night-court-base);
   --duna-web-grad-protect: linear-gradient(
     180deg,
-    rgb(20 35 53 / 0%),
-    rgb(20 35 53 / 80%)
+    rgb(14 26 34 / 0%),
+    rgb(14 26 34 / 80%)
   );
 }
 
 :root[data-theme="dark"] {
-  --duna-web-snow: #101824;
-  --duna-web-white: #172234;
-  --duna-web-charcoal: #faf6f2;
-  --duna-web-charcoal-press: #fff;
-  --duna-web-grey-600: #bdc6d0;
-  --duna-web-grey-500: #96a4b4;
-  --duna-web-grey-300: #718096;
-  --duna-web-hairline: rgb(211 227 240 / 12%);
-  --duna-web-border: rgb(211 227 240 / 22%);
-  --duna-web-surface-grey: #202c3d;
-  --duna-web-navy: #0b1320;
-  --duna-web-navy-2: #1c2a43;
-  --duna-web-mist: #9eb0c2;
-  --duna-web-sky-ink: #c7d7e5;
-  --duna-web-sky: #22344a;
-  --duna-web-sky-2: #1c2d42;
-  --duna-web-sky-3: #17263a;
-  --duna-web-sky-border: #344a62;
-  --duna-web-blush-2: #30242a;
-  --duna-web-blush-3: #251f25;
-  --duna-web-blush-border: #4e3940;
-  --duna-web-cream: #211d20;
-  --duna-web-cream-2: #1b1920;
   --duna-web-grad-hero:
     radial-gradient(
       1000px 520px at 14% -10%,
@@ -224,7 +209,7 @@
   --duna-web-grad-warm:
     radial-gradient(
       900px 520px at 88% 0%,
-      rgb(176 86 31 / 24%),
+      color-mix(in srgb, var(--td-energy) 24%, transparent),
       transparent 62%
     ),
     linear-gradient(155deg, #211d20, #181b24);
@@ -238,12 +223,13 @@
   --duna-web-grad-club:
     radial-gradient(
       900px 500px at 12% -12%,
-      rgb(214 177 67 / 18%),
+      color-mix(in srgb, var(--td-energy) 18%, transparent),
       transparent 60%
     ),
     linear-gradient(160deg, #211d20, #171a22);
   --duna-web-glow-blush:
-    0 0 0 1px rgb(254 207 192 / 16%), 0 0 90px 30px rgb(176 86 31 / 12%);
+    0 0 0 1px color-mix(in srgb, var(--td-energy) 16%, transparent),
+    0 0 90px 30px color-mix(in srgb, var(--td-energy) 12%, transparent);
   --duna-web-glow-sky:
     0 0 0 1px rgb(211 227 240 / 18%), 0 0 90px 30px rgb(68 98 126 / 18%);
 }
@@ -262,20 +248,20 @@ main[data-zone="editorial"],
   --text-1: var(--duna-web-charcoal);
   --text-2: var(--duna-web-grey-600);
   --text-3: var(--duna-web-grey-500);
-  --text-on-accent: var(--duna-web-white);
+  --text-on-accent: var(--td-on-action);
   --flare: var(--duna-web-blush);
   --flare-text: var(--duna-web-rust);
-  --flare-fill: rgb(254 207 192 / 25%);
+  --flare-fill: var(--td-energy-wash);
   --signal: var(--duna-web-gold);
   --signal-text: var(--duna-web-navy);
   --gold: var(--duna-web-gold);
   --gain: var(--duna-web-positive);
-  --loss: var(--duna-web-live);
-  --btn-primary-bg: var(--duna-web-charcoal);
-  --btn-primary-fg: var(--duna-web-white);
-  --btn-primary-hover: var(--duna-web-charcoal-press);
-  --btn-ghost-border: var(--duna-web-border);
-  --focus-ring: var(--duna-web-rust);
+  --loss: var(--td-danger);
+  --btn-primary-bg: var(--td-action);
+  --btn-primary-fg: var(--td-on-action);
+  --btn-primary-hover: var(--td-action-hover);
+  --btn-ghost-border: var(--td-border-control);
+  --focus-ring: var(--td-focus);
   --glass-fill: color-mix(in srgb, var(--duna-web-white) 78%, transparent);
   --glass-border: color-mix(in srgb, var(--duna-web-border) 86%, transparent);
   --font-data: var(--duna-web-font-mono);
@@ -333,7 +319,7 @@ main[data-zone="editorial"]
 main[data-zone="editorial"] ::selection,
 .site-mobile-sheet ::selection {
   background: var(--duna-web-blush);
-  color: #18181b;
+  color: var(--td-on-energy);
 }
 
 /* Navigation: a continuous 78px wash with a full-width dropdown extension. */
@@ -717,7 +703,7 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
 
 .rating-methodology-hero__actions a:first-child {
   background: var(--duna-web-navy);
-  color: #fff;
+  color: var(--td-on-action);
 }
 
 .rating-methodology-hero__actions a:last-child {
@@ -747,7 +733,7 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
   margin: 0;
   padding: 0;
   background: var(--duna-web-grad-footer);
-  color: #faf6f2;
+  color: var(--td-brand-salt);
 }
 
 .site-footer__top,
@@ -1306,7 +1292,7 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
 .discover-results-header > nav > .discover-v2-map-button {
   border-color: var(--duna-web-navy);
   background: var(--duna-web-navy);
-  color: #fff;
+  color: var(--td-on-action);
 }
 
 .discover-map-results .discover-v2-map--full {

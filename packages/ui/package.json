@@ -20,6 +20,7 @@
     "./tideline/legacy-bridge.css": "./src/tideline/legacy-bridge.css",
     "./tideline/tokens": "./src/tideline/tokens/tokens.ts",
     "./tideline/tokens.css": "./src/tideline/tokens/tokens.css",
+    "./tideline/tokens.root.css": "./src/tideline/tokens/tokens.root.css",
     "./native/layout": "./src/native/layout/index.ts",
     "./native/layout/lab": "./src/native/layout/lab/LayoutLab.tsx"
   },

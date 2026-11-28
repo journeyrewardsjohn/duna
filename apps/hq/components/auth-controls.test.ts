@@ -1,55 +1,81 @@
-import { readFileSync } from "node:fs";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { describe, expect, it } from "vitest";
+const mocks = vi.hoisted(() => ({ useAuth: vi.fn() }));
 
-const authSource = readFileSync(
-  new URL("./auth-controls.tsx", import.meta.url),
-  "utf8",
-);
-const shellSource = readFileSync(
-  new URL("./operator-shell.tsx", import.meta.url),
-  "utf8",
-);
-const organizationSwitcherSource = readFileSync(
-  new URL("./organization-switcher.tsx", import.meta.url),
-  "utf8",
-);
-const styles = readFileSync(
-  new URL("../app/design-v3.css", import.meta.url),
-  "utf8",
-);
+vi.mock("@workos-inc/authkit-nextjs/components", () => ({
+  useAuth: mocks.useAuth,
+}));
 
-describe("HQ account menu", () => {
-  it("keeps personal, organization, and sign-out actions together", () => {
-    expect(authSource).toContain('href="/account"');
-    expect(authSource).toContain('href="/settings"');
-    expect(authSource).toContain("returnTo: new URL(");
-    expect(shellSource).toContain("showOrganization={false}");
+import { renderForTest } from "@/lib/render-for-test";
+import { AuthControls } from "./auth-controls";
+
+// What this file can prove without a browser: the first paint of the account
+// control in each session state. Opening the menu, Escape, outside-click
+// dismissal, and focus return need a WorkOS session that demo mode does not
+// have; the organization switcher shares that dismissal code and is driven in
+// the browser journeys.
+describe("HQ account control", () => {
+  beforeEach(() => {
+    mocks.useAuth.mockReset();
+    mocks.useAuth.mockReturnValue({
+      loading: false,
+      organizationId: "org_1",
+      signOut: vi.fn(),
+      user: {
+        email: "mara@example.com",
+        firstName: "Mara",
+        lastName: "Santos",
+        profilePictureUrl: null,
+      },
+    });
   });
 
-  it("switches organizations directly from the primary header control", () => {
-    expect(shellSource).toContain("<OrganizationSwitcher");
-    expect(organizationSwitcherSource).toContain("switchWorkspaceAction");
-    expect(organizationSwitcherSource).toContain('name="organizationId"');
-    expect(organizationSwitcherSource).toContain(
-      'href="/onboarding?mode=create"',
-    );
-    expect(organizationSwitcherSource).toContain(
-      'aria-label="Switch organization"',
-    );
+  it("exposes the signed-in account menu as a closed, labelled disclosure", () => {
+    const control = renderForTest(AuthControls, { configured: true });
+    const [trigger] = control.elements("button");
+
+    expect(control.elements("button")).toHaveLength(1);
+    expect(trigger).toMatchObject({
+      "aria-expanded": "false",
+      "aria-label": "Open account menu for Mara Santos",
+      type: "button",
+    });
+    expect(trigger?.["aria-controls"]).toBeTruthy();
+    expect(control.text).toBe("MS");
+    // The panel is not in the document until the trigger opens it.
+    expect(control.html).not.toContain("hq-auth-menu__panel");
   });
 
-  it("preserves keyboard, focus, and dismissal behavior", () => {
-    expect(authSource).toContain("aria-controls={menuId}");
-    expect(authSource).toContain("aria-expanded={menuOpen}");
-    expect(authSource).toContain('event.key !== "Escape"');
-    expect(authSource).toContain('document.addEventListener("pointerdown"');
-    expect(authSource).toContain("triggerRef.current?.focus()");
+  it("offers sign-in when the session has no user", () => {
+    mocks.useAuth.mockReturnValue({
+      loading: false,
+      organizationId: undefined,
+      signOut: vi.fn(),
+      user: null,
+    });
+    const control = renderForTest(AuthControls, { configured: true });
+
+    expect(control.elements("a")).toEqual([
+      expect.objectContaining({ href: "/sign-in" }),
+    ]);
+    expect(control.elements("button")).toHaveLength(0);
   });
 
-  it("uses an opaque menu surface", () => {
-    expect(styles).toMatch(
-      /\.hq-auth-menu__panel \{[\s\S]*?background: var\(--surface-1\);/,
-    );
+  it("renders nothing while the session is still loading", () => {
+    mocks.useAuth.mockReturnValue({
+      loading: true,
+      organizationId: undefined,
+      signOut: vi.fn(),
+      user: null,
+    });
+
+    expect(renderForTest(AuthControls, { configured: true }).html).toBe("");
+  });
+
+  it("labels the preview environment instead of pretending to be signed in", () => {
+    const control = renderForTest(AuthControls, { configured: false });
+
+    expect(control.text).toBe("Preview");
+    expect(mocks.useAuth).not.toHaveBeenCalled();
   });
 });

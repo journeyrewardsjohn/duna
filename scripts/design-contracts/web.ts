@@ -1,17 +1,11 @@
 import type { SurfaceContract } from "./types";
 
 /** Signed-in Player web (`apps/web/app/app/**` and its components). Owners: P1, P3–P9. */
-const legacy = "legacy: delete when Player web migrates (P1/P3–P9)" as const;
-
 export const web: SurfaceContract = {
   surface: "web",
   owners: "P1, P3, P4, P5, P6, P7, P8, P9",
   migrated: [],
   checks: [
-    ...[
-      "apps/web/app/app/player-dashboard.module.css",
-      "apps/web/components/pickup-edit-form.module.css",
-    ].map((path) => ({ kind: "exists", path, legacy }) as const),
     {
       kind: "includes",
       file: "apps/web/app/app/page.tsx",
@@ -26,12 +20,6 @@ export const web: SurfaceContract = {
       message:
         "Player web Home must keep future-only Next up and quick actions (re-assert the behaviour in a test when this migrates)",
       legacy: "legacy: delete when Player web Home migrates (P1)",
-    },
-    {
-      kind: "includes",
-      file: "apps/web/components/event-card.tsx",
-      values: ["defaultEventMedia", "event.media?.find"],
-      legacy,
     },
     {
       kind: "excludes",

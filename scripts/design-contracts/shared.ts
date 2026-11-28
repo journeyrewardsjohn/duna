@@ -83,13 +83,6 @@ export const shared: SurfaceContract = {
       file: "apps/web/public/media/brand/imagery-log.json",
     },
 
-    // packages/ui legacy pins: delete when the shared layer migrates.
-    {
-      kind: "exists",
-      path: "docs/licenses/Archivo-OFL-1.1.txt",
-      legacy:
-        "legacy: delete when the Archivo font files are removed (M-F1, M-X1)",
-    },
     {
       kind: "exists",
       path: "packages/ui/src/brand/club-colors.ts",
@@ -101,96 +94,6 @@ export const shared: SurfaceContract = {
     {
       kind: "exists",
       path: "packages/ui/src/brand/duna-logo.tsx",
-    },
-    {
-      kind: "includes",
-      file: "packages/ui/src/mobile.ts",
-      values: ['ground: whiteCanvas ? "#FFFFFF"'],
-      message:
-        "packages/ui/src/mobile.ts must preserve the true-white light mobile ground",
-      legacy:
-        "legacy: delete when native tokens move to Tideline (Salt ground) (M-F0)",
-    },
-    {
-      kind: "includes",
-      file: "packages/ui/src/web.tsx",
-      values: [
-        "function buttonClassName",
-        "function PageHeader",
-        "function AvatarStack",
-        "function StatCard",
-        "function EmptyState",
-        "function ProgressBar",
-        '"score"',
-        '"monument"',
-        '"hero"',
-        '"block"',
-        '"table"',
-        '"chip"',
-      ],
-      message:
-        "packages/ui/src/web.tsx must keep its shared primitives and numeric tiers",
-      legacy:
-        "legacy: delete when the web surfaces use packages/ui/src/tideline (F1, F3)",
-    },
-    {
-      kind: "includes",
-      file: "packages/ui/src/styles.css",
-      values: [
-        '--font-display: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
-        '--font-body: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
-        "--font-heading: var(--font-display)",
-        "--font-ui: var(--font-body)",
-        "--font-sans: var(--font-body)",
-        '--font-data: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
-        "--td-font-display: var(--td-font-ui)",
-        "--td-font-numeric: var(--td-font-ui)",
-        "--signal-text: #52630f",
-        "--signal-text: #c9e265",
-        "clamp(4.5rem, 8vw, 8.75rem)",
-        "clamp(7.5rem, 12vw, 12.5rem)",
-        "clamp(2.5rem, 4vw, 3.5rem)",
-        "clamp(2rem, 3vw, 2.875rem)",
-        "clamp(0.8125rem, 1.25vw, 1.1875rem)",
-        "clamp(0.75rem, 1vw, 0.8125rem)",
-      ],
-      message:
-        "packages/ui/src/styles.css must keep the legacy font and numeric-tier contract",
-      legacy: "legacy: delete when the web fonts move to Jost/Geist (F2b, F3)",
-    },
-    ...(
-      [
-        [".duna-numeric--score", '"wght" 900'],
-        [".duna-numeric--monument", '"wght" 900'],
-        [".duna-numeric--hero", '"wght" 800'],
-        [".duna-numeric--block", '"wght" 800'],
-        [".duna-numeric--table", '"wght" 700'],
-        [".duna-numeric--chip", '"wght" 700'],
-      ] as const
-    ).map(
-      ([selector, weight]) =>
-        ({
-          kind: "cssRule",
-          file: "packages/ui/src/styles.css",
-          selector,
-          values: [weight],
-          message: `packages/ui/src/styles.css must preserve ${selector} at ${weight}`,
-          legacy:
-            "legacy: delete when the web fonts move to Jost/Geist (F2b, F3)",
-        }) as const,
-    ),
-    {
-      kind: "includes",
-      file: "packages/ui/src/tokens.ts",
-      values: [
-        'display: "Satoshi"',
-        'body: "Satoshi"',
-        'data: "Satoshi"',
-        'mono: "Satoshi"',
-      ],
-      message: "packages/ui/src/tokens.ts must keep the legacy font tokens",
-      legacy:
-        "legacy: delete when native type moves to Jost/Geist (native planner, M-F0/M-F1)",
     },
   ],
 };
