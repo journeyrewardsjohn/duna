@@ -1,21 +1,17 @@
 "use client";
 
-import {
-  Button,
-  Icon,
-  type IconName,
-  Sheet,
-  SheetContent,
-} from "@duna/ui/tideline";
+import { buttonClassName, Icon, type IconName } from "@duna/ui/tideline";
 import { useRouter } from "next/navigation";
 import {
   type FormEvent,
-  type ReactNode,
+  lazy,
+  Suspense,
   useEffect,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
+import { firstViewSettled } from "../first-view";
 import {
   DEFAULT_SEARCH,
   discoveryHref,
@@ -24,10 +20,12 @@ import {
   whenText,
   whereText,
 } from "./search-query";
-import { WherePicker } from "./where-picker";
-import { WhatPicker, WhenPicker } from "./when-what-pickers";
+import type { Field } from "./search-pickers";
 
-type Field = "where" | "when" | "what";
+const loadPickers = () => import("./search-pickers");
+const SearchPickers = lazy(() =>
+  loadPickers().then((module) => ({ default: module.SearchPickers })),
+);
 
 const PHONE_QUERY = "(max-width: 640px)";
 
@@ -83,60 +81,14 @@ function Row({
   );
 }
 
-function Panel({
-  field,
-  children,
-  onClose,
-}: {
-  readonly field: Field;
-  readonly children: ReactNode;
-  readonly onClose: () => void;
-}) {
-  const panel = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const element = panel.current;
-    if (field !== "where") {
-      element?.querySelector<HTMLElement>("button, input")?.focus();
-    }
-    const outside = (event: PointerEvent) => {
-      const card = element?.closest(".site-search");
-      if (card && !card.contains(event.target as Node)) onClose();
-    };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, [field, onClose]);
-  return (
-    <div
-      aria-label={FIELDS.find((item) => item.id === field)!.label}
-      className="site-search__panel td-rise td-rise--short"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation();
-          onClose();
-        }
-      }}
-      ref={panel}
-      role="dialog"
-    >
-      {children}
-      {field === "where" ? null : (
-        <div className="site-search__panel-foot">
-          <Button onClick={onClose} size="sm" variant="secondary">
-            Done
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * The home page's primary action: Where · When · What as three stacked rows
  * (labels always visible), then Search. On desktop each row opens its
  * picker under the card; on a phone the search is a full-screen sheet with
  * the three stacked and a sticky Search. Submitting opens the discovery page
  * (`/discover`) with the parameters it reads. Without script the form still
- * submits and lands on discovery for this week, anywhere.
+ * submits and lands on discovery for this week, anywhere. The pickers live
+ * in `SearchPickers`, loaded after the first screen.
  */
 export function SearchCard() {
   const router = useRouter();
@@ -145,6 +97,21 @@ export function SearchCard() {
   const [open, setOpen] = useState<Field | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const rows = useRef<HTMLDivElement>(null);
+  // The pickers' script (place search, calendar, sheet) is fetched after the
+  // first screen settles, or when a row is first pressed; the press that
+  // opens a row also starts the fetch (first-view settles on pointerdown).
+  const [pickersWanted, setPickersWanted] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void firstViewSettled()
+      .then(loadPickers)
+      .then(() => {
+        if (live) setPickersWanted(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const close = () => {
     const was = open;
@@ -157,6 +124,7 @@ export function SearchCard() {
   };
 
   const openField = (field: Field) => {
+    setPickersWanted(true);
     if (phone) {
       setSheetOpen(true);
       return;
@@ -170,33 +138,6 @@ export function SearchCard() {
     setOpen(null);
     router.push(discoveryHref(state));
   };
-
-  const where = (
-    <WherePicker
-      autoFocus
-      onChoose={(choice) => {
-        setState((current) => ({ ...current, where: choice }));
-        if (!phone) {
-          setOpen("when");
-        }
-      }}
-      onDismiss={close}
-    />
-  );
-  const when = (
-    <WhenPicker
-      onChange={(next) => setState((current) => ({ ...current, when: next }))}
-      value={state.when}
-    />
-  );
-  const what = (
-    <WhatPicker
-      onSurface={(surface) => setState((current) => ({ ...current, surface }))}
-      onWhat={(next) => setState((current) => ({ ...current, what: next }))}
-      surface={state.surface}
-      what={state.what}
-    />
-  );
 
   return (
     <div className="site-search" id="search">
@@ -234,53 +175,32 @@ export function SearchCard() {
           <span className="site-meta">
             Open games, clinics, leagues and courts
           </span>
-          <Button
-            icon={<Icon name="search" size="inline" />}
+          <button
+            className={buttonClassName({ variant: "primary" })}
             type="submit"
-            variant="primary"
           >
-            Search
-          </Button>
+            <span className="td-btn__icon td-btn__icon--start">
+              <Icon name="search" size="inline" />
+            </span>
+            <span className="td-btn__label">Search</span>
+          </button>
         </div>
       </form>
-      {open && !phone ? (
-        <Panel field={open} onClose={close}>
-          {open === "where" ? where : open === "when" ? when : what}
-        </Panel>
+      {pickersWanted ? (
+        <Suspense fallback={null}>
+          <SearchPickers
+            close={close}
+            open={open}
+            phone={phone}
+            setOpen={setOpen}
+            setSheetOpen={setSheetOpen}
+            setState={setState}
+            sheetOpen={sheetOpen}
+            state={state}
+            submit={submit}
+          />
+        </Suspense>
       ) : null}
-      <Sheet onOpenChange={setSheetOpen} open={sheetOpen}>
-        <SheetContent
-          className="site-search-sheet"
-          closeLabel="Close search"
-          title="Find a game"
-        >
-          <section aria-label="Where" className="site-search-sheet__section">
-            <p className="site-label">Where</p>
-            <p className="site-search-sheet__current">
-              {whereText(state.where)}
-            </p>
-            {sheetOpen ? (
-              <WherePicker
-                onChoose={(choice) =>
-                  setState((current) => ({ ...current, where: choice }))
-                }
-              />
-            ) : null}
-          </section>
-          <section aria-label="When" className="site-search-sheet__section">
-            <p className="site-label">When</p>
-            {when}
-          </section>
-          <section aria-label="What" className="site-search-sheet__section">
-            {what}
-          </section>
-          <div className="site-search-sheet__foot">
-            <Button block onClick={() => submit()} variant="primary">
-              Search
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }

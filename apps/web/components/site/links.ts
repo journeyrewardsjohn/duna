@@ -41,6 +41,28 @@ export const siteLinks = {
   startClub: DUNA_HQ_SIGNUP_URL,
 } as const;
 
+/**
+ * Pages still served by the `(legacy)` root layout. Navigating to one from a
+ * rebuilt page is a full page load, so `SiteLink` never prefetches them (a
+ * prefetch would only download the legacy stylesheet). Remove an entry when
+ * its page moves into `app/(next)`.
+ */
+const crossDocumentPrefixes = [
+  "/about",
+  "/rankings",
+  "/safety",
+  "/sign-in",
+  "/sign-up",
+] as const;
+
+/** Whether `href` leaves the rebuilt site's document for a `(legacy)` page. */
+export function isCrossDocumentPath(href: string): boolean {
+  const path = href.split(/[?#]/)[0] ?? "";
+  return crossDocumentPrefixes.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  );
+}
+
 /** The header's page links, in the spec's order (section 3.1). */
 export const siteNavigation = [
   { label: "Find a game", href: siteLinks.findGame },

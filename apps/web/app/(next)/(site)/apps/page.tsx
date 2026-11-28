@@ -4,12 +4,7 @@ import { CrestMark } from "@duna/ui/tideline";
 import type { Metadata } from "next";
 import { DeviceTrio } from "@/components/site/apps/device-trio";
 import { AppStoreLink } from "@/components/site/apps/store-link";
-import { ConceptFilm } from "@/components/site/concepts/concept-film";
-import { ConceptOpenGame } from "@/components/site/concepts/concept-open-game";
-import { ConceptRating } from "@/components/site/concepts/concept-rating";
-import { ConceptScore } from "@/components/site/concepts/concept-score";
 import { ConceptWallet } from "@/components/site/concepts/concept-wallet";
-import { ConceptWatch } from "@/components/site/concepts/concept-watch";
 import { ConceptTile } from "@/components/site/home/home-bands";
 import { ArrowLink } from "@/components/site/link-button";
 import { siteLinks } from "@/components/site/links";
@@ -19,6 +14,13 @@ import { PageHero, SectionHead, Split } from "@/components/site/page-parts";
 import { Reveal } from "@/components/site/reveal";
 import { ConceptStage } from "@/components/site/stage";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
+import {
+  LaterConceptFilm,
+  LaterConceptOpenGame,
+  LaterConceptRating,
+  LaterConceptScore,
+  LaterConceptWatch,
+} from "@/components/site/deferred";
 
 const title = "The Duna apps";
 const description =
@@ -146,7 +148,7 @@ export default function AppsPage() {
           <ConceptTile
             anchor="scorekeeper"
             body="Tap a side for each point. It keeps the server and every set, and the buttons on this card work."
-            concept={<ConceptScore />}
+            concept={<LaterConceptScore />}
             credit="Generated image · demo match"
             label="Scorekeeper"
             photo={sitePhotos.beachAttack}
@@ -162,7 +164,7 @@ export default function AppsPage() {
               </>
             }
             concept={
-              <ConceptRating
+              <LaterConceptRating
                 from={3.12}
                 label="After this match"
                 reliability={2}
@@ -180,7 +182,7 @@ export default function AppsPage() {
           <ConceptTile
             anchor="film"
             body="Film a match and see your heart rate and every rally laid over the video, point by point."
-            concept={<ConceptFilm />}
+            concept={<LaterConceptFilm />}
             credit="Generated image · demo film"
             label="Film"
             photo={sitePhotos.digSpray}
@@ -190,7 +192,7 @@ export default function AppsPage() {
           <ConceptTile
             anchor="find"
             body="Search by where, when and what, then join a game that needs two more. Your club cards sit in the same app and your phone’s wallet."
-            concept={<ConceptOpenGame />}
+            concept={<LaterConceptOpenGame />}
             credit="Generated image · demo game"
             label="Find and book"
             photo={sitePhotos.courtsFirstLight}
@@ -250,7 +252,7 @@ export default function AppsPage() {
             shape="wide"
             sizes="(max-width: 1000px) 100vw, 58vw"
           >
-            <ConceptWatch />
+            <LaterConceptWatch />
           </ConceptStage>
         }
         title="Your match, on your wrist."

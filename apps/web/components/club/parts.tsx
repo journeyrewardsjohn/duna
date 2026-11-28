@@ -1,6 +1,6 @@
 import { formatVenueTime } from "@duna/core";
 import { Chip, Icon, type TidelineTone } from "@duna/ui/tideline";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import type { ReactNode } from "react";
 import { mapboxStaticImageUrl, publicMapboxToken } from "@/lib/static-map";
 import { directionsHref } from "../event/event-model";

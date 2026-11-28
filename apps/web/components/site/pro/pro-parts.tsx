@@ -1,6 +1,6 @@
 import type { PublicProCoverage } from "@duna/api";
 import { Icon, NetScore } from "@duna/ui/tideline";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import {
   dayLabel,
   eventDates,

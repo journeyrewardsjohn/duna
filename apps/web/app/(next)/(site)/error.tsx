@@ -1,10 +1,13 @@
 "use client";
 
 import { useErrorReference } from "@duna/observability/react";
-import { ErrorState } from "@duna/ui/tideline";
-import Link from "next/link";
+import { SiteErrorState } from "@/components/site/site-error-state";
+import Link from "@/components/site/site-link";
 
-/** A public page failed: the kit's ErrorState, reported once, with its reference. */
+/**
+ * A public page failed: the kit's error state (`SiteErrorState`, light enough
+ * to ship with every page), reported once, with its reference.
+ */
 export default function SiteError({
   error,
   reset,
@@ -18,7 +21,7 @@ export default function SiteError({
   return (
     <main className="site-state" id="main" tabIndex={-1}>
       <h1 className="td-sr">This page didn’t load</h1>
-      <ErrorState
+      <SiteErrorState
         action={<Link href="/">Duna home</Link>}
         message="Something went wrong on our side, not yours. Try again. If it keeps happening, send Duna support the reference below."
         onRetry={unstable_retry ?? reset}

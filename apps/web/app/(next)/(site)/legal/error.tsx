@@ -1,8 +1,8 @@
 "use client";
 
-import { ErrorState } from "@duna/ui/tideline";
 import { useErrorReference } from "@duna/observability/react";
-import Link from "next/link";
+import { SiteErrorState } from "@/components/site/site-error-state";
+import Link from "@/components/site/site-link";
 
 export default function LegalError({
   error,
@@ -17,7 +17,7 @@ export default function LegalError({
   return (
     <main className="lc-main lc-hub" id="main" tabIndex={-1}>
       <h1 className="td-sr">This document didn’t load</h1>
-      <ErrorState
+      <SiteErrorState
         action={<Link href="/legal">All legal documents</Link>}
         message="Something went wrong on our side. Try again; if it keeps happening, send Duna support the reference below."
         onRetry={unstable_retry ?? reset}

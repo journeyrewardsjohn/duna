@@ -61,6 +61,15 @@
       }
 
       /*
+       * The hidden loader stands still: every button carries one, and an
+       * infinite loader animating unseen costs a style, layout and paint
+       * pass on every frame for as long as the page is open.
+       */
+      &:not([data-pending], [data-spinning]) .td-btn__busy * {
+        animation-play-state: paused;
+      }
+
+      /*
        * Loading keeps the width and the label. With an icon, the spinner
        * takes the icon's place; without one, it covers the label, which
        * stays in the layout and in the accessibility tree.
@@ -254,6 +263,11 @@
         place-items: center;
         opacity: 0;
         pointer-events: none;
+      }
+
+      /* The hidden loader stands still (see .td-btn). */
+      &:not([data-pending], [data-spinning]) .td-btn__busy * {
+        animation-play-state: paused;
       }
 
       &:is([data-pending], [data-spinning]) {
