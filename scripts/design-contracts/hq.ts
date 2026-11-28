@@ -66,6 +66,7 @@ export const hq: SurfaceContract = {
       "apps/hq/components/today",
       "apps/hq/components/money",
       "apps/hq/components/team",
+      "apps/hq/components/setup",
     ].map((root) => ({
       kind: "treeExcludes" as const,
       root,

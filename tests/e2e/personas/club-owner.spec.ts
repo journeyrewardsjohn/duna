@@ -36,29 +36,82 @@ test.describe("CO-1 Sign up and open the club's workspace", () => {
     page,
   }) => {
     await page.goto(hq("/setup/start"));
-    await expectPageReady(page, "Start your Duna workspace.");
+    await expectPageReady(page, /^Let.s set up /);
+    await expect(
+      page.getByRole("heading", { name: "Do you have a website?" }),
+    ).toBeVisible();
     await expectNoLayoutShift(page);
   });
 });
 
 test.describe("CO-2 Set up the club from its website", () => {
-  test.fixme("CO-2.1 Enter the club's website and Duna reads it [B1, H11]", async () => {
-    // Expected: "Your club's website" field; a Rally loader while Duna reads;
-    // proposals for name, hours, places, offerings and socials.
+  test("CO-2.1 Enter the club's website and Duna reads it", async ({
+    page,
+  }) => {
+    await page
+      .context()
+      .addCookies([{ name: "duna-demo-setup", value: "fresh", url: hq("/") }]);
+    await page.goto(hq("/setup/start"));
+    await page.getByLabel("Your club's website").fill("club.example");
+    await page.getByRole("button", { name: "Read my website" }).click();
+    // A Rally loader and the pages being read, by name.
+    await expect(
+      page.getByRole("button", { name: "Stop reading" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Review what Duna found" })
+      .click({ timeout: 20_000 });
+    for (const group of [
+      "Identity and brand",
+      "Contact and hours",
+      "Places and courts",
+      "Offerings and prices",
+    ]) {
+      await expect(page.getByRole("heading", { name: group })).toBeVisible();
+    }
   });
-  test.fixme("CO-2.2 Review each proposal with Keep, Edit or Skip [H11]", async () => {
-    // Expected: nothing is applied until the person confirms; Edit opens the
-    // same SpecForm the agent filled.
+  test("CO-2.2 Review each proposal with Keep, Edit or Skip", async ({
+    page,
+  }) => {
+    await page
+      .context()
+      .addCookies([{ name: "duna-demo-setup", value: "fresh", url: hq("/") }]);
+    await page.goto(hq("/setup/start?path=website"));
+    await page.getByLabel("Your club's website").fill("club.example");
+    await page.getByRole("button", { name: "Read my website" }).click();
+    await page
+      .getByRole("button", { name: "Review what Duna found" })
+      .click({ timeout: 20_000 });
+    // Nothing applies until the person confirms.
+    await expect(page.locator("article[data-decision='applied']")).toHaveCount(
+      0,
+    );
+    const venue = page.locator("article", {
+      has: page.getByRole("heading", { name: "Venue", exact: true }),
+    });
+    // Edit opens the same form a person fills.
+    await venue.getByRole("button", { name: "Edit" }).click();
+    await venue.getByLabel("Place name").fill("North beach");
+    await venue.getByRole("button", { name: "Keep my edit" }).click();
+    await expect(venue).toContainText("You edited this");
+    const team = page.locator("article", {
+      has: page.getByRole("heading", { name: "Head coach", exact: true }),
+    });
+    await team.getByRole("button", { name: "Skip" }).click();
+    await expect(team).toContainText("Skipped");
+    await expect(
+      page.getByRole("complementary", { name: "What Apply will do" }),
+    ).toContainText("Creates a draft place");
   });
   test("CO-2.3 Club setup shows what is left, one decision at a time", async ({
     page,
   }) => {
     await openHqArea(page, "Club setup");
     await expect(
-      page.getByRole("heading", { name: "One decision at a time." }),
+      page.getByRole("heading", { name: "What's left" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Set up payments" }),
+      page.getByRole("link", { name: "Set up payments" }).first(),
     ).toBeVisible();
   });
 });
@@ -129,9 +182,20 @@ test.describe("CO-4 Add places and courts", () => {
       page.getByRole("button", { name: "Create manually →" }),
     ).toBeVisible();
   });
-  test.fixme("CO-4.2 Save the venue and add its courts [H11]", async () => {
-    // Expected: Club setup › Places and courts; the venue's Courts tab lists
-    // the new courts with surface and lights.
+  test("CO-4.2 The place lists its courts with surface and lights", async ({
+    page,
+  }) => {
+    await page.goto(hq("/setup/places"));
+    await page
+      .getByRole("link", { name: /Beach Elite Training Center/ })
+      .click();
+    await expectPageReady(page, "Beach Elite Training Center");
+    const courts = page.getByRole("region", { name: "Courts" });
+    await expect(courts).toContainText("Championship Court");
+    await expect(courts).toContainText(/Sand · Lit after dark/);
+    await expect(
+      courts.getByRole("link", { name: "Add a court" }),
+    ).toBeVisible();
   });
   test.fixme("CO-4.3 Set opening hours, layout and court orientation [H11, B11]", async () => {
     // Expected: hours per weekday; orientation feeds wind-on-court.

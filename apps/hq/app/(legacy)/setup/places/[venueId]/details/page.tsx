@@ -12,18 +12,21 @@ export async function generateMetadata({
   const caller = await getServerCaller();
   const workspace = await caller.operator.workspace();
   const venue = workspace.venues.find((item) => item.id === venueId);
-  return { title: venue?.name ?? "Venue" };
+  return { title: venue ? `${venue.name} details` : "Place details" };
 }
 
-export default async function VenueManagementPage({
+/**
+ * A place's details editor (name, story, address and map pin, arrival
+ * features, photo) and its court rate plans. Still the legacy editor: the
+ * place's Overview moved to the new shell (H-SETUP); this opens from its
+ * "Details and pricing" tab until the address and photo fields are rebuilt.
+ */
+export default async function PlaceDetailsPage({
   params,
-  searchParams,
 }: {
   readonly params: Promise<{ venueId: string }>;
-  readonly searchParams: Promise<{ created?: string; section?: string }>;
 }) {
   const { venueId } = await params;
-  const query = await searchParams;
   const caller = await getServerCaller();
   const [dashboard, workspace] = await Promise.all([
     caller.operator.dashboard(),
@@ -31,10 +34,6 @@ export default async function VenueManagementPage({
   ]);
   const venue = workspace.venues.find((item) => item.id === venueId);
   if (!venue) notFound();
-  const initialSection =
-    query.section === "details" || query.section === "courts"
-      ? query.section
-      : "overview";
   return (
     <OperatorShell
       active="setup"
@@ -42,8 +41,7 @@ export default async function VenueManagementPage({
       organization={dashboard.organization}
     >
       <VenueManagementWorkspace
-        created={query.created === "true"}
-        initialSection={initialSection}
+        initialSection="details"
         venue={venue}
         workspace={workspace}
       />
