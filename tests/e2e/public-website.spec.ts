@@ -70,11 +70,11 @@ test("quiet public navigation preserves menus, keyboard access and dark mode", a
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator(".site-header")).toHaveCSS(
     "background-color",
-    "rgb(25, 25, 25)",
+    "rgb(14, 26, 34)",
   );
   await expect(page.locator(".site-header")).toHaveCSS(
     "color",
-    "rgb(245, 245, 243)",
+    "rgb(244, 242, 236)",
   );
 });
 

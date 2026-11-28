@@ -1,3 +1,4 @@
+@import "./tideline/tokens/tokens.root.css";
 @import "./icons/lucide-stroke.css";
 
 .duna-loader {
@@ -61,6 +62,17 @@
   color: rgb(5 22 38 / 72%);
 }
 
+/*
+ * Legacy colour aliases (F2b). Every legacy colour variable points at a
+ * Duna Design System (Tideline 4.1.1) role from `tokens.root.css`, which
+ * declares the `--td-*` values on <html> for the light and dark themes, the
+ * HQ zone and any live zone. The mapping and its reasons are in
+ * docs/design/legacy-aliases.md. Delete with each surface's migration.
+ *
+ * A `var()` alias resolves on the element that declares it, so the theme
+ * block only sets the `*-rgb` channel triplets (which cannot be derived from
+ * a variable) and a live zone redeclares the aliases on its own element.
+ */
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
@@ -75,160 +87,136 @@
   --duna-type-section: clamp(2rem, 3.4vw, 3.25rem);
   --duna-type-title: clamp(1.25rem, 2vw, 1.75rem);
   --duna-control-height: 3rem;
-  --ground: #f6f5f1;
-  --ground-warm: #efe6d3;
-  --ground-cool: #b5ccd3;
-  --surface-1: #fff;
-  --surface-2: #edece6;
-  --surface-3: #fff;
-  --hairline: rgb(27 27 25 / 8%);
-  --hairline-strong: rgb(27 27 25 / 18%);
+  --ground: var(--td-ground);
+  --ground-warm: var(--td-surface-warm);
+  --ground-cool: var(--td-surface-sunken);
+  --surface-1: var(--td-surface);
+  --surface-2: var(--td-surface-sunken);
+  --surface-3: var(--td-surface-raised);
+  --hairline: var(--td-line);
+  --hairline-strong: var(--td-line-strong);
   --edge-light: transparent;
-  --scrim: rgb(27 27 25 / 44%);
-  --text-1: #1b1b19;
-  --text-2: #3a3a36;
-  --text-3: #766f61;
-  --text-on-accent: #fff;
-  --flare: #e8683a;
-  --flare-text: #b84a20;
-  --flare-fill: rgb(232 104 58 / 13%);
-  --flare-border: rgb(232 104 58 / 26%);
-  --signal: #c9e265;
-  --signal-text: #52630f;
-  --gold: #c9a96a;
-  --gain: #2f6b3a;
-  --loss: #9a4a2e;
+  --scrim: var(--td-scrim);
+  --text-1: var(--td-text);
+  --text-2: var(--td-text-2);
+  --text-3: var(--td-text-3);
+  --text-on-accent: var(--td-on-action);
+  /* Flare (retired orange): Dune, the warm signal. Live indicators use
+     --td-live directly (see docs/design/legacy-aliases.md). */
+  --flare: var(--td-energy);
+  --flare-text: var(--td-energy-ink);
+  --flare-fill: var(--td-energy-wash);
+  --flare-border: color-mix(in srgb, var(--td-energy) 60%, transparent);
+  --signal: var(--td-energy);
+  --signal-text: var(--td-energy-ink);
+  --gold: var(--td-energy);
+  --gain: var(--td-positive);
+  --loss: var(--td-danger);
   --image-veil: transparent;
-  --dissolve: #f6f5f1;
-  --btn-primary-bg: #1b1b19;
-  --btn-primary-fg: #f6f5f1;
-  --btn-primary-hover: #3a3a36;
-  --btn-ghost-border: rgb(27 27 25 / 22%);
-  --focus-ring: #e8683a;
-  --glass-fill: rgb(255 255 255 / 68%);
-  --glass-border: rgb(255 255 255 / 55%);
+  --dissolve: var(--td-ground);
+  --btn-primary-bg: var(--td-action);
+  --btn-primary-fg: var(--td-on-action);
+  --btn-primary-hover: var(--td-action-hover);
+  --btn-ghost-border: var(--td-border-control);
+  --focus-ring: var(--td-focus);
+  --glass-fill: color-mix(in srgb, var(--td-surface) 72%, transparent);
+  --glass-border: var(--td-glass-edge);
   --glass-blur: blur(22px) saturate(1.35);
-  --performance-ground: #1b1b19;
-  --overlay-rgb: 27 27 25;
-  --text-rgb: 27 27 25;
-  --muted-rgb: 58 58 54;
-  --accent-rgb: 27 27 25;
-  --warning-rgb: 201 169 106;
-  --positive-rgb: 47 107 58;
-  --danger-rgb: 154 74 46;
-  --flare-rgb: 232 104 58;
-}
-
-:root[data-theme="light"] [data-zone="live"],
-:root[data-theme="light"][data-zone="live"] {
-  color-scheme: dark;
-  --ground: #1b1b19;
-  --ground-warm: #231f19;
-  --ground-cool: #22343b;
-  --surface-1: rgb(246 245 241 / 5%);
-  --surface-2: rgb(246 245 241 / 8%);
-  --surface-3: #232320;
-  --hairline: rgb(246 245 241 / 10%);
-  --hairline-strong: rgb(246 245 241 / 22%);
-  --edge-light: rgb(246 245 241 / 6%);
-  --scrim: rgb(10 10 9 / 62%);
-  --text-1: #f2f0ea;
-  --text-2: rgb(242 240 234 / 72%);
-  --text-3: rgb(242 240 234 / 52%);
-  --text-on-accent: #fff;
-  --flare-text: #f28a64;
-  --flare-fill: rgb(232 104 58 / 16%);
-  --flare-border: rgb(232 104 58 / 34%);
-  --gain: #75b982;
-  --loss: #d28365;
-  --image-veil: rgb(13 17 20 / 8%);
-  --dissolve: #1b1b19;
-  --btn-primary-bg: #f2f0ea;
-  --btn-primary-fg: #1b1b19;
-  --btn-primary-hover: #fff;
-  --btn-ghost-border: rgb(242 240 234 / 26%);
-  --focus-ring: #f4794c;
-  --glass-fill: rgb(27 27 25 / 70%);
-  --glass-border: rgb(242 240 234 / 10%);
-  --glass-blur: blur(24px) saturate(1.15);
-  --overlay-rgb: 246 245 241;
-  --text-rgb: 242 240 234;
-  --muted-rgb: 242 240 234;
-  --accent-rgb: 242 240 234;
+  --performance-ground: var(--td-mesh-night-court-base);
+  /* Channel triplets of the roles named (rgb() cannot read a variable). */
+  --overlay-rgb: 14 26 34; /* --td-text #0e1a22 */
+  --text-rgb: 14 26 34; /* --td-text */
+  --muted-rgb: 63 75 82; /* --td-text-2 #3f4b52 */
+  --accent-rgb: 14 26 34; /* --td-action #0e1a22 */
+  --warning-rgb: 138 90 0; /* --td-warning #8a5a00 */
+  --positive-rgb: 29 122 74; /* --td-positive #1d7a4a */
+  --danger-rgb: 180 35 24; /* --td-danger #b42318 */
+  --flare-rgb: 217 195 160; /* --td-energy #d9c3a0 */
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ground: #141310;
-  --ground-warm: #1e1a14;
-  --ground-cool: #16232a;
-  --surface-1: #1c1a16;
-  --surface-2: #24211c;
-  --surface-3: #2c2823;
-  --hairline: rgb(239 230 211 / 10%);
-  --hairline-strong: rgb(239 230 211 / 20%);
-  --edge-light: transparent;
-  --scrim: rgb(10 10 9 / 62%);
-  --text-1: #f2f0ea;
-  --text-2: #b8b4a8;
-  --text-3: #918b80;
-  --text-on-accent: #141310;
-  --flare: #f4794c;
-  --flare-text: #f4794c;
-  --flare-fill: rgb(244 121 76 / 16%);
-  --flare-border: rgb(244 121 76 / 34%);
-  --signal: #a8c44e;
-  --signal-text: #c9e265;
-  --gold: #d4b77c;
-  --gain: #6bae78;
-  --loss: #c4785c;
-  --image-veil: rgb(13 17 20 / 16%);
-  --dissolve: #141310;
-  --btn-primary-bg: #f2f0ea;
-  --btn-primary-fg: #141310;
-  --btn-primary-hover: #fff;
-  --btn-ghost-border: rgb(242 240 234 / 26%);
-  --focus-ring: #f4794c;
-  --glass-fill: rgb(20 19 16 / 66%);
-  --glass-border: rgb(242 240 234 / 10%);
   --glass-blur: blur(24px) saturate(1.15);
-  --performance-ground: #0d1114;
-  --overlay-rgb: 242 240 234;
-  --text-rgb: 242 240 234;
-  --muted-rgb: 184 180 168;
-  --accent-rgb: 242 240 234;
-  --warning-rgb: 212 183 124;
-  --positive-rgb: 107 174 120;
-  --danger-rgb: 196 120 92;
-  --flare-rgb: 244 121 76;
+  --image-veil: rgb(14 26 34 / 16%);
+  --overlay-rgb: 244 242 236; /* --td-text #f4f2ec */
+  --text-rgb: 244 242 236; /* --td-text */
+  --muted-rgb: 201 211 216; /* --td-text-2 #c9d3d8 */
+  --accent-rgb: 217 195 160; /* --td-action #d9c3a0 */
+  --warning-rgb: 242 196 107; /* --td-warning #f2c46b */
+  --positive-rgb: 111 207 151; /* --td-positive #6fcf97 */
+  --danger-rgb: 243 139 128; /* --td-danger #f38b80 */
+  --flare-rgb: 217 195 160; /* --td-energy */
 }
 
-:root[data-theme="dark"] [data-zone="live"],
-:root[data-theme="dark"][data-zone="live"] {
-  --ground: #0d1114;
-  --ground-warm: #171410;
-  --ground-cool: #101a20;
-  --surface-1: #141a1e;
-  --surface-2: #1b2429;
-  --surface-3: #22343b;
-  --hairline: rgb(181 204 211 / 12%);
-  --hairline-strong: rgb(181 204 211 / 24%);
-  --edge-light: rgb(181 204 211 / 9%);
-  --scrim: rgb(6 8 9 / 70%);
-  --text-1: #edf1f2;
-  --text-2: #a9b4b8;
-  --text-3: #87959b;
-  --text-on-accent: #0d1114;
-  --image-veil: rgb(13 17 20 / 16%);
-  --dissolve: #0d1114;
-  --btn-primary-bg: #edf1f2;
-  --btn-primary-fg: #0d1114;
-  --btn-ghost-border: rgb(237 241 242 / 26%);
-  --glass-fill: rgb(13 17 20 / 70%);
-  --overlay-rgb: 237 241 242;
-  --text-rgb: 237 241 242;
-  --muted-rgb: 169 180 184;
-  --accent-rgb: 237 241 242;
+/* Live is always the dark Night Court ground; Solar marks the live state. */
+:root[data-zone="live"],
+:root [data-zone="live"] {
+  color-scheme: dark;
+  --ground: var(--td-ground);
+  --ground-warm: var(--td-surface-warm);
+  --ground-cool: var(--td-surface-sunken);
+  --surface-1: var(--td-surface);
+  --surface-2: var(--td-surface-raised);
+  --surface-3: var(--td-surface-raised);
+  --hairline: var(--td-line);
+  --hairline-strong: var(--td-line-strong);
+  --edge-light: color-mix(in srgb, var(--td-text) 6%, transparent);
+  --scrim: var(--td-scrim);
+  --text-1: var(--td-text);
+  --text-2: var(--td-text-2);
+  --text-3: var(--td-text-3);
+  --text-on-accent: var(--td-on-action);
+  /* A live zone is a dark ground, not a live state: flare stays Dune and
+     only the explicit live indicators use --td-live (Solar). */
+  --flare: var(--td-energy);
+  --flare-text: var(--td-energy-ink);
+  --flare-fill: var(--td-energy-wash);
+  --flare-border: color-mix(in srgb, var(--td-energy) 50%, transparent);
+  --signal: var(--td-energy);
+  --signal-text: var(--td-energy-ink);
+  --gold: var(--td-energy);
+  --gain: var(--td-positive);
+  --loss: var(--td-danger);
+  --image-veil: rgb(14 26 34 / 16%);
+  --dissolve: var(--td-ground);
+  --btn-primary-bg: var(--td-action);
+  --btn-primary-fg: var(--td-on-action);
+  --btn-primary-hover: var(--td-action-hover);
+  --btn-ghost-border: var(--td-border-control);
+  --focus-ring: var(--td-focus);
+  --glass-fill: color-mix(in srgb, var(--td-surface) 72%, transparent);
+  --glass-border: var(--td-glass-edge);
+  --glass-blur: blur(24px) saturate(1.15);
+  --performance-ground: var(--td-mesh-night-court-base);
+  --overlay-rgb: 244 242 236; /* --td-text #f4f2ec */
+  --text-rgb: 244 242 236;
+  --muted-rgb: 201 211 216; /* --td-text-2 */
+  --accent-rgb: 217 195 160; /* --td-action #d9c3a0 */
+  --warning-rgb: 242 196 107; /* --td-warning */
+  --positive-rgb: 111 207 151; /* --td-positive */
+  --danger-rgb: 243 139 128; /* --td-danger */
+  --flare-rgb: 217 195 160; /* --td-energy */
+  --color-ink: var(--performance-ground);
+  --color-depth: var(--surface-1);
+  --color-navy: var(--ground-cool);
+  --color-navy-lift: var(--surface-2);
+  --color-bone: var(--text-1);
+  --color-bone-muted: var(--text-2);
+  --color-sand: var(--gold);
+  --color-sand-light: var(--ground-warm);
+  --color-aqua: var(--btn-primary-bg);
+  --color-aqua-deep: var(--btn-primary-hover);
+  --color-flare: var(--flare);
+  --color-positive: var(--gain);
+  --color-warning: var(--td-warning);
+  --color-danger: var(--loss);
+  --color-on-primary: var(--btn-primary-fg);
+  --color-canvas: var(--ground);
+  --color-canvas-soft: var(--surface-2);
+  --color-surface: var(--surface-1);
+  --color-surface-raised: var(--surface-3);
+  --color-line: var(--hairline);
+  --color-line-strong: var(--hairline-strong);
 }
 
 :root {
@@ -247,23 +235,25 @@
   --font-data: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif);
   --font-monument: var(--font-data);
   --font-mono: var(--font-data);
-  --sand-100: #efe6d3;
-  --sand-300: #e2cfa6;
-  --sand-500: #c9a96a;
-  --marine-200: #b5ccd3;
-  --marine-400: #8fb0bc;
-  --marine-900: #22343b;
-  --ink: #1b1b19;
-  --ink-soft: #3a3a36;
-  --fog-50: #f6f5f1;
-  --fog-100: #edece6;
-  --dusk: #fbf3f4;
-  --dusk-deep: #edd3d9;
-  --pending: #8a8578;
-  --hq-tint: #e8f2d4;
-  --hq-core: #a9c463;
-  --hq-ink: #3f5417;
-  --hq-deep: #1e2a0e;
+  /* Palette constants (theme-independent) point at the matching ramp step. */
+  --sand-100: var(--td-dune-100);
+  --sand-300: var(--td-dune-300);
+  --sand-500: var(--td-dune-500);
+  --marine-200: var(--td-sky-300);
+  --marine-400: var(--td-tide-300);
+  --marine-900: var(--td-tide-900);
+  --ink: var(--td-brand-night-court);
+  --ink-soft: var(--td-haze-800);
+  --fog-50: var(--td-brand-salt);
+  --fog-100: var(--td-haze-100);
+  --dusk: var(--td-dusk-100);
+  --dusk-deep: var(--td-dusk-300);
+  --pending: var(--td-text-3);
+  /* HQ accents outside HQ (marketing pages): neutral, action-led. */
+  --hq-tint: var(--td-surface-sunken);
+  --hq-core: var(--td-line-strong);
+  --hq-ink: var(--td-text);
+  --hq-deep: var(--td-action);
   --club-h: 205;
   --club-c: 0.07;
   --club-tint: oklch(0.95 calc(var(--club-c) * 0.28) var(--club-h));
@@ -278,8 +268,8 @@
   --radius-small: var(--radius-chip);
   --radius-medium: var(--radius-nested);
   --radius-large: var(--radius-card);
-  --shadow-small: 0 8px 32px rgb(27 27 25 / 6%);
-  --shadow-large: 0 24px 80px rgb(27 27 25 / 8%);
+  --shadow-small: 0 8px 32px rgb(14 26 34 / 6%); /* Night Court */
+  --shadow-large: 0 24px 80px rgb(14 26 34 / 8%);
   --focus: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 34%, transparent);
 
   /* Backward-compatible names. New work uses the semantic names above. */
@@ -295,7 +285,7 @@
   --color-aqua-deep: var(--btn-primary-hover);
   --color-flare: var(--flare);
   --color-positive: var(--gain);
-  --color-warning: var(--gold);
+  --color-warning: var(--td-warning);
   --color-danger: var(--loss);
   --color-white: #fff;
   --color-on-primary: var(--btn-primary-fg);
@@ -305,7 +295,7 @@
   --color-surface-raised: var(--surface-3);
   --color-line: var(--hairline);
   --color-line-strong: var(--hairline-strong);
-  --ink-rgb: 27 27 25;
+  --ink-rgb: 14 26 34; /* --td-brand-night-court */
   --depth-rgb: 255 255 255;
 }
 
@@ -325,8 +315,8 @@
 }
 
 ::selection {
-  background: var(--gold);
-  color: #1b1b19;
+  background: var(--td-energy);
+  color: var(--td-on-energy);
 }
 
 [data-theme-switching="true"] *,
@@ -416,7 +406,7 @@
 
 .duna-button--danger {
   background: var(--loss);
-  color: #fff;
+  color: var(--td-on-danger);
 }
 
 .duna-button--small {
@@ -660,11 +650,16 @@
   text-transform: uppercase;
 }
 
-.duna-badge--live,
+.duna-badge--live {
+  background: var(--td-live-wash);
+  border-color: color-mix(in srgb, var(--td-live) 40%, transparent);
+  color: var(--td-live-ink);
+}
+
 .duna-badge--danger {
-  background: var(--flare-fill);
-  border-color: var(--flare-border);
-  color: var(--flare-text);
+  background: var(--td-danger-wash);
+  border-color: color-mix(in srgb, var(--td-danger) 32%, transparent);
+  color: var(--td-danger);
 }
 
 .duna-badge--positive {
@@ -674,8 +669,8 @@
 }
 
 .duna-badge--warning {
-  background: color-mix(in srgb, var(--gold) 14%, transparent);
-  border-color: color-mix(in srgb, var(--gold) 34%, transparent);
+  background: var(--td-warning-wash);
+  border-color: color-mix(in srgb, var(--td-warning) 34%, transparent);
   color: var(--text-1);
 }
 
@@ -693,13 +688,13 @@
 }
 
 [data-zone="live"] .duna-eyebrow {
-  color: color-mix(in srgb, var(--gold) 90%, var(--text-1));
+  color: var(--td-energy-ink);
 }
 
 .duna-live-dot {
-  background: var(--flare);
+  background: var(--td-live);
   border-radius: 50%;
-  box-shadow: 0 0 0 0 var(--flare-border);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--td-live) 40%, transparent);
   display: inline-block;
   height: 6px;
   width: 6px;
@@ -719,8 +714,8 @@
 }
 
 .duna-status--live {
-  background: var(--flare-fill);
-  color: var(--flare-text);
+  background: var(--td-live-wash);
+  color: var(--td-live-ink);
 }
 
 .duna-status--upcoming {
@@ -775,8 +770,8 @@
 }
 
 .duna-metric--urgent {
-  background: var(--flare-fill);
-  color: var(--flare-text);
+  background: var(--td-attention-wash);
+  color: var(--td-attention);
 }
 
 .duna-identity {
@@ -1581,7 +1576,7 @@
 
 @keyframes duna-live-pulse {
   0% {
-    box-shadow: 0 0 0 0 var(--flare-border);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--td-live) 40%, transparent);
   }
   70%,
   100% {
@@ -1660,7 +1655,7 @@
 }
 
 .duna-field__error {
-  color: #b53e2d;
+  color: var(--td-danger);
   font-weight: 650;
 }
 
@@ -1952,11 +1947,11 @@
 }
 
 .duna-action-center__launcher .duna-action-center__duna-button {
-  background: #163f6d;
+  background: var(--td-action);
   box-shadow:
-    0 8px 20px rgb(20 61 107 / 26%),
+    0 8px 20px rgb(14 26 34 / 26%),
     inset 0 1px 0 rgb(255 255 255 / 18%);
-  color: white;
+  color: var(--td-on-action);
   height: 58px;
   overflow: hidden;
   width: 58px;
@@ -1965,7 +1960,7 @@
 .duna-action-center__launcher .duna-action-center__duna-button:hover,
 .duna-action-center__launcher
   .duna-action-center__duna-button[aria-pressed="true"] {
-  background: #0f3157;
+  background: var(--td-action-hover);
   transform: translateY(-2px);
 }
 
@@ -2029,9 +2024,9 @@
 
 .duna-action-center__avatar {
   align-items: center;
-  background: #163f6d;
+  background: var(--td-action);
   border-radius: 14px;
-  box-shadow: 0 5px 14px rgb(20 61 107 / 21%);
+  box-shadow: 0 5px 14px rgb(14 26 34 / 21%);
   display: flex;
   height: 42px;
   justify-content: center;
@@ -2040,7 +2035,7 @@
 }
 
 .duna-action-center__avatar {
-  color: white;
+  color: var(--td-on-action);
 }
 
 .duna-action-center__chat-header > span:nth-child(2) {
@@ -2063,9 +2058,9 @@
 }
 
 .duna-action-center__chat-header small i {
-  background: #59a679;
+  background: var(--td-positive);
   border-radius: 50%;
-  box-shadow: 0 0 0 3px rgb(89 166 121 / 12%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--td-positive) 14%, transparent);
   height: 6px;
   width: 6px;
 }
@@ -2143,10 +2138,10 @@
 }
 
 .duna-action-center__message--user > .duna-action-center__message-body {
-  background: #163f6d;
+  background: var(--td-action);
   border-radius: 18px 18px 5px 18px;
-  box-shadow: 0 6px 16px rgb(20 61 107 / 16%);
-  color: #fff;
+  box-shadow: 0 6px 16px rgb(14 26 34 / 16%);
+  color: var(--td-on-action);
   padding: 0.68rem 0.82rem;
 }
 
@@ -2274,13 +2269,13 @@
 }
 
 .duna-action-center__composer-tools button.is-recording {
-  background: #fff0ed;
-  color: #bd4838;
+  background: var(--td-danger-wash);
+  color: var(--td-danger);
 }
 
 .duna-action-center__composer-tools button.is-recording i {
   animation: duna-recording-pulse 1.1s ease-out infinite;
-  border: 2px solid #bd4838;
+  border: 2px solid var(--td-danger);
   border-radius: 50%;
   inset: 2px;
   position: absolute;
@@ -2294,13 +2289,13 @@
 }
 
 .duna-action-center__composer-tools .duna-action-center__send {
-  background: #163f6d;
-  color: white;
+  background: var(--td-action);
+  color: var(--td-on-action);
 }
 
 .duna-action-center__composer-tools .duna-action-center__send:hover {
-  background: #0f3157;
-  color: white;
+  background: var(--td-action-hover);
+  color: var(--td-on-action);
 }
 
 .duna-action-center__composer-tools button:disabled {
@@ -2352,9 +2347,9 @@
 }
 
 .duna-action-center__notice {
-  background: #fff7e4;
+  background: var(--td-warning-wash);
   border-radius: 8px;
-  color: #815b1e;
+  color: var(--td-warning);
   font-size: 0.75rem;
   margin: 0;
   padding: 0.45rem 0.55rem;
@@ -2450,23 +2445,23 @@
 }
 
 .duna-action-center__card--warning {
-  background: #fff8e9;
-  border-color: #eddcb7;
+  background: var(--td-warning-wash);
+  border-color: color-mix(in srgb, var(--td-warning) 30%, transparent);
 }
 
 .duna-action-center__card--danger {
-  background: #fff1ee;
-  border-color: #edc3ba;
+  background: var(--td-danger-wash);
+  border-color: color-mix(in srgb, var(--td-danger) 30%, transparent);
 }
 
 .duna-action-center__card--positive {
-  background: #edf8f1;
-  border-color: #c5e1ce;
+  background: var(--td-positive-wash);
+  border-color: color-mix(in srgb, var(--td-positive) 30%, transparent);
 }
 
 .duna-action-center__card--approval {
-  background: #fff8e9;
-  border-color: #e9d18f;
+  background: var(--td-warning-wash);
+  border-color: color-mix(in srgb, var(--td-warning) 30%, transparent);
 }
 
 .duna-action-center__card--approval ul {
@@ -2479,10 +2474,10 @@
 
 .duna-action-center__card--approval button {
   align-items: center;
-  background: #163f6d;
+  background: var(--td-action);
   border: 0;
   border-radius: 999px;
-  color: white;
+  color: var(--td-on-action);
   cursor: pointer;
   display: inline-flex;
   font-size: 0.75rem;

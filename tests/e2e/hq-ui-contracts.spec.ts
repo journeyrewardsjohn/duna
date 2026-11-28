@@ -90,14 +90,14 @@ test.describe("HQ neutral surface theme", () => {
     light: {
       "--ground": "#fff",
       "--surface-1": "#fff",
-      "--surface-2": "#f7f7f7",
+      "--surface-2": "#f5f6f7",
       calendar: "rgb(255, 255, 255)",
     },
     dark: {
-      "--ground": "#191919",
-      "--surface-1": "#222",
-      "--surface-2": "#2b2b2b",
-      calendar: "rgb(34, 34, 34)",
+      "--ground": "#0e1a22",
+      "--surface-1": "#17262f",
+      "--surface-2": "#1c2d38",
+      calendar: "rgb(23, 38, 47)",
     },
   } as const;
 
