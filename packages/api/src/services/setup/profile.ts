@@ -172,13 +172,11 @@ export async function updateSetupProfile(input: {
         .set(row)
         .where(eq(organizationProfiles.organizationId, input.organizationId));
     } else {
-      await tx
-        .insert(organizationProfiles)
-        .values({
-          organizationId: input.organizationId,
-          ...row,
-          createdAt: input.now,
-        });
+      await tx.insert(organizationProfiles).values({
+        organizationId: input.organizationId,
+        ...row,
+        createdAt: input.now,
+      });
     }
   });
   return loadSetupProfile(input.organizationId);
