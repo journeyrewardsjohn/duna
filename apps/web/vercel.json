@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/health-retention",
       "schedule": "40 4 * * *"
+    },
+    {
+      "path": "/api/cron/add-score-cleanup",
+      "schedule": "25 5 * * *"
     }
   ]
 }

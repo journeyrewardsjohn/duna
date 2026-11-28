@@ -68,6 +68,11 @@ import {
   facilityPublicRouter,
 } from "./routers/facility";
 import { searchPlayerRouter, searchPublicRouter } from "./routers/search";
+import {
+  addScoreAdminRouter,
+  addScorePlayerRouter,
+  addScorePublicRouter,
+} from "./routers/add-score";
 import { healthPlayerRouter } from "./routers/health";
 import {
   conditionsOperatorRouter,
@@ -2785,6 +2790,8 @@ const publicRouter = router({
   // W3-0 seams (schema steward): legal document versions.
   legal: legalPublicRouter,
   participation: participationPublicRouter,
+  // SITE-3: add a score without an account (./routers/add-score.ts).
+  addScore: addScorePublicRouter,
 });
 
 const playerRouter = router({
@@ -8546,6 +8553,8 @@ const playerRouter = router({
   households: householdsPlayerRouter,
   legal: legalPlayerRouter,
   participation: participationPlayerRouter,
+  // SITE-3: claim an anonymous score draft after sign-in.
+  addScore: addScorePlayerRouter,
 });
 
 const operatorRouter = router({
@@ -16473,6 +16482,8 @@ const adminRouter = router({
     .query(() => toolRiskRegistry),
   // R3 seam: provider readiness (./routers/readiness.ts).
   readiness: readinessAdminRouter,
+  // SITE-3: staff review of candidate venues (./routers/add-score.ts).
+  addScore: addScoreAdminRouter,
 });
 
 export const appRouter = router({

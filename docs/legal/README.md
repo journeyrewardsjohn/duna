@@ -337,3 +337,32 @@ Read from the code at the legal-center branch; the Cookie Policy text was not ch
 5. **Public site preferences (SITE-1, 28 November 2026).** The new public site (`apps/web/components/site/boot.ts`) keeps two values in duna.coach local storage, never sent to a server: `duna-site-audience` ("play" or "run": the "I play / I run a club" switch, which changes only the header's call to action) and `duna-site-recent-places` (up to three places the visitor searched, with their map point, for the Where picker). Strictly functional, set only after the visitor acts; no consent banner is needed, but both belong in the section 2 tables.
 6. **Library first-open flag.** `td-first-open` (session or local storage, `packages/ui/src/tideline/motion/motion.tsx`) is set only where `FirstOpen` is used; no app uses it yet. List it when one does.
 7. Confirmed as described: `wos-session`, `duna-organization-context` (httpOnly, 90 days), `duna-theme`, `duna-ai-recent-player-paths`, `duna-ai-recent-hq-paths`, `duna-action-center-paths-*`, `duna-search-recents-*`, `duna-scoring-device-id`, `duna-score-pending:*`, `ask-duna:draft:*`. No analytics, advertising or tag-manager scripts were found. The `duna-demo-persona` cookie exists only in demo and test runs and is refused in production. Error reporting (when its key is set) sends device details with error reports but sets no cookie.
+8. **Add a score without an account (SITE-3, 28 November 2026).** `/add-score` sets a first-party cookie `duna-score-draft`: an HTTP-only, `SameSite=Lax`, `Secure` (production) random token that finds the visitor's anonymous score draft on Duna; it expires with the draft (7 days after the draft was started) and is cleared on claim or Start over. Strictly necessary for a service the visitor asked for (set only after they save a step); belongs in the section 2 tables. The flow also reuses `duna-site-recent-places` (item 5).
+
+## (h) Anonymous score submissions: what the drafts must say (for counsel, SITE-3)
+
+The legal texts were not changed. What the code does is in `docs/product/add-score.md`. Points for
+counsel and the owner:
+
+1. **Privacy Policy, data we collect without an account.** Describe the anonymous draft: where the
+   person played (a Duna venue, a maps-provider place, or a court they describe with an address or a
+   location pin from their device), the score, day, format, and first names or initials they type for
+   other players; kept 7 days from when it was started, then deleted; no email, phone or IP address
+   stored with it.
+2. **Third-party data.** Names typed for other players are personal data about people who have not
+   used Duna. State the lawful basis (legitimate interest in recording a match all players agreed to
+   record), that the names are first names or initials only, never shown publicly, used only to set up
+   the match on claim, and how those players can object or have their name removed once invited.
+3. **Contacts at claim.** A phone or email typed for another player is used once, to send a confirm
+   link through the existing invitation path: say so, and how long the invitation path keeps it.
+4. **Location pin.** "Use where I am now" sends the device's coordinates for a court the person adds;
+   say it is used for that court only and kept with the candidate venue.
+5. **Candidate venues.** Places players name are reviewed by staff and may become listings; the
+   submitter is counted but not identified publicly. Content from the maps provider is kept at most
+   30 days (place ids longer, as the provider's terms allow).
+6. **Under 13.** The flow says adding a score without an account is for players 13 and over, and an
+   under-13 account cannot claim a draft. Confirm this notice is enough for COPPA when no account
+   exists, or whether an age gate is needed before the first save.
+7. **Cookie Policy.** List `duna-score-draft` (item g.8).
+8. **Ratings.** Terms should keep saying a self-reported result moves a rating only after
+   confirmation by the other side; an anonymous submission never does.

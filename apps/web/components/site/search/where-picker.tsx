@@ -1,7 +1,13 @@
 "use client";
 
 import { report } from "@duna/observability";
-import { Button, Icon, type IconName, useAsyncSearch } from "@duna/ui/tideline";
+import {
+  Button,
+  ClubMark,
+  Icon,
+  type IconName,
+  useAsyncSearch,
+} from "@duna/ui/tideline";
 import {
   type KeyboardEvent,
   useEffect,
@@ -17,9 +23,11 @@ import {
   fetchPlaceDetails,
   fetchPlaceSuggestions,
   loadDunaVenues,
+  newPlacesSession,
   PLACES_MIN_LENGTH,
   type PlaceSuggestion,
   PlacesNotConfiguredError,
+  PlacesRateLimitedError,
   readRecentPlaces,
   rememberPlace,
   SearchRequestError,
@@ -52,6 +60,7 @@ function venueChoice(
     latitude: venue.latitude,
     longitude: venue.longitude,
     source: "duna",
+    venueId: venue.id,
   };
 }
 
@@ -118,6 +127,19 @@ interface WherePickerProps {
   /** Escape: close the picker and return focus to its row. */
   readonly onDismiss?: () => void;
   readonly autoFocus?: boolean;
+  /**
+   * `search` (home and discovery): Near me and Anywhere, and nothing found
+   * links to `/add-score`. `flow` (the add-a-score flow): places only, and
+   * "I can't find it" adds the typed place as a new court.
+   */
+  readonly mode?: "search" | "flow";
+  /** Text to start with (a search that found nothing, carried over). */
+  readonly initialText?: string;
+  /** In `flow` mode: add what was typed as a place Duna doesn't know. */
+  readonly onAddPlace?: (text: string) => void;
+  /** The input's accessible name. */
+  readonly label?: string;
+  readonly placeholder?: string;
 }
 
 /**
@@ -131,10 +153,18 @@ export function WherePicker({
   onChoose,
   onDismiss,
   autoFocus,
+  mode = "search",
+  initialText = "",
+  onAddPlace,
+  label = "Where",
+  placeholder = "A beach, a gym, a city",
 }: WherePickerProps) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText);
+  // One provider session per open picker (its billing model); renewed after
+  // a place is chosen.
+  const session = useRef<string>("");
   const [venues, setVenues] = useState<DunaVenue[]>([]);
   const [recent, setRecent] = useState<ReturnType<typeof readRecentPlaces>>([]);
   const [active, setActive] = useState(0);
@@ -144,7 +174,10 @@ export function WherePicker({
     reference?: string;
   } | null>(null);
   const search = useAsyncSearch<PlaceSuggestion>({
-    search: fetchPlaceSuggestions,
+    search: (query, signal) => {
+      session.current ||= newPlacesSession();
+      return fetchPlaceSuggestions(query, signal, session.current);
+    },
     debounceMs: WHERE_DEBOUNCE_MS,
     minLength: PLACES_MIN_LENGTH,
     getKey: (place) => place.placeId,
@@ -162,8 +195,17 @@ export function WherePicker({
     };
   }, [autoFocus]);
 
+  // A search that found nothing arrives with its text: look it up once.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !initialText.trim()) return;
+    seeded.current = true;
+    search.setQuery(initialText);
+  }, [initialText, search]);
+
   const placesOff = search.error instanceof PlacesNotConfiguredError;
-  const placesFailed = search.status === "error" && !placesOff;
+  const placesBusy = search.error instanceof PlacesRateLimitedError;
+  const placesFailed = search.status === "error" && !placesOff && !placesBusy;
   const failureReference = useMemo(() => {
     if (!placesFailed) return undefined;
     const reference =
@@ -180,6 +222,16 @@ export function WherePicker({
 
   const typed = text.trim();
   const options = useMemo<Option[]>(() => {
+    if (!typed && mode === "flow") {
+      return [
+        ...recent.map((choice, index): Option => ({
+          id: `recent-${index}`,
+          group: "Recent",
+          kind: "chosen",
+          choice,
+        })),
+      ];
+    }
     if (!typed) {
       const popular = [...venues]
         .sort((left, right) => right.courtCount - left.courtCount)
@@ -218,20 +270,26 @@ export function WherePicker({
         kind: "venue",
         venue,
       }));
-    const places = (placesOff ? [] : search.results).map((place): Option => ({
-      id: `place-${place.placeId}`,
-      group: "Places",
-      kind: "place",
-      place,
-    }));
+    const places = (placesOff || placesBusy ? [] : search.results).map(
+      (place): Option => ({
+        id: `place-${place.placeId}`,
+        group: "Places",
+        kind: "place",
+        place,
+      }),
+    );
+    // Duna's own clubs and courts always come first.
     return [...duna, ...places];
-  }, [typed, venues, recent, search.results, placesOff]);
+  }, [typed, venues, recent, search.results, placesOff, placesBusy, mode]);
 
   useEffect(() => setActive(0), [typed]);
 
   const settled =
     typed.length >= PLACES_MIN_LENGTH &&
-    (search.status === "empty" || search.status === "success" || placesOff);
+    (search.status === "empty" ||
+      search.status === "success" ||
+      placesOff ||
+      placesBusy);
   const nothingFound = settled && options.length === 0;
 
   async function choose(option: Option) {
@@ -275,10 +333,15 @@ export function WherePicker({
       return onChoose(choice);
     }
     try {
-      const choice = await fetchPlaceDetails(option.place);
+      const choice = await fetchPlaceDetails(option.place, session.current);
+      session.current = "";
       rememberPlace(choice);
       onChoose(choice);
     } catch (error) {
+      if (error instanceof PlacesRateLimitedError) {
+        setNotice({ text: error.message });
+        return;
+      }
       const reference = report(error, {
         event: "site.search.place-details.failed",
         level: "warning",
@@ -322,7 +385,7 @@ export function WherePicker({
     <div className="site-where">
       <label className="site-where__field">
         <Icon name="search" size="control" />
-        <span className="td-sr">Where</span>
+        <span className="td-sr">{label}</span>
         <input
           aria-activedescendant={activeId}
           aria-autocomplete="list"
@@ -335,7 +398,7 @@ export function WherePicker({
             search.setQuery(event.target.value);
           }}
           onKeyDown={onKeyDown}
-          placeholder="A beach, a gym, a city"
+          placeholder={placeholder}
           ref={inputRef}
           role="combobox"
           type="text"
@@ -345,6 +408,12 @@ export function WherePicker({
       {placesOff ? (
         <p className="site-where__line">
           Place search is off right now. Clubs and courts on Duna still show.
+        </p>
+      ) : null}
+      {placesBusy ? (
+        <p className="site-where__line" role="status">
+          Lots of searches just now. Try again in a few seconds. Clubs and
+          courts on Duna still show.
         </p>
       ) : null}
       {placesFailed ? (
@@ -397,7 +466,11 @@ export function WherePicker({
                 tabIndex={-1}
               >
                 <span aria-hidden="true" className="site-where__icon">
-                  <Icon name={icon} size="control" />
+                  {option.kind === "venue" ? (
+                    <ClubMark decorative name={option.venue.name} size={36} />
+                  ) : (
+                    <Icon name={icon} size="control" />
+                  )}
                 </span>
                 <span className="site-where__text">
                   <span className="site-where__title">
@@ -420,6 +493,22 @@ export function WherePicker({
           );
         })}
       </ul>
+      {options.some((option) => option.kind === "place") ? (
+        <p className="site-where__line site-where__attribution">
+          Powered by Google
+        </p>
+      ) : null}
+      {mode === "flow" && typed.length >= 2 && !nothingFound && onAddPlace ? (
+        <p className="site-where__line">
+          <button
+            className="site-textbutton"
+            onClick={() => onAddPlace(typed)}
+            type="button"
+          >
+            I can’t find it: add this place
+          </button>
+        </p>
+      ) : null}
       {search.status === "loading" && options.length === 0 ? (
         <p className="site-where__line" role="status">
           Looking for “{typed}”…
@@ -427,13 +516,35 @@ export function WherePicker({
       ) : null}
       {nothingFound ? (
         <div className="site-where__empty" role="status">
-          <p>
-            <strong>We couldn’t find “{typed}”.</strong> Played somewhere we
-            don’t know yet? Add the court and your score.
-          </p>
-          <Button href={siteLinks.addScore} size="sm" variant="secondary">
-            Add the court and a score
-          </Button>
+          {mode === "flow" ? (
+            <>
+              <p>
+                <strong>We couldn’t find “{typed}”.</strong> Add it as a new
+                court: we check new courts before they’re listed for everyone.
+              </p>
+              <Button
+                onClick={() => onAddPlace?.(typed)}
+                size="sm"
+                variant="primary"
+              >
+                Add “{typed}” as a new court
+              </Button>
+            </>
+          ) : (
+            <>
+              <p>
+                <strong>We couldn’t find “{typed}”.</strong> Played somewhere we
+                don’t know yet? Add the court and your score.
+              </p>
+              <Button
+                href={`${siteLinks.addScore}?where=${encodeURIComponent(typed)}`}
+                size="sm"
+                variant="secondary"
+              >
+                Add the court and a score
+              </Button>
+            </>
+          )}
         </div>
       ) : null}
     </div>

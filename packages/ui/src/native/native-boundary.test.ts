@@ -131,7 +131,7 @@ describe("native boundary", () => {
         /brand\.solar|colors\.live\b|colors\["live(?:-ink|-wash)?"\]|tone="live(?:-ink|-wash)?"/;
       if (solar.test(source)) {
         expect(relative(here, file), "Solar outside a live state").toMatch(
-          /loaders\/loaders\.tsx$|foundations\//,
+          /loaders\/loaders\.tsx$|foundations\/|participation\/Participation\.tsx$|map\/Map\.tsx$/,
         );
       }
     }

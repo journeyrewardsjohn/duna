@@ -3,18 +3,15 @@ import { DUNA_HQ_SIGNUP_URL, DUNA_HQ_URL } from "@/lib/site-urls";
 /**
  * Where the public site's links go today. Pages that later packages build
  * (docs/design/website.md section 8) point at the closest live page until
- * they exist (`/add-score`, SITE-4); change the address here when it ships.
+ * they exist; change the address here when it ships.
  */
 export const siteLinks = {
   home: "/",
   findGame: "/discover",
   /** The discovery page that reads Where · When · What from its address. */
   searchResults: "/discover/results",
-  /**
-   * Add a score. `/add-score` (no account needed) is SITE-4; until then this
-   * is the signed-in score entry.
-   */
-  addScore: "/app/score",
+  /** Add a score and where you played, no account needed (SITE-3). */
+  addScore: "/add-score",
   forClubs: "/run-your-club",
   /** Duna Pro for coaches (the index above `/coaches/[handle]` profiles). */
   forCoaches: "/coaches",

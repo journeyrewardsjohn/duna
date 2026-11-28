@@ -26,7 +26,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
-import { useMapboxToken } from "./discovery-map";
+import { useMapboxToken } from "./src/features/find/mapbox-token";
 import {
   DunaNumericText,
   SatoshiText as Text,
