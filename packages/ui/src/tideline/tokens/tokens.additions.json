@@ -1,0 +1,20 @@
+{
+  "note": "Tokens the code needs that the published tokens.json does not carry yet. The token build merges them in; a token of the same name in tokens.json always wins, so each entry disappears from effect once design publishes it.",
+  "type": {
+    "groups": [
+      {
+        "name": "Code additions",
+        "family": "ui",
+        "styles": [
+          {
+            "name": "micro",
+            "fontSize": "12px",
+            "lineHeight": "16px",
+            "fontWeight": 500,
+            "usage": "Chips, badges and counts: the 12px floor."
+          }
+        ]
+      }
+    ]
+  }
+}

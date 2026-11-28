@@ -12,6 +12,14 @@
     {
       "path": "/api/cron/virtual-sessions",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/catalog-participation",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/health-retention",
+      "schedule": "40 4 * * *"
     }
   ]
 }

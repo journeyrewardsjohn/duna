@@ -1,3 +1,5 @@
+> **Superseded by Tideline 4.1.1** (the Duna Design System, 27 November 2026): see [the contract](tideline-4.1.1/README.md). Kept for history and for behaviour the contract does not change.
+
 # Public website refinement — October 4, 2026
 
 The user's current direction is a simpler public site inspired by the navigation

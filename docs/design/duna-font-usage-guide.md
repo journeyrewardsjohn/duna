@@ -1,3 +1,5 @@
+> **Superseded by Tideline 4.1.1** (the Duna Design System, 27 November 2026): see [the contract](tideline-4.1.1/README.md). Kept for history and for behaviour the contract does not change.
+
 # Duna Font Usage Guide
 
 **Status:** authoritative for every Duna surface. This guide supersedes earlier

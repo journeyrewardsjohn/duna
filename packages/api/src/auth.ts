@@ -10,7 +10,20 @@ export interface ProcedurePolicy {
 export const t = initTRPC
   .context<ApiContext>()
   .meta<ProcedurePolicy>()
-  .create();
+  .create({
+    errorFormatter({ shape, error }) {
+      // Duna Health refusals carry a typed reason the app can render
+      // (services/health/policy.ts HealthRefusalReason). Nothing else is added.
+      const cause = error.cause as { healthReason?: unknown } | undefined;
+      const healthReason =
+        typeof cause?.healthReason === "string"
+          ? cause.healthReason
+          : undefined;
+      return healthReason
+        ? { ...shape, data: { ...shape.data, healthReason } }
+        : shape;
+    },
+  });
 
 export const router = t.router;
 export const createCallerFactory = t.createCallerFactory;

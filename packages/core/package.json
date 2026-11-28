@@ -6,7 +6,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./demo": "./src/demo.ts",
-    "./eligibility": "./src/eligibility.ts"
+    "./demo/*": "./src/demo/*.ts",
+    "./eligibility": "./src/eligibility.ts",
+    "./flags": "./src/flags.ts",
+    "./providers": "./src/providers.ts",
+    "./hq-routes": "./src/hq-routes.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

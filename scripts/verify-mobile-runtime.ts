@@ -128,6 +128,13 @@ function verifyPlayerHealthPrivacy(): {
     typeof readPurpose === "string" && readPurpose.length >= 40,
     "apps/player must explain why it reads Apple Health data",
   );
+  // Health is offered to players 13 and over (H1, docs/HEALTH_PRIVACY.md),
+  // reads only what the player chooses, and never writes. Purpose strings
+  // must stay accurate: no adults-only claim, no write claim.
+  assert(
+    /\bchoose\b/i.test(readPurpose) && !/\badults?\b/i.test(readPurpose),
+    "apps/player Health read purpose must say the player chooses the data and must not claim an adults-only audience",
+  );
   assert(
     typeof updatePurpose === "string" &&
       updatePurpose.length >= 40 &&

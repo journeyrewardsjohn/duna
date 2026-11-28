@@ -6,14 +6,17 @@ on:
     branches:
       - main
 
+# Pull-request runs cancel their own superseded runs. Runs on main are keyed by
+# commit, so a newer merge never cancels or replaces an older main run.
 concurrency:
-  group: verify-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'push' && format('verify-push-{0}', github.sha) || format('verify-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  release-gate:
+  static-checks:
+    name: static-checks
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
       NEXT_PUBLIC_HQ_URL: http://127.0.0.1:3001
     steps:
@@ -31,32 +34,46 @@ jobs:
           node-version: 24.21.0
           cache: pnpm
 
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo/cache
+            node_modules/.cache/turbo
+          key: turbo-static-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-static-${{ runner.os }}-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build HQ agent
+        run: pnpm --filter @duna/hq build:agent
+
+      - name: Check formatting
+        run: pnpm format:check
 
       - name: Verify Duna AI feature knowledge
         run: pnpm knowledge:check
 
-      - name: Install test browser
-        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify design system
+        run: pnpm verify:design-system
 
-      - name: Run release gate
-        run: pnpm --filter @duna/hq build:agent && pnpm verify
+      - name: Verify readable type
+        run: pnpm verify:readable-type
 
-      - name: Save browser QA evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-qa
-          path: |
-            test-results/
-            playwright-report/
-          if-no-files-found: ignore
-          retention-days: 7
+      - name: Lint
+        run: pnpm lint
 
-  mobile-bundles:
+      - name: Typecheck
+        run: pnpm typecheck
+
+  unit-tests:
+    name: unit-tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
+    env:
+      NEXT_PUBLIC_HQ_URL: http://127.0.0.1:3001
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -69,17 +86,172 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.22.0
+          node-version: 24.21.0
           cache: pnpm
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo/cache
+            node_modules/.cache/turbo
+          key: turbo-unit-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-unit-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build HQ agent
+        run: pnpm --filter @duna/hq build:agent
+
+      - name: Unit tests
+        run: pnpm test
+
       - name: Verify native React runtime
         run: pnpm verify:mobile-runtime
 
+  build-and-e2e:
+    name: build-and-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NEXT_PUBLIC_HQ_URL: http://127.0.0.1:3001
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo/cache
+            node_modules/.cache/turbo
+            apps/web/.next/cache
+            apps/hq/.next/cache
+          key: turbo-e2e-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-e2e-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install test browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build HQ agent
+        run: pnpm --filter @duna/hq build:agent
+
+      - name: Build
+        run: pnpm build
+
+      - name: Browser tests (desktop, tablet, phone)
+        run: pnpm test:e2e
+
+      - name: Save browser QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-qa
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Stable required check: succeeds only when every split job succeeded.
+  release-gate:
+    name: release-gate
+    if: ${{ always() }}
+    needs:
+      - static-checks
+      - unit-tests
+      - build-and-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every verification job to succeed
+        env:
+          STATIC_CHECKS: ${{ needs.static-checks.result }}
+          UNIT_TESTS: ${{ needs.unit-tests.result }}
+          BUILD_AND_E2E: ${{ needs.build-and-e2e.result }}
+        run: |
+          echo "static-checks=$STATIC_CHECKS unit-tests=$UNIT_TESTS build-and-e2e=$BUILD_AND_E2E"
+          if [ "$STATIC_CHECKS" != "success" ] || [ "$UNIT_TESTS" != "success" ] || [ "$BUILD_AND_E2E" != "success" ]; then
+            echo "::error::A verification job did not succeed."
+            exit 1
+          fi
+
+  # Always reports. The expensive steps run only when mobile-relevant paths
+  # changed (decided inside the job so the check is never missing).
+  mobile-bundles:
+    name: mobile-bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Decide whether mobile bundles are affected
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Mobile bundles always run on main. On pull requests they are skipped
+          # only when every changed file is outside the native apps and the
+          # shared packages, tooling, and lockfile they consume.
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "Not a pull request: running."; exit 0
+          fi
+          if ! git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "Could not fetch base: running."; exit 0
+          fi
+          changed="$(git diff --name-only "$BASE_SHA" HEAD || echo UNKNOWN)"
+          echo "Changed files:"; echo "$changed"
+          relevant="$(echo "$changed" | grep -Ev '^(docs/|apps/web/|apps/hq/|apps/voice-agent/|tests/|output/|.*\.md$|\.github/pull_request_template\.md$)' | grep -v '^$' || true)"
+          if [ -n "$relevant" ] || [ "$changed" = "UNKNOWN" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "Mobile-relevant changes found: running."
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"; echo "No mobile-relevant changes: skipping bundle steps."
+          fi
+
+      - name: Install pnpm
+        if: steps.scope.outputs.run == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Install Node.js
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify native React runtime
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm verify:mobile-runtime
+
       - name: Export Duna
+        if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @duna/player export
 
       - name: Export Duna Pro
+        if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @duna/pro export

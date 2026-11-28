@@ -13,6 +13,7 @@ import {
   follows,
   getDatabase,
   healthConnections,
+  healthConsents,
   healthDailyCheckIns,
   healthSamples,
   healthSharingGrants,
@@ -39,6 +40,11 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import {
+  healthDemoGrants,
+  healthDemoPerson,
+  healthDemoSamples,
+} from "@duna/core/demo/health";
 import type { ApiActor } from "./context";
 import type {
   HealthCategory,
@@ -57,6 +63,33 @@ import type {
   HealthVideoOverlay,
 } from "./contracts";
 import { buildHealthIntelligence } from "./health-intelligence";
+import { usesDemoData } from "./services/data-source";
+import {
+  decideForSubject,
+  loadHealthSubjectState,
+  recordHealthConsent,
+  requireHealthEligibility,
+  type HealthSubjectState,
+} from "./services/health/consent";
+import { HealthServiceError } from "./services/health/errors";
+import {
+  HEALTH_ADULT_AGE,
+  HEALTH_METRIC_CATEGORY,
+  HEALTH_POLICY_VERSION,
+  HEALTH_REFUSAL_MESSAGES,
+  checkHealthGrantRequest,
+  filterSamplesForBand,
+  healthGrantIsEffective,
+  isMinorBand,
+  normalizeStorefront,
+  organizationViewerRolesFor,
+  subtractMonths,
+  type HealthAgeBand,
+  type HealthGrantApprovalStatus,
+  type HealthPermit,
+} from "./services/health/policy";
+
+export { HealthServiceError };
 
 export const HEALTH_CONSENT_VERSION = "duna-health-v1";
 export const HEALTH_CONSENT_TEXT =
@@ -75,27 +108,7 @@ const ALL_SCOPES: readonly HealthSharingScope[] = [
 ];
 const STAFF_HEALTH_ROLES = ["owner", "manager", "coach"] as const;
 
-const METRIC_CATEGORY: Readonly<Record<HealthMetric, HealthCategory>> = {
-  "heart-rate": "heart",
-  "resting-heart-rate": "heart",
-  "heart-rate-variability": "heart",
-  "walking-heart-rate": "heart",
-  "vo2-max": "heart",
-  "respiratory-rate": "recovery",
-  "oxygen-saturation": "recovery",
-  "body-temperature": "recovery",
-  sleep: "recovery",
-  "active-energy": "activity",
-  "basal-energy": "activity",
-  steps: "activity",
-  distance: "activity",
-  "exercise-minutes": "activity",
-  "stand-minutes": "activity",
-  workout: "activity",
-  weight: "body",
-  "body-fat": "body",
-  "lean-body-mass": "body",
-};
+const METRIC_CATEGORY = HEALTH_METRIC_CATEGORY;
 
 const ALL_HEALTH_METRICS = Object.keys(METRIC_CATEGORY) as HealthMetric[];
 // HealthKit can produce tens of thousands of heart-rate samples for one
@@ -146,6 +159,10 @@ type HealthAccess = {
   readonly owner: boolean;
   readonly categories: readonly HealthCategory[];
   readonly scopes: readonly HealthSharingScope[];
+  /** Metrics this owner's band may hold; reads filter to them. */
+  readonly metrics?: readonly HealthMetric[];
+  /** The owner's age band today (from their birth date). */
+  readonly ownerBand?: HealthAgeBand;
 };
 
 export function healthGrantAllows(input: {
@@ -208,23 +225,6 @@ export function redactHealthIntelligenceForViewer(
   };
 }
 
-export class HealthServiceError extends Error {
-  constructor(
-    readonly code:
-      | "DATABASE_REQUIRED"
-      | "ENCRYPTION_REQUIRED"
-      | "ADULT_REQUIRED"
-      | "HEALTH_NOT_FOUND"
-      | "ACCESS_DENIED"
-      | "INVALID_GRANT"
-      | "GRANT_NOT_FOUND",
-    message: string,
-  ) {
-    super(message);
-    this.name = "HealthServiceError";
-  }
-}
-
 function requireDatabase(): void {
   if (!process.env.DATABASE_URL) {
     throw new HealthServiceError(
@@ -234,13 +234,103 @@ function requireDatabase(): void {
   }
 }
 
-function requireAdult(actor: ApiActor): void {
-  if (actor.ageBand !== "adult") {
-    throw new HealthServiceError(
-      "ADULT_REQUIRED",
-      "Duna Health sharing is currently available only to verified adults.",
-    );
+/** Region refusals are audited (no storefront value, no Health values). */
+async function auditRegionRefusal(input: {
+  readonly actor: ApiActor;
+  readonly action: string;
+  readonly error: unknown;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
+  readonly now: Date;
+}): Promise<void> {
+  if (
+    !(input.error instanceof HealthServiceError) ||
+    (input.error.healthReason !== "region-not-supported" &&
+      input.error.healthReason !== "region-unknown") ||
+    usesDemoData()
+  ) {
+    return;
   }
+  await recordHealthAudit({
+    actorPersonId: input.actor.personId,
+    action: "health.refused_region",
+    entityType: "health-connection",
+    entityId: input.actor.personId,
+    reason: `Duna Health refused ${input.action}: the App Store storefront was ${input.error.healthReason === "region-unknown" ? "not reported" : "outside the United States"} under ${HEALTH_POLICY_VERSION}.`,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+    now: input.now,
+  });
+}
+
+/** Stores the last storefront claim on an existing connection. */
+async function recordStorefrontClaim(input: {
+  readonly personId: string;
+  readonly storefront?: string | null;
+  readonly now: Date;
+}): Promise<void> {
+  if (usesDemoData()) return;
+  await getDatabase()
+    .update(healthConnections)
+    .set({
+      storefrontCountry: normalizeStorefront(input.storefront) ?? null,
+      storefrontReportedAt: input.now,
+      updatedAt: input.now,
+    })
+    .where(eq(healthConnections.personId, input.personId));
+}
+
+/**
+ * Runs the policy for the signed-in owner. Region refusals are audited and
+ * the reported storefront is stored either way.
+ */
+async function requireOwnHealthAction(input: {
+  readonly actor: ApiActor;
+  readonly action: "sync" | "check-in" | "create-grant";
+  readonly storefront?: string | null;
+  readonly now: Date;
+  readonly requestId?: string;
+  readonly ipAddress?: string;
+}): Promise<{
+  readonly state: HealthSubjectState;
+  readonly permit: HealthPermit;
+}> {
+  if (input.action !== "sync") {
+    await recordStorefrontClaim({
+      personId: input.actor.personId,
+      storefront: input.storefront,
+      now: input.now,
+    });
+  }
+  try {
+    return await requireHealthEligibility({
+      actor: input.actor,
+      action: input.action,
+      storefront: input.storefront,
+      now: input.now,
+    });
+  } catch (error) {
+    if (input.action === "sync") {
+      await recordStorefrontClaim({
+        personId: input.actor.personId,
+        storefront: input.storefront,
+        now: input.now,
+      });
+    }
+    await auditRegionRefusal({ ...input, error });
+    throw error;
+  }
+}
+
+function adultBornOnOrBefore(now: Date): string {
+  return subtractMonths(now, HEALTH_ADULT_AGE * 12)
+    .toISOString()
+    .slice(0, 10);
+}
+
+/** SQL twin of currentAgeBand(...) === "adult" for recipient lists. */
+function personIsAdultNow(now: Date) {
+  return sql`((${people.birthDate} IS NOT NULL AND ${people.birthDate} <= ${adultBornOnOrBefore(now)}::date) OR (${people.birthDate} IS NULL AND ${people.ageBand} = 'adult'))`;
 }
 
 async function requireNoPendingAccountDeletion(
@@ -485,6 +575,7 @@ async function activeOrganizationViewer(
   ownerPersonId: string,
   viewerPersonId: string,
   organizationId: string,
+  roles: readonly string[] = STAFF_HEALTH_ROLES,
 ): Promise<boolean> {
   const ownerOrganizations = await ownerOrganizationIds(ownerPersonId);
   if (!ownerOrganizations.includes(organizationId)) return false;
@@ -496,7 +587,10 @@ async function activeOrganizationViewer(
         eq(organizationMemberships.organizationId, organizationId),
         eq(organizationMemberships.personId, viewerPersonId),
         eq(organizationMemberships.active, true),
-        inArray(organizationMemberships.role, [...STAFF_HEALTH_ROLES]),
+        inArray(
+          organizationMemberships.role,
+          roles as (typeof STAFF_HEALTH_ROLES)[number][],
+        ),
       ),
     )
     .limit(1);
@@ -507,9 +601,27 @@ async function resolveHealthAccess(input: {
   readonly ownerPersonId: string;
   readonly viewerPersonId: string;
   readonly now: Date;
+  readonly ownerState?: HealthSubjectState;
 }): Promise<HealthAccess | undefined> {
+  const ownerState =
+    input.ownerState ??
+    (await loadHealthSubjectState({
+      personId: input.ownerPersonId,
+      now: input.now,
+    }));
+  const ownerPermit = decideForSubject(ownerState, "view-own");
+  if (!ownerPermit.allowed) return undefined;
+  const allowedCategories = ownerPermit.allowedCategories;
   if (input.ownerPersonId === input.viewerPersonId) {
-    return { owner: true, categories: ALL_CATEGORIES, scopes: ALL_SCOPES };
+    return {
+      owner: true,
+      categories: ALL_CATEGORIES.filter((category) =>
+        allowedCategories.includes(category),
+      ),
+      scopes: ALL_SCOPES,
+      metrics: ownerPermit.allowedMetrics,
+      ownerBand: ownerState.band,
+    };
   }
   const grants = await getDatabase()
     .select()
@@ -527,8 +639,23 @@ async function resolveHealthAccess(input: {
     );
   const valid = [] as typeof grants;
   for (const grant of grants) {
+    const audienceKind = grant.audienceKind as
+      "player" | "coach" | "organization";
+    if (
+      !healthGrantIsEffective({
+        audienceKind,
+        approvalStatus: grant.approvalStatus as HealthGrantApprovalStatus,
+        expiresAt: grant.expiresAt,
+        revokedAt: grant.revokedAt,
+        ownerBand: ownerState.band,
+        juniorsEnabled: ownerState.juniorsEnabled,
+        now: input.now,
+      })
+    ) {
+      continue;
+    }
     const baseGrant = {
-      audienceKind: grant.audienceKind as "player" | "coach" | "organization",
+      audienceKind,
       audiencePersonId: grant.audiencePersonId,
       viewerPersonId: input.viewerPersonId,
       expiresAt: grant.expiresAt,
@@ -568,6 +695,7 @@ async function resolveHealthAccess(input: {
           input.ownerPersonId,
           input.viewerPersonId,
           grant.organizationId,
+          organizationViewerRolesFor(ownerState.band),
         ),
       })
     ) {
@@ -579,10 +707,12 @@ async function resolveHealthAccess(input: {
     owner: false,
     categories: unique(
       valid.flatMap((grant) => grant.categories as HealthCategory[]),
-    ),
+    ).filter((category) => allowedCategories.includes(category)),
     scopes: unique(
       valid.flatMap((grant) => grant.scopes as HealthSharingScope[]),
     ),
+    metrics: ownerPermit.allowedMetrics,
+    ownerBand: ownerState.band,
   };
 }
 
@@ -593,19 +723,29 @@ export async function syncHealthSamples(input: {
   readonly earliestAuthorizedAt?: Date;
   readonly samples: readonly HealthSampleInput[];
   readonly deletedExternalIds: readonly string[];
+  readonly storefront?: string | null;
   readonly syncedAt: Date;
   readonly requestId?: string;
   readonly ipAddress?: string;
 }): Promise<{
   readonly imported: number;
   readonly deleted: number;
+  readonly dropped: number;
   readonly protocolVersion: 2;
 }> {
-  requireDatabase();
-  requireAdult(input.actor);
-  await requireNoPendingAccountDeletion(input.actor.personId);
-  masterKey();
-  const categories = unique(input.categories);
+  const { permit } = await requireOwnHealthAction({
+    actor: input.actor,
+    action: "sync",
+    storefront: input.storefront,
+    now: input.syncedAt,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+  });
+  // A minor may sync only the minimal categories; anything else selected on
+  // an older client is ignored rather than stored.
+  const categories = unique(input.categories).filter((category) =>
+    permit.allowedCategories.includes(category),
+  );
   if (categories.length === 0) {
     throw new HealthServiceError(
       "INVALID_GRANT",
@@ -613,7 +753,9 @@ export async function syncHealthSamples(input: {
     );
   }
   const disallowed = input.samples.find(
-    (sample) => !categories.includes(metricCategory(sample.metric)),
+    (sample) =>
+      permit.allowedMetrics.includes(sample.metric) &&
+      !categories.includes(metricCategory(sample.metric)),
   );
   if (disallowed) {
     throw new HealthServiceError(
@@ -621,11 +763,40 @@ export async function syncHealthSamples(input: {
       "A sample was outside the Health categories selected by the player.",
     );
   }
+  // Metrics outside the band's allowlist are dropped before encryption and
+  // never stored; the count is returned and audited, never the values.
+  const { kept: samples, dropped } = filterSamplesForBand(
+    input.samples,
+    permit.allowedMetrics,
+  );
+  if (usesDemoData()) {
+    return {
+      imported: samples.length,
+      deleted: input.deletedExternalIds.length,
+      dropped,
+      protocolVersion: 2,
+    };
+  }
+  requireDatabase();
+  await requireNoPendingAccountDeletion(input.actor.personId);
+  masterKey();
   const database = getDatabase();
+  const [existingConnection] = await database
+    .select({ purgeRequestedAt: healthConnections.purgeRequestedAt })
+    .from(healthConnections)
+    .where(eq(healthConnections.personId, input.actor.personId))
+    .limit(1);
+  if (existingConnection?.purgeRequestedAt) {
+    throw new HealthServiceError(
+      "ACCESS_DENIED",
+      "Duna is deleting previously imported Health data after a withdrawal. Syncing can start again once that finishes (within a day).",
+    );
+  }
+  const storefrontCountry = normalizeStorefront(input.storefront) ?? null;
   const deletionHashes = input.deletedExternalIds.map((externalId) =>
     externalIdHash(input.actor.personId, externalId),
   );
-  const rows = input.samples.map((sample) => ({
+  const rows = samples.map((sample) => ({
     personId: input.actor.personId,
     externalIdHash: externalIdHash(input.actor.personId, sample.externalId),
     metric: sample.metric,
@@ -663,6 +834,8 @@ export async function syncHealthSamples(input: {
       earliestAuthorizedAt: input.earliestAuthorizedAt,
       lastSyncedAt: input.syncedAt,
       revokedAt: null,
+      storefrontCountry,
+      storefrontReportedAt: input.syncedAt,
       createdAt: input.syncedAt,
       updatedAt: input.syncedAt,
     })
@@ -676,6 +849,8 @@ export async function syncHealthSamples(input: {
         earliestAuthorizedAt: sql`COALESCE(LEAST(${healthConnections.earliestAuthorizedAt}, excluded.earliest_authorized_at), ${healthConnections.earliestAuthorizedAt}, excluded.earliest_authorized_at)`,
         lastSyncedAt: input.syncedAt,
         revokedAt: null,
+        storefrontCountry,
+        storefrontReportedAt: input.syncedAt,
         updatedAt: input.syncedAt,
       },
     });
@@ -685,7 +860,7 @@ export async function syncHealthSamples(input: {
     action: "health.sync_completed",
     entityType: "health-connection",
     entityId: input.actor.personId,
-    reason: `The player synchronized ${rows.length} encrypted Apple Health records and submitted ${deletionHashes.length} deletion tombstones under ${HEALTH_CONSENT_VERSION}.`,
+    reason: `The player synchronized ${rows.length} encrypted Apple Health records, dropped ${dropped} outside their age band's metric allowlist, and submitted ${deletionHashes.length} deletion tombstones under ${HEALTH_CONSENT_VERSION} and ${HEALTH_POLICY_VERSION}.`,
     traceId: input.requestId,
     ipAddress: input.ipAddress,
     createdAt: input.syncedAt,
@@ -723,7 +898,7 @@ export async function syncHealthSamples(input: {
     ]);
     deleted = removed.length;
   }
-  return { imported: rows.length, deleted, protocolVersion: 2 };
+  return { imported: rows.length, deleted, dropped, protocolVersion: 2 };
 }
 
 function serializeHealthCheckIn(
@@ -758,12 +933,21 @@ async function loadHealthCheckIns(
 export async function saveHealthCheckIn(input: {
   readonly actor: ApiActor;
   readonly checkIn: HealthCheckInInput;
+  readonly storefront?: string | null;
   readonly requestId?: string;
   readonly ipAddress?: string;
   readonly now: Date;
 }): Promise<{ readonly saved: true }> {
+  await requireOwnHealthAction({
+    actor: input.actor,
+    action: "check-in",
+    storefront: input.storefront,
+    now: input.now,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+  });
+  if (usesDemoData()) return { saved: true };
   requireDatabase();
-  requireAdult(input.actor);
   await requireNoPendingAccountDeletion(input.actor.personId);
   masterKey();
   const dateAtNoon = new Date(`${input.checkIn.date}T12:00:00.000Z`);
@@ -815,8 +999,14 @@ export async function saveHealthCheckIn(input: {
 
 async function loadSharingCandidates(
   ownerPersonId: string,
+  options: {
+    readonly now: Date;
+    readonly audiences: readonly ("player" | "coach" | "organization")[];
+    readonly minor?: boolean;
+  },
 ): Promise<HealthSharingCandidate[]> {
   const database = getDatabase();
+  const adultNow = personIsAdultNow(options.now);
   const organizationIds = await ownerOrganizationIds(ownerPersonId);
   const ownerTeamRows = await database
     .select({ teamId: teamMembers.teamId })
@@ -836,7 +1026,7 @@ async function loadSharingCandidates(
           and(
             eq(follows.followerPersonId, ownerPersonId),
             eq(follows.entityType, "person"),
-            eq(people.ageBand, "adult"),
+            adultNow,
             eq(people.status, "active"),
           ),
         ),
@@ -857,7 +1047,7 @@ async function loadSharingCandidates(
                   ownerTeamRows.map((row) => row.teamId),
                 ),
                 ne(people.id, ownerPersonId),
-                eq(people.ageBand, "adult"),
+                adultNow,
                 eq(people.status, "active"),
               ),
             ),
@@ -879,7 +1069,7 @@ async function loadSharingCandidates(
                 ),
                 eq(organizationMemberships.role, "coach"),
                 eq(organizationMemberships.active, true),
-                eq(people.ageBand, "adult"),
+                adultNow,
                 eq(people.status, "active"),
               ),
             ),
@@ -891,7 +1081,9 @@ async function loadSharingCandidates(
             .where(inArray(organizations.id, organizationIds)),
     ]);
   const players = new Map(
-    [...followRows, ...teammateRows].map((row) => [row.id, row]),
+    options.audiences.includes("player")
+      ? [...followRows, ...teammateRows].map((row) => [row.id, row])
+      : [],
   );
   return [
     ...[...players.values()].map((person) => ({
@@ -912,7 +1104,9 @@ async function loadSharingCandidates(
       id: `organization:${organization.id}`,
       kind: "organization" as const,
       label: organization.name,
-      detail: "Authorized owner, manager, and coach staff",
+      detail: options.minor
+        ? "Club coaching staff"
+        : "Authorized owner, manager, and coach staff",
       organizationId: organization.id,
     })),
   ].sort((a, b) => a.label.localeCompare(b.label));
@@ -922,6 +1116,7 @@ async function serializeActiveGrants(input: {
   readonly ownerPersonId: string;
   readonly now: Date;
   readonly candidates: readonly HealthSharingCandidate[];
+  readonly includePending?: boolean;
 }): Promise<HealthSharingGrant[]> {
   const rows = await getDatabase()
     .select()
@@ -1002,6 +1197,8 @@ async function serializeActiveGrants(input: {
       scopes: row.scopes as HealthSharingScope[],
       expiresAt: row.expiresAt.toISOString(),
       createdAt: row.createdAt.toISOString(),
+      approvalStatus: row.approvalStatus as HealthGrantApprovalStatus,
+      approvedAt: row.approvedAt?.toISOString(),
     };
   });
 }
@@ -1016,35 +1213,63 @@ export async function createHealthSharingGrant(input: {
   readonly categories: readonly HealthCategory[];
   readonly scopes: readonly HealthSharingScope[];
   readonly expiresAt: Date;
+  readonly storefront?: string | null;
   readonly requestId?: string;
   readonly ipAddress?: string;
   readonly now: Date;
-}): Promise<{ readonly id: string }> {
-  requireDatabase();
-  requireAdult(input.actor);
-  await requireNoPendingAccountDeletion(input.actor.personId);
+}): Promise<{
+  readonly id: string;
+  readonly approvalStatus: HealthGrantApprovalStatus;
+}> {
+  const { state, permit } = await requireOwnHealthAction({
+    actor: input.actor,
+    action: "create-grant",
+    storefront: input.storefront,
+    now: input.now,
+    requestId: input.requestId,
+    ipAddress: input.ipAddress,
+  });
   const categories = unique(input.categories);
   const scopes = unique(input.scopes);
-  if (categories.length === 0 || scopes.length === 0) {
+  const violation = checkHealthGrantRequest({
+    permit,
+    audienceKind: input.candidate.kind,
+    categories,
+    scopes,
+    expiresAt: input.expiresAt,
+    now: input.now,
+  });
+  if (violation) {
     throw new HealthServiceError(
       "INVALID_GRANT",
-      "Choose both Health categories and how the recipient may use them.",
+      {
+        "audience-not-allowed":
+          "Players under 18 can share Health only with a coach or their club's coaching staff.",
+        "no-categories":
+          "Choose both Health categories and how the recipient may use them.",
+        "category-not-allowed":
+          "That Health category is not collected for players under 18.",
+        "video-overlay-needs-heart":
+          "Video overlays require explicit access to the Heart category.",
+        "expiry-in-past": `Health sharing must expire within ${permit.maxGrantDays} days.`,
+        "expiry-too-long": permit.minor
+          ? `Health sharing for players under 18 lasts at most ${permit.maxGrantDays} days.`
+          : "Health sharing must expire within one year.",
+      }[violation],
     );
   }
-  if (scopes.includes("video-overlay") && !categories.includes("heart")) {
-    throw new HealthServiceError(
-      "INVALID_GRANT",
-      "Video overlays require explicit access to the Heart category.",
-    );
+  const approvalStatus: HealthGrantApprovalStatus =
+    permit.grantRequiresGuardianApproval ? "pending" : "not-required";
+  if (usesDemoData()) {
+    return { id: randomUUID(), approvalStatus };
   }
-  const maximum = new Date(input.now.getTime() + 366 * 24 * 60 * 60 * 1_000);
-  if (input.expiresAt <= input.now || input.expiresAt > maximum) {
-    throw new HealthServiceError(
-      "INVALID_GRANT",
-      "Health sharing must expire within one year.",
-    );
-  }
-  const candidates = await loadSharingCandidates(input.actor.personId);
+  requireDatabase();
+  await requireNoPendingAccountDeletion(input.actor.personId);
+  const candidates = await loadSharingCandidates(input.actor.personId, {
+    now: input.now,
+    audiences: permit.allowedAudiences,
+    minor: permit.minor,
+  });
   const candidate = candidates.find(
     (item) =>
       item.kind === input.candidate.kind &&
@@ -1064,6 +1289,7 @@ export async function createHealthSharingGrant(input: {
     `categories=${[...categories].sort().join(",")}`,
     `scopes=${[...scopes].sort().join(",")}`,
     `expires=${input.expiresAt.toISOString()}`,
+    `policy=${HEALTH_POLICY_VERSION}`,
   ].join("\n");
   const id = randomUUID();
   const database = getDatabase();
@@ -1094,6 +1320,7 @@ export async function createHealthSharingGrant(input: {
       scopes,
       consentVersion: HEALTH_CONSENT_VERSION,
       consentTextHash: consentTextHash(consent),
+      approvalStatus,
       expiresAt: input.expiresAt,
       createdAt: input.now,
       updatedAt: input.now,
@@ -1101,16 +1328,22 @@ export async function createHealthSharingGrant(input: {
     database.insert(auditLog).values({
       actorPersonId: input.actor.personId,
       actorType: "person",
-      action: "health.sharing_granted",
+      action:
+        approvalStatus === "pending"
+          ? "health.sharing_requested"
+          : "health.sharing_granted",
       entityType: "health-grant",
       entityId: id,
-      reason: `The player explicitly granted ${candidate.kind} access until ${input.expiresAt.toISOString()} under ${HEALTH_CONSENT_VERSION}.`,
+      reason:
+        approvalStatus === "pending"
+          ? `A ${state.band} player asked to share Health with a ${candidate.kind} until ${input.expiresAt.toISOString()}; it stays unreadable until a linked adult guardian approves, under ${HEALTH_POLICY_VERSION}.`
+          : `The player explicitly granted ${candidate.kind} access until ${input.expiresAt.toISOString()} under ${HEALTH_CONSENT_VERSION}.`,
       traceId: input.requestId,
       ipAddress: input.ipAddress,
       createdAt: input.now,
     }),
   ]);
-  return { id };
+  return { id, approvalStatus };
 }
 
 export async function revokeHealthSharingGrant(input: {
@@ -1120,8 +1353,9 @@ export async function revokeHealthSharingGrant(input: {
   readonly ipAddress?: string;
   readonly now: Date;
 }): Promise<{ readonly revoked: true }> {
+  // Stopping a grant is never gated by age, region or the juniors switch.
+  if (usesDemoData()) return { revoked: true };
   requireDatabase();
-  requireAdult(input.actor);
   const updated = await getDatabase()
     .update(healthSharingGrants)
     .set({ revokedAt: input.now, updatedAt: input.now })
@@ -1326,11 +1560,13 @@ export function computeHealthCorrelations(
 function decryptRows(
   rows: readonly (typeof healthSamples.$inferSelect)[],
   categories: readonly HealthCategory[],
+  metrics?: readonly HealthMetric[],
 ): HealthTimelineEntry[] {
   return rows.flatMap((row) => {
     const metric = row.metric as HealthMetric;
     const category = metricCategory(metric);
     if (!categories.includes(category)) return [];
+    if (metrics && !metrics.includes(metric)) return [];
     const payload = decryptHealthPayload({
       encryptedPayload: row.encryptedPayload,
       encryptionIv: row.encryptionIv,
@@ -1567,13 +1803,43 @@ async function buildProfile(input: {
   readonly audit?: boolean;
   readonly requestId?: string;
   readonly ipAddress?: string;
+  readonly ownerState?: HealthSubjectState;
 }): Promise<HealthProfile> {
+  const viewerIsOwner = input.subjectPersonId === input.viewer.personId;
+  let ownerState: HealthSubjectState | undefined;
+  if (viewerIsOwner && input.ownerState) {
+    ownerState = input.ownerState;
+  } else if (viewerIsOwner) {
+    ownerState = (
+      await requireHealthEligibility({
+        actor: input.viewer,
+        action: "view-own",
+        now: input.now,
+      })
+    ).state;
+  } else if (input.viewer.ageBand !== "adult") {
+    // Reading someone else's Health stays adult-only (coaches, club staff).
+    throw new HealthServiceError(
+      "NOT_ELIGIBLE",
+      HEALTH_REFUSAL_MESSAGES["adult-viewer-required"],
+      "adult-viewer-required",
+    );
+  }
+  if (usesDemoData()) {
+    if (!viewerIsOwner || !ownerState) {
+      throw new HealthServiceError(
+        "ACCESS_DENIED",
+        "This player has not shared Duna Health with you.",
+      );
+    }
+    return buildDemoProfile(ownerState, input.viewer.displayName, input.now);
+  }
   requireDatabase();
-  requireAdult(input.viewer);
   const access = await resolveHealthAccess({
     ownerPersonId: input.subjectPersonId,
     viewerPersonId: input.viewer.personId,
     now: input.now,
+    ownerState,
   });
   if (!access || (!access.owner && !access.scopes.includes("summary"))) {
     throw new HealthServiceError(
@@ -1603,36 +1869,21 @@ async function buildProfile(input: {
   if (!subject[0]) {
     throw new HealthServiceError("HEALTH_NOT_FOUND", "Player not found.");
   }
-  const samples = decryptRows(rows, access.categories);
-  const timeline =
-    access.owner || access.scopes.includes("timeline")
-      ? samples.slice(0, 500)
-      : [];
+  const samples = decryptRows(rows, access.categories, access.metrics);
   const matches = await buildMatchContexts(input.subjectPersonId, samples);
-  const heartValues = samples
-    .filter((sample) => sample.metric === "heart-rate")
-    .flatMap((sample) => (sample.value === undefined ? [] : [sample.value]));
-  const sevenDaysAgo = input.now.getTime() - 7 * 24 * 3_600_000;
-  const activeEnergy = samples
-    .filter(
-      (sample) =>
-        sample.metric === "active-energy" &&
-        sample.value !== undefined &&
-        new Date(sample.endedAt).getTime() >= sevenDaysAgo,
-    )
-    .reduce((sum, sample) => sum + (sample.value ?? 0), 0);
   const timezone = connection[0]?.timezone ?? "UTC";
-  const intelligence = buildHealthIntelligence({
+  const profile = assembleProfile({
+    subject: subject[0],
+    access,
     samples,
     checkIns: healthCheckInContextAllowed(access) ? checkIns : [],
+    matches,
     timezone,
     now: input.now,
+    // A minor's Readiness and Strain stay visible only to the minor.
+    hideDerivedScores:
+      !access.owner && isMinorBand(access.ownerBand ?? "unknown"),
   });
-  const intelligenceForViewer = redactHealthIntelligenceForViewer(
-    intelligence,
-    access.owner,
-  );
-  const readiness = intelligence.readiness;
   if (!access.owner && input.audit !== false) {
     await recordHealthAudit({
       actorPersonId: input.viewer.personId,
@@ -1646,9 +1897,55 @@ async function buildProfile(input: {
       now: input.now,
     });
   }
+  return profile;
+}
+
+/** The common read model for a profile once samples are authorized. */
+function assembleProfile(input: {
+  readonly subject: { readonly id: string; readonly displayName: string };
+  readonly access: HealthAccess;
+  readonly samples: readonly HealthTimelineEntry[];
+  readonly checkIns: readonly HealthCheckIn[];
+  readonly matches: HealthProfile["matches"];
+  readonly timezone: string;
+  readonly now: Date;
+  readonly hideDerivedScores?: boolean;
+}): HealthProfile {
+  const { access, samples, matches, timezone } = input;
+  const timeline =
+    access.owner || access.scopes.includes("timeline")
+      ? samples.slice(0, 500)
+      : [];
+  const heartValues = samples
+    .filter((sample) => sample.metric === "heart-rate")
+    .flatMap((sample) => (sample.value === undefined ? [] : [sample.value]));
+  const sevenDaysAgo = input.now.getTime() - 7 * 24 * 3_600_000;
+  const activeEnergy = samples
+    .filter(
+      (sample) =>
+        sample.metric === "active-energy" &&
+        sample.value !== undefined &&
+        new Date(sample.endedAt).getTime() >= sevenDaysAgo,
+    )
+    .reduce((sum, sample) => sum + (sample.value ?? 0), 0);
+  const intelligence = buildHealthIntelligence({
+    samples: input.hideDerivedScores ? [] : samples,
+    checkIns: input.hideDerivedScores ? [] : input.checkIns,
+    timezone,
+    now: input.now,
+  });
+  const intelligenceForViewer = redactHealthIntelligenceForViewer(
+    intelligence,
+    access.owner,
+  );
+  const readiness = intelligence.readiness;
   return {
-    subject: subject[0],
-    access,
+    subject: input.subject,
+    access: {
+      owner: access.owner,
+      categories: access.categories,
+      scopes: access.scopes,
+    },
     summary: {
       latestHeartRate: round(heartValues[0], 0),
       restingHeartRate: round(latestValue(samples, "resting-heart-rate"), 0),
@@ -1681,10 +1978,107 @@ async function buildProfile(input: {
     daily: buildDaily(samples, timezone),
     timeline,
     matches,
-    correlations: computeHealthCorrelations(matches),
+    correlations: input.hideDerivedScores
+      ? []
+      : computeHealthCorrelations(matches),
     intelligence: intelligenceForViewer,
     disclaimer:
       "Duna Readiness and Strain are individualized performance context—not medical advice, diagnosis, injury prediction, or a direction to train. Wearable sleep stages are estimates. Correlations describe this player's available sample and do not establish cause.",
+  };
+}
+
+function buildDemoProfile(
+  state: HealthSubjectState,
+  fallbackName: string,
+  now: Date,
+): HealthProfile {
+  const permit = decideForSubject(state, "view-own");
+  const metrics = permit.allowed ? permit.allowedMetrics : [];
+  const categories = permit.allowed ? permit.allowedCategories : [];
+  const samples: HealthTimelineEntry[] = healthDemoSamples(state.personId, now)
+    .filter((sample) => metrics.includes(sample.metric))
+    .map((sample) => ({
+      id: sample.id,
+      metric: sample.metric,
+      category: metricCategory(sample.metric),
+      kind: sample.kind,
+      startedAt: sample.startedAt,
+      endedAt: sample.endedAt,
+      value: sample.value,
+      unit: sample.unit,
+      categoryValue: sample.categoryValue,
+    }))
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  return assembleProfile({
+    subject: {
+      id: state.personId,
+      displayName:
+        healthDemoPerson(state.personId, now)?.displayName ?? fallbackName,
+    },
+    access: {
+      owner: true,
+      categories: ALL_CATEGORIES.filter((category) =>
+        categories.includes(category),
+      ),
+      scopes: ALL_SCOPES,
+      metrics,
+    },
+    samples,
+    checkIns: [],
+    matches: [],
+    timezone: "UTC",
+    now,
+  });
+}
+
+function buildDemoDashboard(
+  state: HealthSubjectState,
+  permit: HealthPermit,
+  profile: HealthProfile,
+  now: Date,
+): HealthDashboard {
+  const grants = healthDemoGrants(now)
+    .filter((grant) => grant.ownerPersonId === state.personId)
+    .map((grant) => ({
+      id: grant.id,
+      audience: {
+        id:
+          grant.audienceKind === "organization"
+            ? `organization:${grant.organizationId}`
+            : `${grant.audienceKind}:${grant.audiencePersonId}`,
+        kind: grant.audienceKind,
+        label: grant.audienceLabel,
+        detail:
+          grant.audienceKind === "organization"
+            ? "Club coaching staff"
+            : "Coach",
+        personId: grant.audiencePersonId,
+        organizationId: grant.organizationId,
+      },
+      categories: [...grant.categories],
+      scopes: [...grant.scopes],
+      expiresAt: grant.expiresAt,
+      createdAt: grant.createdAt,
+      approvalStatus: grant.approvalStatus,
+    }));
+  const samples = healthDemoSamples(state.personId, now);
+  return {
+    ...profile,
+    connection:
+      samples.length > 0
+        ? {
+            provider: "apple-health",
+            status: "active",
+            enabledCategories: [...permit.allowedCategories],
+            consentVersion: HEALTH_CONSENT_VERSION,
+            timezone: "UTC",
+            lastSyncedAt: now.toISOString(),
+            importedSampleCount: samples.length,
+            purgePending: false,
+          }
+        : undefined,
+    grants,
+    candidates: grants.map((grant) => grant.audience),
   };
 }
 
@@ -1694,13 +2088,21 @@ export async function loadHealthDashboard(input: {
   readonly requestId?: string;
   readonly ipAddress?: string;
 }): Promise<HealthDashboard> {
+  const { state, permit } = await requireHealthEligibility({
+    actor: input.actor,
+    action: "view-own",
+    now: input.now,
+  });
   const profile = await buildProfile({
     subjectPersonId: input.actor.personId,
     viewer: input.actor,
     now: input.now,
     requestId: input.requestId,
     ipAddress: input.ipAddress,
+    ownerState: state,
   });
+  if (usesDemoData())
+    return buildDemoDashboard(state, permit, profile, input.now);
   const database = getDatabase();
   const [connectionRows, sampleStats, checkInRows] = await Promise.all([
     database
@@ -1727,7 +2129,11 @@ export async function loadHealthDashboard(input: {
       .orderBy(desc(healthDailyCheckIns.localDate))
       .limit(1),
   ]);
-  const candidates = await loadSharingCandidates(input.actor.personId);
+  const candidates = await loadSharingCandidates(input.actor.personId, {
+    now: input.now,
+    audiences: permit.allowedAudiences,
+    minor: permit.minor,
+  });
   const grants = await serializeActiveGrants({
     ownerPersonId: input.actor.personId,
     now: input.now,
@@ -1752,6 +2158,7 @@ export async function loadHealthDashboard(input: {
           latestSampleAt: sampleStats[0]?.latestSampleAt
             ? new Date(sampleStats[0].latestSampleAt).toISOString()
             : undefined,
+          purgePending: Boolean(connection.purgeRequestedAt),
         }
       : undefined,
     grants,
@@ -1816,7 +2223,7 @@ export async function loadHealthVideoOverlay(input: {
     )
     .orderBy(healthSamples.startedAt)
     .limit(10_000);
-  const samples = decryptRows(rows, ["heart"]);
+  const samples = decryptRows(rows, ["heart"], access.metrics);
   const points = samples.flatMap((sample) =>
     sample.value === undefined
       ? []
@@ -1864,8 +2271,16 @@ export async function disconnectHealth(input: {
   readonly deletedCheckIns: number;
   readonly revokedGrants: number;
 }> {
+  // Deleting imported data is never gated by age, region or the switch.
+  if (usesDemoData()) {
+    return { deletedSamples: 0, deletedCheckIns: 0, revokedGrants: 0 };
+  }
   requireDatabase();
-  requireAdult(input.actor);
+  const state = await loadHealthSubjectState({
+    personId: input.actor.personId,
+    now: input.now,
+    juniorsEnabled: true,
+  });
   const database = getDatabase();
   const [deleted, deletedCheckIns, revoked] = await database.batch([
     database
@@ -1905,6 +2320,7 @@ export async function disconnectHealth(input: {
           status: "revoked",
           enabledCategories: [],
           revokedAt: input.now,
+          purgeRequestedAt: null,
           updatedAt: input.now,
         },
       }),
@@ -1921,6 +2337,21 @@ export async function disconnectHealth(input: {
       createdAt: input.now,
     }),
   ]);
+  if (isMinorBand(state.band)) {
+    // A minor's disconnect is also a withdrawal of collection consent, so a
+    // later reconnect needs a fresh opt-in and guardian approval.
+    await recordHealthConsent({
+      subjectPersonId: input.actor.personId,
+      actorPersonId: input.actor.personId,
+      actorRole: "subject",
+      kind: "collection",
+      decision: "withdrawn",
+      subjectAgeBand: state.band,
+      disclosureText: HEALTH_DISCONNECT_NOTICE,
+      ipAddress: input.ipAddress,
+      now: input.now,
+    });
+  }
   return {
     deletedSamples: deleted.length,
     deletedCheckIns: deletedCheckIns.length,
@@ -1928,32 +2359,41 @@ export async function disconnectHealth(input: {
   };
 }
 
+const HEALTH_DISCONNECT_NOTICE =
+  "Duna will delete every imported Health record and revoke every Duna sharing grant. Apple Health permissions are managed separately in Settings.";
+
 export async function exportHealthDataForPerson(
   personId: string,
 ): Promise<Record<string, unknown>> {
   requireDatabase();
-  const [connection, sampleRows, checkInRows, grantRows] = await Promise.all([
-    getDatabase()
-      .select()
-      .from(healthConnections)
-      .where(eq(healthConnections.personId, personId))
-      .limit(1),
-    getDatabase()
-      .select()
-      .from(healthSamples)
-      .where(eq(healthSamples.personId, personId))
-      .orderBy(desc(healthSamples.startedAt)),
-    getDatabase()
-      .select()
-      .from(healthDailyCheckIns)
-      .where(eq(healthDailyCheckIns.personId, personId))
-      .orderBy(desc(healthDailyCheckIns.localDate)),
-    getDatabase()
-      .select()
-      .from(healthSharingGrants)
-      .where(eq(healthSharingGrants.ownerPersonId, personId))
-      .orderBy(desc(healthSharingGrants.createdAt)),
-  ]);
+  const [connection, sampleRows, checkInRows, grantRows, consentRows] =
+    await Promise.all([
+      getDatabase()
+        .select()
+        .from(healthConnections)
+        .where(eq(healthConnections.personId, personId))
+        .limit(1),
+      getDatabase()
+        .select()
+        .from(healthSamples)
+        .where(eq(healthSamples.personId, personId))
+        .orderBy(desc(healthSamples.startedAt)),
+      getDatabase()
+        .select()
+        .from(healthDailyCheckIns)
+        .where(eq(healthDailyCheckIns.personId, personId))
+        .orderBy(desc(healthDailyCheckIns.localDate)),
+      getDatabase()
+        .select()
+        .from(healthSharingGrants)
+        .where(eq(healthSharingGrants.ownerPersonId, personId))
+        .orderBy(desc(healthSharingGrants.createdAt)),
+      getDatabase()
+        .select()
+        .from(healthConsents)
+        .where(eq(healthConsents.subjectPersonId, personId))
+        .orderBy(desc(healthConsents.occurredAt)),
+    ]);
   return {
     connection: connection[0] ?? null,
     samples: decryptRows(sampleRows, ALL_CATEGORIES),
@@ -1967,10 +2407,21 @@ export async function exportHealthDataForPerson(
       scopes: grant.scopes,
       consentVersion: grant.consentVersion,
       consentTextHash: grant.consentTextHash,
+      approvalStatus: grant.approvalStatus,
+      approvedAt: grant.approvedAt,
       expiresAt: grant.expiresAt,
       revokedAt: grant.revokedAt,
       createdAt: grant.createdAt,
       updatedAt: grant.updatedAt,
+    })),
+    consents: consentRows.map((consent) => ({
+      actorRole: consent.actorRole,
+      kind: consent.kind,
+      decision: consent.decision,
+      grantId: consent.grantId,
+      policyVersion: consent.policyVersion,
+      disclosureTextHash: consent.disclosureTextHash,
+      occurredAt: consent.occurredAt,
     })),
   };
 }

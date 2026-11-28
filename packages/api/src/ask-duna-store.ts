@@ -17,6 +17,7 @@ import { TRPCError } from "@trpc/server";
 import type { PersonRole } from "@duna/core";
 import { scopesForRoles, type ApiActor } from "./context";
 import { askDunaConversationInput } from "./ask-duna-contracts";
+import { currentAgeBand } from "./age-band";
 
 export type AskDunaConversation = typeof askDunaConversations.$inferSelect;
 export type AskDunaAction = typeof askDunaActions.$inferSelect;
@@ -160,7 +161,7 @@ export async function resolveAskDunaActor(
         ...platformRoles.flatMap((row) => row.scopes),
       ]),
     ],
-    ageBand: person.ageBand as ApiActor["ageBand"],
+    ageBand: currentAgeBand(person, new Date()),
     isDemo: false,
   };
   assertAskDunaOperator(actor);

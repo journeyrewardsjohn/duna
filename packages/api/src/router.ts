@@ -36,6 +36,43 @@ import {
 } from "./auth";
 import type { ApiContext } from "./context";
 import { messagingRouter } from "./messaging-router";
+import { flagsPublicRouter } from "./routers/flags";
+import { readinessAdminRouter } from "./routers/readiness";
+import { setupOperatorRouter } from "./routers/setup";
+import { payOperatorRouter } from "./routers/pay";
+import { teamAvailabilityOperatorRouter } from "./routers/team-availability";
+import { teamPayOperatorRouter } from "./routers/team-pay";
+import { teamPayoutsOperatorRouter } from "./routers/team-payouts";
+import {
+  trainingProgramsOperatorRouter,
+  trainingProgramsPlayerRouter,
+} from "./routers/training-programs";
+import {
+  trainingDrillsOperatorRouter,
+  trainingDrillsPlayerRouter,
+  trainingDrillsPublicRouter,
+} from "./routers/training-drills";
+import { trainingSceneAiOperatorRouter } from "./routers/training-scene-ai";
+import {
+  conciergeOperatorRouter,
+  conciergePlayerRouter,
+} from "./routers/concierge";
+import { websiteWorkspaceOperatorRouter } from "./routers/website-workspace";
+import {
+  websiteTemplatesOperatorRouter,
+  websiteTemplatesPublicRouter,
+} from "./routers/website-templates";
+import {
+  facilityOperatorRouter,
+  facilityPlayerRouter,
+  facilityPublicRouter,
+} from "./routers/facility";
+import { searchPlayerRouter, searchPublicRouter } from "./routers/search";
+import { healthPlayerRouter } from "./routers/health";
+import {
+  conditionsOperatorRouter,
+  conditionsPublicRouter,
+} from "./routers/conditions";
 import {
   accountDeletionReadinessSchema,
   adminOrganizationDetailSchema,
@@ -54,6 +91,11 @@ import {
   bookingCancellationResultSchema,
   catalogCheckoutResultSchema,
   catalogCheckoutStatusSchema,
+  catalogSessionBookingResultSchema,
+  catalogSessionCancellationResultSchema,
+  operatorCatalogSessionOccurrenceSchema,
+  playerCatalogSessionBookingSchema,
+  participationEvaluationSchema,
   customerPaymentScheduleSchema,
   catalogOfferEligibilitySchema,
   consentRecordResultSchema,
@@ -89,6 +131,7 @@ import {
   healthProfileSchema,
   healthSampleInputSchema,
   healthSharingScopeSchema,
+  healthStorefrontCountrySchema,
   matchSummarySchema,
   matchJournalNoteSchema,
   matchJournalWorkspaceSchema,
@@ -243,10 +286,23 @@ import {
   updateOperatorMemberProfile,
 } from "./people-service";
 import {
+  CatalogCheckoutError,
   getCatalogOfferEligibility,
   getCatalogCheckoutStatus,
   startCatalogCheckout,
 } from "./catalog-checkout";
+import {
+  CatalogParticipationError,
+  evaluateCatalogSessionParticipation,
+  loadOperatorCatalogSessionOccurrences,
+} from "./catalog-participation";
+import {
+  bookCatalogSessions,
+  cancelCatalogSessionBooking,
+  CatalogSessionBookingError,
+  loadPlayerCatalogSessionBookings,
+  MAX_CATALOG_SESSIONS_PER_BOOKING,
+} from "./catalog-session-bookings";
 import {
   approveTicketOrder,
   claimTeamEntry,
@@ -1575,11 +1631,13 @@ function throwDomainError(error: unknown): never {
     const code =
       error.code === "HEALTH_NOT_FOUND" || error.code === "GRANT_NOT_FOUND"
         ? "NOT_FOUND"
-        : error.code === "ACCESS_DENIED" || error.code === "ADULT_REQUIRED"
+        : error.code === "ACCESS_DENIED" || error.code === "NOT_ELIGIBLE"
           ? "FORBIDDEN"
           : error.code === "INVALID_GRANT"
             ? "BAD_REQUEST"
-            : "INTERNAL_SERVER_ERROR";
+            : error.code === "POLICY_VERSION_MISMATCH"
+              ? "CONFLICT"
+              : "INTERNAL_SERVER_ERROR";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof PrivacyError) {
@@ -1725,6 +1783,42 @@ function throwDomainError(error: unknown): never {
             : error.code === "EVENT_SEQUENCE_CONFLICT"
               ? "CONFLICT"
               : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CatalogParticipationError) {
+    const code =
+      error.code === "OCCURRENCE_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "DATABASE_REQUIRED"
+          ? "INTERNAL_SERVER_ERROR"
+          : error.code === "INVALID_ATTENDANCE"
+            ? "BAD_REQUEST"
+            : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CatalogSessionBookingError) {
+    const code =
+      error.code === "BOOKING_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "NOT_ALLOWED"
+          ? "FORBIDDEN"
+          : error.code === "INVALID_REQUEST"
+            ? "BAD_REQUEST"
+            : error.code === "DATABASE_REQUIRED"
+              ? "INTERNAL_SERVER_ERROR"
+              : "PRECONDITION_FAILED";
+    throw new TRPCError({ code, message: error.message, cause: error });
+  }
+  if (error instanceof CatalogCheckoutError) {
+    const code =
+      error.code === "CATALOG_ITEM_NOT_FOUND"
+        ? "NOT_FOUND"
+        : error.code === "MEMBERSHIP_REQUIRED" ||
+            error.code === "PARTICIPANT_NOT_ALLOWED"
+          ? "FORBIDDEN"
+          : error.code === "CHECKOUT_UNAVAILABLE"
+            ? "CONFLICT"
+            : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });
   }
   if (error instanceof SandDataServiceError) {
@@ -2669,6 +2763,13 @@ const publicRouter = router({
       if (!coach) throw new TRPCError({ code: "NOT_FOUND" });
       return coach;
     }),
+  // R3 domain seams: code lives in ./routers/<domain>.ts (see ./routers/README.md).
+  flags: flagsPublicRouter,
+  trainingDrills: trainingDrillsPublicRouter,
+  websiteTemplates: websiteTemplatesPublicRouter,
+  facility: facilityPublicRouter,
+  search: searchPublicRouter,
+  conditions: conditionsPublicRouter,
 });
 
 const playerRouter = router({
@@ -3175,7 +3276,9 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
-  healthDashboard: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  healthDashboard: protectedProcedure
     .output(healthDashboardSchema)
     .query(async ({ ctx }) => {
       try {
@@ -3189,7 +3292,9 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
-  healthProfile: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  healthProfile: protectedProcedure
     .input(z.object({ personId: z.string().uuid() }))
     .output(healthProfileSchema)
     .query(async ({ input, ctx }) => {
@@ -3205,7 +3310,9 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
-  syncHealthSamples: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  syncHealthSamples: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-sync",
@@ -3223,12 +3330,14 @@ const playerRouter = router({
         earliestAuthorizedAt: z.iso.datetime().optional(),
         samples: z.array(healthSampleInputSchema).max(500),
         deletedExternalIds: z.array(z.string().uuid()).max(500),
+        storefrontCountry: healthStorefrontCountrySchema,
       }),
     )
     .output(
       z.object({
         imported: z.number().int().nonnegative(),
         deleted: z.number().int().nonnegative(),
+        dropped: z.number().int().nonnegative().optional(),
         protocolVersion: z.literal(2),
       }),
     )
@@ -3243,6 +3352,7 @@ const playerRouter = router({
             : undefined,
           samples: input.samples,
           deletedExternalIds: input.deletedExternalIds,
+          storefront: input.storefrontCountry,
           syncedAt: ctx.now,
           requestId: ctx.requestId,
           ipAddress: ctx.ipAddress,
@@ -3251,7 +3361,9 @@ const playerRouter = router({
         return throwDomainError(error);
       }
     }),
-  saveHealthCheckIn: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  saveHealthCheckIn: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-check-in",
@@ -3262,6 +3374,7 @@ const playerRouter = router({
     .input(
       z.object({
         checkIn: healthCheckInInputSchema,
+        storefrontCountry: healthStorefrontCountrySchema,
         idempotencyKey: z.string().uuid(),
       }),
     )
@@ -3277,6 +3390,7 @@ const playerRouter = router({
             return await saveHealthCheckIn({
               actor: ctx.actor!,
               checkIn: input.checkIn,
+              storefront: input.storefrontCountry,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -3287,7 +3401,9 @@ const playerRouter = router({
         },
       }),
     ),
-  createHealthSharingGrant: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  createHealthSharingGrant: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-sharing-grant",
@@ -3304,6 +3420,7 @@ const playerRouter = router({
           categories: z.array(healthCategorySchema).min(1).max(4),
           scopes: z.array(healthSharingScopeSchema).min(1).max(3),
           expiresAt: z.iso.datetime(),
+          storefrontCountry: healthStorefrontCountrySchema,
           idempotencyKey: z.string().uuid(),
         })
         .refine(
@@ -3317,7 +3434,14 @@ const playerRouter = router({
           },
         ),
     )
-    .output(z.object({ id: z.string().uuid() }))
+    .output(
+      z.object({
+        id: z.string().uuid(),
+        approvalStatus: z
+          .enum(["not-required", "pending", "approved", "denied"])
+          .optional(),
+      }),
+    )
     .mutation(({ input, ctx }) =>
       runIdempotentMutation({
         key: input.idempotencyKey,
@@ -3336,6 +3460,7 @@ const playerRouter = router({
               categories: input.categories,
               scopes: input.scopes,
               expiresAt: new Date(input.expiresAt),
+              storefront: input.storefrontCountry,
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               now: ctx.now,
@@ -3346,7 +3471,9 @@ const playerRouter = router({
         },
       }),
     ),
-  revokeHealthSharingGrant: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  revokeHealthSharingGrant: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-sharing-revoke",
@@ -3382,7 +3509,9 @@ const playerRouter = router({
         },
       }),
     ),
-  disconnectHealth: adultProcedure
+  // H1: age, consent and region are enforced in the Health service
+  // (services/health/policy.ts), not by the retired adult-only gate.
+  disconnectHealth: protectedProcedure
     .use(
       rateLimitMiddleware({
         id: "health-disconnect",
@@ -5147,6 +5276,9 @@ const playerRouter = router({
         promoCode: z.string().trim().min(3).max(48).optional(),
         quantity: z.number().int().min(1).max(50),
         catalogSessionOccurrenceId: z.string().uuid().optional(),
+        // Book for a dependent as their verified guardian. Credits only.
+        participantPersonId: z.string().uuid().optional(),
+        creditSource: z.enum(["self", "participant"]).optional(),
         recordingConsentAccepted: z.boolean().optional(),
         successUrl: z.url(),
         cancelUrl: z.url(),
@@ -5169,6 +5301,122 @@ const playerRouter = router({
               requestId: ctx.requestId,
               ipAddress: ctx.ipAddress,
               userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  // Book several session occurrences with organization credits in one call,
+  // for the caller or for dependents they are the verified guardian of.
+  bookCatalogSessions: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "catalog-session-booking",
+        capacity: 6,
+        refillPerMinute: 3,
+      }),
+    )
+    .input(
+      z.object({
+        bookings: z
+          .array(
+            z.object({
+              catalogItemId: z.string().uuid(),
+              catalogVariantId: z.string().uuid(),
+              catalogSessionOccurrenceId: z.string().uuid(),
+              participantPersonId: z.string().uuid().optional(),
+              quantity: z.number().int().min(1).max(50).default(1),
+            }),
+          )
+          .min(1)
+          .max(MAX_CATALOG_SESSIONS_PER_BOOKING),
+        // Whose wallet pays for a dependent's sessions. Defaults to the
+        // caller's own wallet.
+        creditSource: z.enum(["self", "participant"]).optional(),
+        // True (default): every session is booked, or none remain booked.
+        atomic: z.boolean().default(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(catalogSessionBookingResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.bookCatalogSessions",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await bookCatalogSessions({
+              actor: ctx.actor!,
+              ...input,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+              userAgent: ctx.userAgent,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
+  // The caller's session schedule, including sessions booked for verified
+  // dependents.
+  catalogSessionBookings: protectedProcedure
+    .input(
+      z
+        .object({
+          scope: z.enum(["upcoming", "past", "all"]).default("upcoming"),
+          includeDependents: z.boolean().default(true),
+          limit: z.number().int().min(1).max(200).default(50),
+        })
+        .default({ scope: "upcoming", includeDependents: true, limit: 50 }),
+    )
+    .output(z.array(playerCatalogSessionBookingSchema).readonly())
+    .query(({ input, ctx }) =>
+      ctx.actor!.isDemo && !process.env.DATABASE_URL
+        ? []
+        : loadPlayerCatalogSessionBookings({
+            actor: ctx.actor!,
+            ...input,
+            now: ctx.now,
+          }),
+    ),
+  cancelCatalogSessionBooking: protectedProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "catalog-session-cancel",
+        capacity: 8,
+        refillPerMinute: 4,
+      }),
+    )
+    .input(
+      z.object({
+        bookingId: z.string().uuid(),
+        // Required to cancel after the refund window, when nothing returns.
+        acknowledgeNoRefund: z.boolean().default(false),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(catalogSessionCancellationResultSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "player.cancelCatalogSessionBooking",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await cancelCatalogSessionBooking({
+              actor: ctx.actor!,
+              bookingId: input.bookingId,
+              acknowledgeNoRefund: input.acknowledgeNoRefund,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
               now: ctx.now,
             });
           } catch (error) {
@@ -8270,6 +8518,14 @@ const playerRouter = router({
         },
       }),
     ),
+  // R3 domain seams: code lives in ./routers/<domain>.ts (see ./routers/README.md).
+  trainingPrograms: trainingProgramsPlayerRouter,
+  trainingDrills: trainingDrillsPlayerRouter,
+  concierge: conciergePlayerRouter,
+  facility: facilityPlayerRouter,
+  search: searchPlayerRouter,
+  // H1: Duna Health eligibility, teen opt-in and guardian approval.
+  health: healthPlayerRouter,
 });
 
 const operatorRouter = router({
@@ -11927,6 +12183,64 @@ const operatorRouter = router({
         },
       }),
     ),
+  catalogSessionOccurrences: organizationProcedure("sessions:read")
+    .input(
+      z
+        .object({
+          catalogItemId: z.string().uuid().optional(),
+          from: z.iso.datetime().optional(),
+          to: z.iso.datetime().optional(),
+        })
+        .default({}),
+    )
+    .output(z.array(operatorCatalogSessionOccurrenceSchema).readonly())
+    .query(({ input, ctx }) =>
+      loadOperatorCatalogSessionOccurrences({
+        actor: ctx.actor!,
+        catalogItemId: input.catalogItemId,
+        from: input.from ? new Date(input.from) : undefined,
+        to: input.to ? new Date(input.to) : undefined,
+        now: ctx.now,
+      }),
+    ),
+  settleCatalogSessionOccurrence: organizationProcedure("payments:write")
+    .input(
+      z.object({
+        catalogSessionOccurrenceId: z.string().uuid(),
+        // Bookings that attended. Required when the offer settles on
+        // recorded attendance; ignored when it settles on the booked
+        // headcount at the cutoff.
+        attendedFulfillmentIds: z.array(z.string().uuid()).max(500).optional(),
+        // Decide the minimum and lock the headcount before the cutoff.
+        decideBeforeCutoff: z.boolean().default(false),
+        confirmed: z.literal(true),
+        idempotencyKey: z.string().uuid(),
+      }),
+    )
+    .output(participationEvaluationSchema)
+    .mutation(({ input, ctx }) =>
+      runIdempotentMutation({
+        key: input.idempotencyKey,
+        procedure: "operator.settleCatalogSessionOccurrence",
+        request: input,
+        ctx,
+        execute: async () => {
+          try {
+            return await evaluateCatalogSessionParticipation({
+              occurrenceId: input.catalogSessionOccurrenceId,
+              organizationId: ctx.actor!.organizationId!,
+              force: input.decideBeforeCutoff,
+              attendedFulfillmentIds: input.attendedFulfillmentIds,
+              actorPersonId: ctx.actor!.personId,
+              requestId: ctx.requestId,
+              now: ctx.now,
+            });
+          } catch (error) {
+            return throwDomainError(error);
+          }
+        },
+      }),
+    ),
   organization: organizationProcedure("members:read")
     .output(organizationSummarySchema)
     .query(({ ctx }) =>
@@ -13720,6 +14034,20 @@ const operatorRouter = router({
         },
       }),
     ),
+  // R3 domain seams: code lives in ./routers/<domain>.ts (see ./routers/README.md).
+  setup: setupOperatorRouter,
+  pay: payOperatorRouter,
+  teamAvailability: teamAvailabilityOperatorRouter,
+  teamPay: teamPayOperatorRouter,
+  teamPayouts: teamPayoutsOperatorRouter,
+  trainingPrograms: trainingProgramsOperatorRouter,
+  trainingDrills: trainingDrillsOperatorRouter,
+  trainingSceneAi: trainingSceneAiOperatorRouter,
+  concierge: conciergeOperatorRouter,
+  websiteWorkspace: websiteWorkspaceOperatorRouter,
+  websiteTemplates: websiteTemplatesOperatorRouter,
+  facility: facilityOperatorRouter,
+  conditions: conditionsOperatorRouter,
 });
 
 const agentConfirmationSchema = z.object({
@@ -15953,8 +16281,8 @@ const adminRouter = router({
           .min(2)
           .max(96)
           .regex(
-            /^[a-z0-9][a-z0-9._-]*$/,
-            "Use lowercase letters, numbers, dots, underscores, or hyphens.",
+            /^[a-z0-9][a-zA-Z0-9._-]*$/,
+            "Start with a lowercase letter or number; then use letters, numbers, dots, underscores, or hyphens.",
           ),
         organizationId: z.string().uuid().optional(),
         market: z.string().trim().min(2).max(96).optional(),
@@ -16108,6 +16436,8 @@ const adminRouter = router({
   toolRiskRegistry: adminProcedure
     .output(z.record(z.string(), z.enum(["read", "propose", "confirm-always"])))
     .query(() => toolRiskRegistry),
+  // R3 seam: provider readiness (./routers/readiness.ts).
+  readiness: readinessAdminRouter,
 });
 
 export const appRouter = router({

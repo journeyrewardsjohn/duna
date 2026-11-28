@@ -1,0 +1,165 @@
+/* Tideline DayStrip and TimeSlotGrid. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- DayStrip and TimeSlotGrid ---------- */
+
+    .td-daystrip {
+      /* Contains the visually hidden labels, which are absolutely placed. */
+      position: relative;
+      display: flex;
+      gap: var(--td-space-2);
+
+      /* Room for the focus ring and the shadow inside the scroller. */
+      margin: -6px;
+      padding: 6px;
+      overflow-x: auto;
+      scroll-snap-type: x proximity;
+      scrollbar-width: none;
+    }
+
+    .td-slotgrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+      gap: var(--td-space-2);
+    }
+
+    .td-tslot {
+      position: relative;
+      min-height: var(--td-control);
+      margin: 0;
+      padding: 0 var(--td-space-2);
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      box-shadow: var(--td-shadow-surface);
+      color: var(--td-text);
+      font: var(--td-type-label);
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        color var(--td-duration-quick) var(--td-ease-ui);
+
+      &[data-checked] {
+        background: var(--td-action);
+        color: var(--td-on-action);
+      }
+
+      &[data-disabled] {
+        background: transparent;
+        box-shadow: none;
+        color: var(--td-text-disabled);
+        text-decoration: line-through;
+        cursor: not-allowed;
+      }
+    }
+
+    .td-tslot__member {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--td-energy);
+    }
+
+    .td-tslot {
+      box-shadow: inset 0 0 0 1px var(--td-line-strong);
+
+      &:hover:not([data-checked], [data-disabled]) {
+        background: var(--td-surface-subtle);
+      }
+
+      &[data-checked],
+      &[data-disabled] {
+        box-shadow: none;
+      }
+
+      &:active:not([data-disabled]) {
+        scale: calc(1 - 0.02 * var(--td-motion));
+      }
+    }
+
+    /* ---------- DayStrip ---------- */
+    .td-daystrip {
+      gap: var(--td-space-3);
+    }
+
+    .td-day {
+      position: relative;
+      display: grid;
+      flex: none;
+      gap: 2px;
+      align-content: center;
+      justify-items: center;
+      width: 80px;
+      min-height: 112px;
+      margin: 0;
+      padding: var(--td-space-3) 0;
+      border: 0;
+      border-radius: var(--td-bk-radius);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-line-strong);
+      color: var(--td-text);
+      cursor: pointer;
+      scroll-snap-align: start;
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        box-shadow var(--td-duration-quick) var(--td-ease-ui),
+        color var(--td-duration-quick) var(--td-ease-ui),
+        scale var(--td-duration-instant) var(--td-ease-ui);
+
+      &:hover:not([data-checked], [data-unavailable]) {
+        box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-border-control);
+      }
+
+      &:active:not([data-unavailable]) {
+        scale: calc(1 - 0.02 * var(--td-motion));
+      }
+
+      /* Selected: solid ink, white text. */
+      &[data-checked] {
+        background: var(--td-action);
+        box-shadow: none;
+        color: var(--td-on-action);
+      }
+
+      /* Nothing open: faded, still reachable and announced. */
+      &[data-unavailable] {
+        box-shadow: inset 0 0 0 var(--td-bk-border) var(--td-line);
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+
+      /* Today: a small dot, not a colour change. */
+      &[data-today]::after {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        content: "";
+      }
+    }
+
+    .td-day__dow {
+      font: var(--td-type-code);
+      font-size: var(--td-type-micro-size);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .td-day__num {
+      font: var(--td-bk-day);
+      letter-spacing: var(--td-type-comfort-day-tracking);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-day__mon {
+      font: var(--td-type-meta);
+    }
+  }
+}

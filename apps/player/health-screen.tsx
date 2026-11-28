@@ -2,6 +2,8 @@ import type {
   HealthCategory,
   HealthCheckInInput,
   HealthDashboard,
+  HealthGuardianOverview,
+  HealthPolicyEligibility,
   HealthSharingScope,
   HealthTimelineEntry,
 } from "@duna/api";
@@ -35,6 +37,7 @@ import {
   getAppleHealthSyncState,
   healthCategoryDetails,
   isAppleHealthSyncActive,
+  readAppleStorefrontCountry,
   requestAppleHealthAccess,
   startAppleHealthMonitoring,
   syncAppleHealth,
@@ -584,6 +587,13 @@ export function HealthScreen({
     "timeline",
   ]);
   const syncInFlight = useRef(false);
+  // H1: age, consent and US-storefront policy from the server.
+  const [eligibility, setEligibility] = useState<
+    HealthPolicyEligibility & { readonly hasConnection: boolean }
+  >();
+  const [guardianOverview, setGuardianOverview] =
+    useState<HealthGuardianOverview>();
+  const [storefrontCountry, setStorefrontCountry] = useState<string>();
 
   useEffect(() => {
     if (mode === "preview") return;
@@ -601,6 +611,21 @@ export function HealthScreen({
     }
     setLoading(true);
     try {
+      const storefront = await readAppleStorefrontCountry();
+      setStorefrontCountry(storefront);
+      const [policy, overview] = await Promise.all([
+        client.player.health.eligibility
+          .query({ storefrontCountry: storefront })
+          .catch(() => undefined),
+        client.player.health.guardianOverview.query().catch(() => undefined),
+      ]);
+      setEligibility(policy);
+      setGuardianOverview(overview);
+      if (policy && !policy.actions["view-own"].allowed) {
+        setDashboard(undefined);
+        setError(undefined);
+        return;
+      }
       setDashboard(await client.player.healthDashboard.query());
       setError(undefined);
     } catch (reason) {
@@ -619,6 +644,19 @@ export function HealthScreen({
   }, [reload]);
 
   const enabledCategories = dashboard?.connection?.enabledCategories;
+  // For a player under 18 the server returns the minimal metric allowlist;
+  // HealthKit is then asked only for those types.
+  const minorMetrics = eligibility?.minor
+    ? eligibility.allowedMetrics
+    : undefined;
+  const viewBlock =
+    eligibility && !eligibility.actions["view-own"].allowed
+      ? eligibility.actions["view-own"]
+      : undefined;
+  const syncBlock =
+    eligibility && !eligibility.actions.sync.allowed
+      ? eligibility.actions.sync
+      : undefined;
   useEffect(() => {
     if (!dashboard?.latestCheckIn) return;
     const saved = dashboard.latestCheckIn;
@@ -636,11 +674,13 @@ export function HealthScreen({
   useEffect(() => {
     if (!enabledCategories?.length || mode === "preview") return;
     let stop: (() => void) | undefined;
-    void startAppleHealthMonitoring(enabledCategories).then((cleanup) => {
-      stop = cleanup;
-    });
+    void startAppleHealthMonitoring(enabledCategories, minorMetrics).then(
+      (cleanup) => {
+        stop = cleanup;
+      },
+    );
     return () => stop?.();
-  }, [enabledCategories, mode]);
+  }, [enabledCategories, minorMetrics, mode]);
 
   const performSync = useCallback(
     async (categories: readonly HealthCategory[], announce = true) => {
@@ -674,6 +714,7 @@ export function HealthScreen({
         const result = await syncAppleHealth({
           client,
           categories,
+          metrics: minorMetrics,
           maxPages: announce ? undefined : 15,
           onProgress: announce
             ? (progress) =>
@@ -745,7 +786,7 @@ export function HealthScreen({
         setBusy(false);
       }
     },
-    [client, mode, reload],
+    [client, minorMetrics, mode, reload],
   );
 
   useEffect(() => {
@@ -773,8 +814,18 @@ export function HealthScreen({
   }, [enabledCategories, mode, performSync]);
 
   async function connect() {
-    if (selectedCategories.length === 0) {
+    const categories = eligibility
+      ? selectedCategories.filter((category) =>
+          eligibility.allowedCategories.includes(category),
+        )
+      : selectedCategories;
+    if (categories.length === 0) {
       setError("Choose at least one Apple Health category.");
+      return;
+    }
+    if (syncBlock) {
+      setConnectOpen(false);
+      setError(syncBlock.message ?? "Duna Health is not available.");
       return;
     }
     if (mode === "preview") {
@@ -795,8 +846,8 @@ export function HealthScreen({
     });
     try {
       setConnectOpen(false);
-      await requestAppleHealthAccess(selectedCategories);
-      await performSync(selectedCategories);
+      await requestAppleHealthAccess(categories, minorMetrics);
+      await performSync(categories);
     } catch (reason) {
       setImportStatus(undefined);
       setError(
@@ -845,18 +896,23 @@ export function HealthScreen({
     setBusy(true);
     try {
       const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1_000);
-      await client.player.createHealthSharingGrant.mutate({
+      const created = await client.player.createHealthSharingGrant.mutate({
         kind: candidate.kind,
         personId: candidate.personId,
         organizationId: candidate.organizationId,
         categories: [...shareCategories],
         scopes: [...shareScopes],
         expiresAt: expiresAt.toISOString(),
+        storefrontCountry,
         idempotencyKey: Crypto.randomUUID(),
       });
       setShareOpen(false);
       setSelectedCandidateId(undefined);
-      setNotice(`Health access shared with ${candidate.label} for 90 days.`);
+      setNotice(
+        created.approvalStatus === "pending"
+          ? `Request sent. ${candidate.label} can see it only after your parent or guardian approves.`
+          : `Health access shared with ${candidate.label} for 90 days.`,
+      );
       await reload();
     } catch (reason) {
       setError(
@@ -880,6 +936,7 @@ export function HealthScreen({
     try {
       await client.player.saveHealthCheckIn.mutate({
         checkIn,
+        storefrontCountry,
         idempotencyKey: Crypto.randomUUID(),
       });
       setCheckInOpen(false);
@@ -964,6 +1021,103 @@ export function HealthScreen({
     );
   }
 
+  async function runPolicyAction(
+    action: () => Promise<unknown>,
+    success: string,
+  ) {
+    if (mode === "preview" || !client) {
+      setNotice("Preview only · nothing was changed.");
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      await action();
+      setNotice(success);
+      await reload();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Duna Health could not save that choice.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function optIn() {
+    if (!client || !eligibility) return;
+    void runPolicyAction(
+      () =>
+        client.player.health.optIn.mutate({
+          policyVersion: eligibility.policyVersion,
+          idempotencyKey: Crypto.randomUUID(),
+        }),
+      eligibility.consent.guardianApproved
+        ? "Duna Health is on. Choose your Apple Health data next."
+        : "Thanks. Your parent or guardian now needs to approve in their Duna account.",
+    );
+  }
+
+  function guardianApprove(minorId: string) {
+    if (!client || !guardianOverview) return;
+    void runPolicyAction(
+      () =>
+        client.player.health.guardianApprove.mutate({
+          minorId,
+          policyVersion: guardianOverview.policyVersion,
+          idempotencyKey: Crypto.randomUUID(),
+        }),
+      "Approved. You will see sharing requests here; you never see their Health values.",
+    );
+  }
+
+  function guardianDecide(
+    minorId: string,
+    grantId: string,
+    decision: "approve" | "deny" | "revoke",
+  ) {
+    if (!client || !guardianOverview) return;
+    void runPolicyAction(
+      () =>
+        client.player.health.guardianDecideGrant.mutate({
+          minorId,
+          grantId,
+          decision,
+          policyVersion: guardianOverview.policyVersion,
+          idempotencyKey: Crypto.randomUUID(),
+        }),
+      decision === "approve"
+        ? "Sharing approved until the date shown."
+        : "Sharing stopped.",
+    );
+  }
+
+  function guardianWithdraw(minorId: string, name: string) {
+    if (!client) return;
+    Alert.alert(
+      `Turn off Duna Health for ${name}?`,
+      "Syncing stops now, every sharing grant ends, and Duna deletes their imported Health data within a day.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Turn off and delete",
+          style: "destructive",
+          onPress: () =>
+            void runPolicyAction(
+              () =>
+                client.player.health.guardianWithdraw.mutate({
+                  minorId,
+                  idempotencyKey: Crypto.randomUUID(),
+                }),
+              "Duna Health is off and deletion is scheduled.",
+            ),
+        },
+      ],
+    );
+  }
+
   const summary = dashboard?.summary;
   const intelligence = dashboard?.intelligence;
   const connected = dashboard?.connection?.status === "active";
@@ -1035,8 +1189,154 @@ export function HealthScreen({
           </View>
         )}
         {notice && <Text style={styles.notice}>{notice}</Text>}
+        {viewBlock && (
+          <View style={styles.systemNote}>
+            <Text style={styles.systemNoteTitle}>Duna Health</Text>
+            <Text style={styles.systemNoteBody}>{viewBlock.message}</Text>
+            {eligibility?.hasConnection && (
+              <Pressable onPress={disconnect}>
+                <Text style={styles.deleteText}>
+                  Delete imported Health data
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+        {!viewBlock &&
+          eligibility?.consent.required &&
+          !(
+            eligibility.consent.teenOptedIn &&
+            eligibility.consent.guardianApproved
+          ) && (
+            <View style={styles.systemNote}>
+              <Text style={styles.systemNoteTitle}>
+                {eligibility.consent.teenOptedIn
+                  ? "Waiting for your parent or guardian"
+                  : "Turn on Duna Health"}
+              </Text>
+              <Text style={styles.systemNoteBody}>
+                {!eligibility.consent.teenOptedIn
+                  ? eligibility.disclosure?.text
+                  : eligibility.consent.linkedGuardian
+                    ? "Your parent or guardian needs to approve Duna Health in their own Duna account before anything is collected."
+                    : "Ask a parent or guardian to link to your Duna account first. Nothing is collected until they approve."}
+              </Text>
+              {!eligibility.consent.teenOptedIn && (
+                <Pressable
+                  disabled={busy}
+                  onPress={optIn}
+                  style={styles.primaryButton}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    I agree, turn on Duna Health
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+        {!viewBlock &&
+          (syncBlock?.reason === "region-not-supported" ||
+            syncBlock?.reason === "region-unknown") && (
+            <Text style={styles.notice}>{syncBlock.message}</Text>
+          )}
+        {(guardianOverview?.minors.length ?? 0) > 0 && (
+          <View style={styles.privacyCard}>
+            <Text style={styles.eyebrow}>JUNIOR PLAYERS</Text>
+            <Text style={styles.timelineMeta}>
+              You see whether Duna Health is on and who it is shared with, never
+              their Health values.
+            </Text>
+            {guardianOverview?.minors.map((minor) => (
+              <View key={minor.personId} style={styles.timelineCopy}>
+                <Text style={styles.timelineTitle}>{minor.displayName}</Text>
+                <Text style={styles.timelineMeta}>
+                  {!minor.eligible.allowed
+                    ? minor.eligible.message
+                    : minor.consent.guardianApproved
+                      ? minor.connection?.status === "active"
+                        ? `Connected${minor.connection.lastSyncedAt ? ` · last sync ${formatDate(minor.connection.lastSyncedAt)}` : ""}`
+                        : "Approved · not connected"
+                      : minor.consent.teenOptedIn
+                        ? "Asked to turn on Duna Health"
+                        : "Off"}
+                  {minor.connection?.purgePending
+                    ? " · deletion scheduled"
+                    : ""}
+                </Text>
+                {minor.eligible.allowed &&
+                  minor.consent.teenOptedIn &&
+                  !minor.consent.guardianApproved && (
+                    <Pressable
+                      disabled={busy}
+                      onPress={() => guardianApprove(minor.personId)}
+                    >
+                      <Text style={styles.linkText}>Approve Duna Health →</Text>
+                    </Pressable>
+                  )}
+                {minor.grants.map((grant) => (
+                  <View key={grant.id} style={styles.grantRow}>
+                    <View style={styles.timelineCopy}>
+                      <Text style={styles.timelineTitle}>
+                        {grant.audienceLabel}
+                      </Text>
+                      <Text style={styles.timelineMeta}>
+                        {grant.categories.join(" + ")} ·{" "}
+                        {grant.approvalStatus === "pending"
+                          ? "waiting for you"
+                          : `until ${formatDate(grant.expiresAt)}`}
+                      </Text>
+                    </View>
+                    {grant.approvalStatus === "pending" &&
+                      minor.eligible.allowed && (
+                        <Pressable
+                          disabled={busy}
+                          onPress={() =>
+                            guardianDecide(minor.personId, grant.id, "approve")
+                          }
+                        >
+                          <Text style={styles.linkText}>Approve</Text>
+                        </Pressable>
+                      )}
+                    <Pressable
+                      disabled={busy}
+                      onPress={() =>
+                        guardianDecide(
+                          minor.personId,
+                          grant.id,
+                          grant.approvalStatus === "pending"
+                            ? "deny"
+                            : "revoke",
+                        )
+                      }
+                    >
+                      <Text style={styles.revokeText}>
+                        {grant.approvalStatus === "pending"
+                          ? "Decline"
+                          : "Revoke"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ))}
+                {(minor.consent.teenOptedIn ||
+                  minor.consent.guardianApproved ||
+                  minor.connection) && (
+                  <Pressable
+                    disabled={busy}
+                    onPress={() =>
+                      guardianWithdraw(minor.personId, minor.displayName)
+                    }
+                  >
+                    <Text style={styles.deleteText}>
+                      Turn off and delete their Health data
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
 
-        {!connected && !loading ? (
+        {viewBlock ? null : !connected && !loading ? (
           <View style={styles.connectHero}>
             <Text style={styles.connectMark}>♥</Text>
             <Text style={styles.heroTitle}>
@@ -1480,8 +1780,10 @@ export function HealthScreen({
                       {grant.audience.label}
                     </Text>
                     <Text style={styles.timelineMeta}>
-                      {grant.categories.join(" + ")} · expires{" "}
-                      {formatDate(grant.expiresAt)}
+                      {grant.categories.join(" + ")} ·{" "}
+                      {grant.approvalStatus === "pending"
+                        ? "waiting for your guardian"
+                        : `expires ${formatDate(grant.expiresAt)}`}
                     </Text>
                   </View>
                   <Pressable
@@ -1550,6 +1852,7 @@ export function HealthScreen({
         styles={styles}
       />
       <ConnectModal
+        allowedCategories={eligibility?.allowedCategories}
         busy={busy}
         categories={selectedCategories}
         onClose={() => setConnectOpen(false)}
@@ -1562,6 +1865,7 @@ export function HealthScreen({
         visible={connectOpen}
       />
       <ShareModal
+        allowedCategories={eligibility?.allowedCategories}
         busy={busy}
         candidates={dashboard?.candidates ?? []}
         categories={shareCategories}
@@ -2372,6 +2676,7 @@ type HealthPalette = {
 };
 
 function ConnectModal({
+  allowedCategories,
   busy,
   categories,
   onClose,
@@ -2381,6 +2686,7 @@ function ConnectModal({
   styles,
   visible,
 }: {
+  readonly allowedCategories?: readonly HealthCategory[];
   readonly busy: boolean;
   readonly categories: readonly HealthCategory[];
   readonly onClose: () => void;
@@ -2418,9 +2724,19 @@ function ConnectModal({
               match-pattern insights, and timestamp-aligned heart rate on Duna
               Vision.
             </Text>
+            {allowedCategories && allowedCategories.length < 4 && (
+              <Text style={styles.modalBody}>
+                For players under 18, Duna reads only heart rate, workouts,
+                active energy and exercise minutes.
+              </Text>
+            )}
             <View style={styles.categoryList}>
-              {(Object.keys(healthCategoryDetails) as HealthCategory[]).map(
-                (category) => {
+              {(Object.keys(healthCategoryDetails) as HealthCategory[])
+                .filter(
+                  (category) =>
+                    !allowedCategories || allowedCategories.includes(category),
+                )
+                .map((category) => {
                   const detail = healthCategoryDetails[category];
                   const selected = categories.includes(category);
                   return (
@@ -2460,8 +2776,7 @@ function ConnectModal({
                       </Text>
                     </Pressable>
                   );
-                },
-              )}
+                })}
             </View>
             <View style={styles.promiseCard}>
               <Text style={styles.promiseTitle}>Duna’s Health promise</Text>
@@ -2491,6 +2806,7 @@ function ConnectModal({
 }
 
 function ShareModal({
+  allowedCategories,
   busy,
   candidates,
   categories,
@@ -2504,6 +2820,7 @@ function ShareModal({
   styles,
   visible,
 }: {
+  readonly allowedCategories?: readonly HealthCategory[];
   readonly busy: boolean;
   readonly candidates: HealthDashboard["candidates"];
   readonly categories: readonly HealthCategory[];
@@ -2564,8 +2881,12 @@ function ShareModal({
             ))}
             <Text style={styles.formLabel}>2 · CATEGORIES</Text>
             <View style={styles.chipWrap}>
-              {(Object.keys(healthCategoryDetails) as HealthCategory[]).map(
-                (category) => (
+              {(Object.keys(healthCategoryDetails) as HealthCategory[])
+                .filter(
+                  (category) =>
+                    !allowedCategories || allowedCategories.includes(category),
+                )
+                .map((category) => (
                   <Pressable
                     key={category}
                     onPress={() => onToggleCategory(category)}
@@ -2584,8 +2905,7 @@ function ShareModal({
                       {healthCategoryDetails[category].label}
                     </Text>
                   </Pressable>
-                ),
-              )}
+                ))}
             </View>
             <Text style={styles.formLabel}>3 · ALLOWED VIEW</Text>
             <View style={styles.scopeList}>

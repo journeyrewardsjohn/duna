@@ -293,6 +293,15 @@ coach or player, and runs Duna's AI Gateway summary/action-item extraction.
 Google retains transcript entries for a limited window, so keep the two-minute
 cron active and alert on repeated `virtual_session_meetings.last_error` values.
 
+The protected `/api/cron/catalog-participation` route runs every five minutes.
+It checks player minimums once a session's cutoff has passed, cancels and
+refunds under-filled sessions whose policy says so, and returns unused reserved
+credits for group-size pricing. Sessions priced on attendance wait for an
+operator to record it, and settle on the players who booked if none is
+recorded within 24 hours of the session ending. Every step is idempotent; a `failed` count above zero in
+the response needs attention, as does a cancelled session whose card refund
+reports `review-required`.
+
 ## Duna Video delivery
 
 Live streaming uses tier-aware Cloudflare or Mux, adaptive native SRT/RTMPS
