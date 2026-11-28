@@ -23,6 +23,7 @@ import { CalendarScreen } from "../features/calendar";
 import { ScorerScreen } from "../features/courtside";
 import { MoreScreen } from "../features/more";
 import { PeopleScreen } from "../features/people";
+import { AttendanceScreen, SessionScreen } from "../features/session";
 import { styles as legacy } from "../legacy/styles";
 import { colors, rgba } from "../shared/palette";
 import { AccountScreen } from "./AccountScreen";
@@ -127,6 +128,9 @@ export const SCREENS = {
       key={entry.entryId ?? "calendar"}
       onCreate={() => shell.open("create")}
       onMessageGroup={(calendarEntry) => openGroup(shell, calendarEntry)}
+      onOpenSession={(sessionId) =>
+        shell.open("session", { entryId: sessionId })
+      }
       onRecordNotes={(sessionId) => openNotes(shell, sessionId)}
       onScan={() => shell.open("checkin")}
       onScore={(matchId) => shell.open("courtside", matchId ? { matchId } : {})}
@@ -191,6 +195,12 @@ export const SCREENS = {
       onCreated={refresh}
       onGetPaid={() => shell.open("getPaid")}
     />
+  ),
+  session: (entry) => (
+    <SessionScreen key={entry.entryId} sessionId={entry.entryId} />
+  ),
+  attendance: (entry) => (
+    <AttendanceScreen key={entry.entryId} sessionId={entry.entryId} />
   ),
   account: () => <AccountScreen />,
   tools: (_entry, { shell }) => (

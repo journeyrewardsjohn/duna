@@ -3,11 +3,19 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it } from "vitest";
 import { ClubLockup, ClubMark } from "./club-mark";
 import { MembershipCard } from "./membership-card";
-import { WalletStack, type WalletCard } from "./wallet-stack";
+import type { WalletCard } from "./membership-card-types";
+import { Wallet, WalletActions } from "./wallet";
+import { WalletStack } from "./wallet-stack";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
+// The card's motion hooks read media queries; Node has none.
+(globalThis as { matchMedia?: unknown }).matchMedia = () => ({
+  matches: false,
+  addEventListener() {},
+  removeEventListener() {},
+});
 
 function render(element: React.ReactElement): ReactTestRenderer {
   let renderer: ReactTestRenderer | undefined;
@@ -87,91 +95,264 @@ describe("ClubMark", () => {
 
 describe("MembershipCard", () => {
   const club = { name: "Sunset Beach Club", color: "#1E5AA8" };
-  it("shows the code only when an active membership has one", () => {
-    const active = text(
-      render(
-        <MembershipCard
-          club={club}
-          code="SBC-0148"
-          member="Noa Williams"
-          status="active"
-        />,
-      ),
-    );
-    expect(active).toContain("SBC-0148");
-    const pending = text(
-      render(
-        <MembershipCard
-          club={club}
-          code="SBC-0148"
-          member="Noa Williams"
-          status="pending"
-        />,
-      ),
-    );
-    expect(pending).not.toContain("SBC-0148");
-    expect(pending).toContain("Your pass appears when the club approves you.");
-    const none = text(
-      render(
-        <MembershipCard club={club} member="Noa Williams" status="active" />,
-      ),
-    );
-    expect(none).toContain("No pass to scan yet.");
-  });
+  const pass = { code: "duna:member:v1:abc", rotation: "static" as const };
 
-  it("names the card for screen readers and says validity", () => {
+  it("names the card, shows one chip and one live fact", () => {
     const renderer = render(
       <MembershipCard
+        art={{ source: "set", key: "ocean-teal" }}
+        chip="Annual"
         club={club}
+        fact={{ kind: "credits", text: "8 credits" }}
         member="Noa Williams"
-        status="expired"
-        validThrough="Oct 31, 2026"
+        number="0412"
+        plan="Annual member"
+        since="Mar 2024"
+        status="active"
       />,
     );
     const card = renderer.root.find((node) => node.type === "article");
     expect(card.props["aria-label"]).toBe(
-      "Sunset Beach Club membership card for Noa Williams, expired",
+      "Sunset Beach Club, Annual member, active, 8 credits",
     );
-    expect(text(renderer)).toContain("Ended Oct 31, 2026");
+    expect(card.props["data-text"]).toBe("salt");
+    const words = text(renderer);
+    expect(words).toContain("Annual");
+    expect(words).toContain("8 credits");
+    expect(words).toContain("No. 0412 · Since Mar 2024");
+    // The back is not rendered until the card has turned over.
+    expect(words).not.toContain("Check-in pass");
+  });
+
+  it("state is a chip in words; pending has no fact and no number", () => {
+    const paused = text(
+      render(
+        <MembershipCard
+          chip="Monthly"
+          club={club}
+          fact={{ kind: "valid", text: "To Jan 2027" }}
+          member="Noa"
+          status="paused"
+          until="Jan 4"
+        />,
+      ),
+    );
+    expect(paused).toContain("Paused to Jan 4");
+    expect(paused).toContain("To Jan 2027");
+    const pending = text(
+      render(
+        <MembershipCard
+          chip="Social"
+          club={club}
+          fact={{ kind: "credits", text: "3 credits" }}
+          member="Noa"
+          status="pending"
+        />,
+      ),
+    );
+    expect(pending).toContain("Pending approval");
+    expect(pending).toContain("Social · No. —");
+    expect(pending).not.toContain("3 credits");
+  });
+
+  it("a junior's card says who holds it", () => {
+    const words = text(
+      render(
+        <MembershipCard
+          chip="Junior"
+          club={club}
+          heldBy="Rae Castillo"
+          kind="junior"
+          member="Maya Castillo"
+          status="active"
+        />,
+      ),
+    );
+    expect(words).toContain("Held by Rae Castillo, guardian");
+  });
+
+  it("the back shows the server's code, honestly labelled, as text and a named image", () => {
+    const renderer = render(
+      <MembershipCard
+        club={club}
+        flipped
+        member="Noa Williams"
+        number="0412"
+        pass={{ ...pass, reference: "7K2Q9D" }}
+        plan="Annual member"
+        status="active"
+        validThrough="Nov 30, 2027"
+      />,
+    );
+    const words = text(renderer);
+    expect(words).toContain("Check-in pass");
+    expect(words).toContain("Active member");
+    expect(words).toContain("Duna member credential");
+    expect(words).toContain("Valid to Nov 30, 2027");
+    const qr = renderer.root.find(
+      (node) => node.type === "svg" && node.props.role === "img",
+    );
+    expect(qr.props["aria-label"]).toBe("Check-in code for Noa Williams");
+  });
+
+  it("pending, ended and passless backs say why and draw no code", () => {
+    for (const [status, words] of [
+      ["pending", "No pass yet"],
+      ["expired", "This membership ended Oct 31"],
+    ] as const) {
+      const renderer = render(
+        <MembershipCard
+          club={club}
+          flipped
+          member="Noa"
+          pass={pass}
+          status={status}
+          until="Oct 31"
+        />,
+      );
+      expect(text(renderer)).toContain(words);
+      expect(
+        renderer.root.findAll(
+          (node) => node.props.role === "img" && node.type === "svg",
+        ),
+      ).toHaveLength(0);
+    }
+    expect(
+      text(
+        render(
+          <MembershipCard club={club} flipped member="Noa" status="active" />,
+        ),
+      ),
+    ).toContain("Passes are not set up for Sunset Beach Club yet.");
+  });
+
+  it("with onFlip the card itself turns over by keyboard", () => {
+    const flips: boolean[] = [];
+    const renderer = render(
+      <MembershipCard
+        club={club}
+        member="Noa"
+        onFlip={(next) => flips.push(next)}
+        status="active"
+      />,
+    );
+    const card = renderer.root.find((node) => node.type === "article");
+    expect(card.props.role).toBe("button");
+    act(() => card.props.onKeyDown({ key: "Enter", preventDefault() {} }));
+    expect(flips).toEqual([true]);
+  });
+});
+
+function cardsOf(count: number): WalletCard[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `c${i}`,
+    club: { name: `Club ${i}` },
+    member: "Noa",
+    chip: "Annual",
+    status: i === 1 ? ("paused" as const) : ("active" as const),
+  }));
+}
+
+describe("Wallet", () => {
+  it("is a carousel (tablist) up to six cards and a stack (listbox) from seven", () => {
+    const five = render(<Wallet cards={cardsOf(5)} />);
+    expect(five.root.findAll((n) => n.props.role === "tablist")).toHaveLength(
+      1,
+    );
+    expect(five.root.findAll((n) => n.props.role === "tab")).toHaveLength(5);
+    const twelve = render(<Wallet cards={cardsOf(12)} />);
+    expect(twelve.root.findAll((n) => n.props.role === "listbox")).toHaveLength(
+      1,
+    );
+    expect(text(twelve)).toContain("12 cards · draw one out");
+  });
+
+  it("the person can switch presentation from three cards; two cannot", () => {
+    const renderer = render(
+      <Wallet cards={cardsOf(4)} rememberPresentation={false} />,
+    );
+    const toggle = renderer.root.find(
+      (n) =>
+        n.props["aria-label"] === "Stack the cards" &&
+        typeof n.props.onClick === "function",
+    );
+    act(() => toggle.props.onClick());
+    expect(
+      renderer.root.findAll((n) => n.props.role === "listbox"),
+    ).toHaveLength(1);
+    const two = render(<Wallet cards={cardsOf(2)} />);
+    expect(
+      two.root.findAll((n) => n.props["aria-label"] === "Stack the cards"),
+    ).toHaveLength(0);
+  });
+
+  it("tapping a neighbour selects it; tapping the selected card shows its pass", () => {
+    const changes: string[] = [];
+    const renderer = render(
+      <Wallet cards={cardsOf(3)} onChange={(id) => changes.push(id)} />,
+    );
+    const tab = (i: number) =>
+      renderer.root.findAll((n) => n.props.role === "tab")[i]!;
+    expect(tab(0).props["aria-selected"]).toBe(true);
+    expect(tab(1).props["aria-label"]).toBe("Club 1, paused. Card 2 of 3");
+    act(() => tab(0).props.onClick());
+    expect(text(renderer)).toContain("Showing Club 0 pass. Noa, active.");
+    expect(text(renderer)).toContain("Tap again for the card");
+    act(() => tab(2).props.onClick());
+    expect(changes).toEqual(["c2"]);
+    expect(tab(2).props["aria-selected"]).toBe(true);
+  });
+
+  it("an empty wallet shows the empty content, never an empty frame", () => {
+    expect(
+      text(render(<Wallet cards={[]} empty={<p>No club cards yet</p>} />)),
+    ).toContain("No club cards yet");
+  });
+
+  it("actions are links or buttons; a disabled one says why", () => {
+    const renderer = render(
+      <WalletActions
+        items={[
+          {
+            key: "pass",
+            label: "Show pass",
+            icon: "pass",
+            onClick: () => {},
+            pressed: true,
+          },
+          { key: "book", label: "Book", icon: "calendar", href: "/clubs/x" },
+          {
+            key: "benefits",
+            label: "Benefits",
+            icon: "verified",
+            disabled: true,
+            reason: "Ended",
+          },
+        ]}
+      />,
+    );
+    expect(renderer.root.find((n) => n.type === "a").props.href).toBe(
+      "/clubs/x",
+    );
+    expect(text(renderer)).toContain("Ended");
   });
 });
 
 describe("WalletStack", () => {
-  const cards: WalletCard[] = [
-    {
-      id: "a",
-      club: { name: "Sunset Beach Club" },
-      member: "Noa",
-      status: "active",
-    },
-    {
-      id: "b",
-      club: { name: "Harbor Sand Club" },
-      member: "Noa",
-      status: "paused",
-    },
-  ];
-  it("opens the first card and shows the rest as strips; a strip opens its card", () => {
-    const changes: string[] = [];
-    const renderer = render(
-      <WalletStack cards={cards} onChange={(id) => changes.push(id)} />,
-    );
-    const open = () =>
-      renderer.root.find((node) => node.type === "article").props[
-        "aria-label"
-      ] as string;
-    expect(open()).toContain("Sunset Beach Club");
-    const strip = renderer.root.find(
-      (node) =>
-        node.props["aria-label"] === "Open Harbor Sand Club card, paused" &&
-        typeof node.props.onClick === "function",
-    );
-    act(() => strip.props.onClick());
-    expect(changes).toEqual(["b"]);
-    expect(open()).toContain("Harbor Sand Club");
+  it("Enter draws the selected card, arrows move, Escape puts it back", () => {
+    const renderer = render(<WalletStack cards={cardsOf(7)} />);
+    const list = () => renderer.root.find((n) => n.props.role === "listbox");
+    const key = (k: string) =>
+      act(() => list().props.onKeyDown({ key: k, preventDefault() {} }));
+    key("ArrowDown");
+    expect(list().props["aria-activedescendant"]).toContain("c1");
+    key("Enter");
+    expect(text(renderer)).toContain("Back to stack");
+    key("Escape");
+    expect(text(renderer)).toContain("7 cards · draw one out");
   });
 
-  it("an empty wallet says why, never an empty frame", () => {
+  it("an empty stack says why", () => {
     expect(text(render(<WalletStack cards={[]} />))).toContain(
       "No club cards yet.",
     );

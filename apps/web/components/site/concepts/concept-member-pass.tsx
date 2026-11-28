@@ -1,13 +1,13 @@
 "use client";
 
-import { MembershipCard } from "@duna/ui/tideline";
+import { MembershipCard, riseClassName } from "@duna/ui/tideline";
+import { useState } from "react";
 import { usePlayOnce } from "../use-play-once";
 
 /**
- * The membership card, the kit's MembershipCard (demo club, labelled). The
- * kit's card has no pass side yet, so the concept shows the front with
- * tonight's class as the club's line; it Rises once when it comes into view.
- * When the card gains its pass side, this flips to it (spec 2.4).
+ * The membership card, the kit's MembershipCard (demo club, labelled). It
+ * Rises once when it comes into view; tap it (or Enter) to turn it over to
+ * the pass (an example code, labelled as one).
  */
 export function ConceptMemberPass({
   className,
@@ -15,6 +15,7 @@ export function ConceptMemberPass({
   readonly className?: string;
 }) {
   const { ref, phase } = usePlayOnce<HTMLDivElement>();
+  const [flipped, setFlipped] = useState(false);
   return (
     <div
       className={
@@ -25,17 +26,29 @@ export function ConceptMemberPass({
       <span className="site-example site-concept-pass__example">
         Example · demo club
       </span>
-      <MembershipCard
-        club={{ name: "Harbor Line Beach Club", color: "#2E5E4E" }}
+      <div
+        className={phase === "play" ? riseClassName() : undefined}
         key={phase === "play" ? "play" : "rest"}
-        kind="Club member"
-        line="Tonight: Thursday clinic · Court 3 · 6:00 PM"
-        member="Kai Arden"
-        plan="Annual member"
-        rise={phase === "play"}
-        since="Member since 2026"
-        status="active"
-      />
+        style={{ width: "100%" }}
+      >
+        <MembershipCard
+          art={{ source: "set", key: "golden-dune" }}
+          chip="Annual"
+          club={{ name: "Harbor Line Beach Club", color: "#2E5E4E" }}
+          fact={{ kind: "next", text: "Tonight 6:00 PM" }}
+          flipped={flipped}
+          member="Kai Arden"
+          onFlip={setFlipped}
+          pass={{
+            code: "duna:example:harbor-line",
+            rotation: "static",
+            label: "Example pass",
+          }}
+          plan="Annual member"
+          since="2026"
+          status="active"
+        />
+      </div>
     </div>
   );
 }

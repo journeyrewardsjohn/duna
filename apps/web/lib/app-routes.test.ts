@@ -104,7 +104,8 @@ describe("the Player web route table", () => {
     expect(verbForPath("/app/wallet")).toBe("connect");
     expect(verbForPath("/app/video/abc")).toBe("improve");
     expect(isShellRoute("/app")).toBe(true);
-    expect(isShellRoute("/app/wallet")).toBe(false);
+    expect(isShellRoute("/app/wallet")).toBe(true);
+    expect(isShellRoute("/app/wallet/predictions")).toBe(false);
   });
 
   it("keeps the person's place when asking them to sign in", () => {

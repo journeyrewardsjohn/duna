@@ -80,9 +80,10 @@ Families today, in cascade order: `base` (the `Tideline` scope, fonts,
 `booking`. `interactions` holds the hooks and has no stylesheet.
 The interaction kit adds `motion`, `confirm`, `states` and `form` (and extends `interactions`, `loaders`, `toast`): see [`interaction-kit.md`](interaction-kit.md).
 `score` (NetScore, RatingRing) and `identity` (ClubMark, ClubLockup,
-MembershipCard, WalletStack) render state computed in `@duna/tideline-core`
-(`netScoreState`, `netScoreSentence`, `scoreAnnouncement`, the rating-ring
-geometry, `clubMarkModel`, `membershipPassModel`), so native draws the same
+MembershipCard and its pass, the Wallet: see [`wallet.md`](wallet.md)) render
+state computed in `@duna/tideline-core` (`netScoreState`, `netScoreSentence`,
+`scoreAnnouncement`, the rating-ring geometry, `clubMarkModel`, and the
+wallet model in `wallet.ts` / `qr.ts`), so native draws the same
 thing; `avatar` also holds `WindowAvatar` (a place seen through the mark).
 
 A family imports another family's file directly (`../button/button-style`),
@@ -167,8 +168,10 @@ is vendored at `.agents/skills/ui-sdk`.
 | `DayStrip`, `TimeSlotGrid`                                                                                                                           | `time/day-strip.tsx`                                   | Radio (single selection, arrow keys). UI SDK has no day-strip or slot-grid primitive      |
 | `Avatar`, `AvatarStack`, `AvatarLevel`                                                                                                               | `avatar/avatar.tsx`                                    | Avatar (image with fallback). Stack and level are presentational                          |
 | `ClubMark`, `ClubLockup`                                                                                                                             | `identity/club-mark.tsx`                               | Avatar (logo or tile with the monogram as fallback, so a broken image shows the monogram) |
-| `WalletStack`                                                                                                                                        | `identity/wallet-stack.tsx`                            | Button (each card strip)                                                                  |
-| `NetScore`, `RatingRing`, `MembershipCard`, `WindowAvatar`                                                                                           | `score/`, `identity/`, `avatar/window-avatar.tsx`      | None: markup and SVG; NetScore's live announcer and NumberChange are client parts         |
+| `MembershipCard`, `MembershipPass`, `CardFlip`, `CardArt`                                                                                            | `identity/membership-card.tsx`, `membership-pass.tsx`  | None: markup, canvas (one shared WebGL renderer) and SVG (`QrCode`)                       |
+| `Wallet`, `WalletCarousel`, `WalletStack`, `WalletActions`                                                                                           | `identity/wallet*.tsx`                                 | Button (switch, actions, Back to stack); carousel `tablist`, stack `listbox`              |
+| `CardArrival`, `CardArtPicker`                                                                                                                       | `identity/card-arrival.tsx`                            | None: CSS transitions; the picker is a `radiogroup`                                       |
+| `NetScore`, `RatingRing`, `WindowAvatar`                                                                                                             | `score/`, `identity/`, `avatar/window-avatar.tsx`      | None: markup and SVG; NetScore's live announcer and NumberChange are client parts         |
 | `PlayerSlot`                                                                                                                                         | `avatar/avatar.tsx`                                    | Button, for an open slot with `onAdd`; otherwise presentational                           |
 | `AddPlayers`                                                                                                                                         | `add-players/add-players.tsx`                          | Toggle (Add / Added, `aria-pressed`), Button; search through `useAsyncSearch`             |
 | `SearchField`                                                                                                                                        | `search/search-field.tsx`                              | Input, InputGroup, InputClear                                                             |
