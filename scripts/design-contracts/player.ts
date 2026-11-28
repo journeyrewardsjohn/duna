@@ -51,18 +51,48 @@ export const player: SurfaceContract = {
     ].map((path) => ({ kind: "exists", path, legacy }) as const),
     {
       kind: "includes",
-      file: "apps/player/satoshi-text.tsx",
-      when: "apps/player/satoshi-text.tsx",
+      file: "apps/player/App.tsx",
+      values: ["<AppRoot />", "SplashScreen.preventAutoHideAsync()"],
+      message:
+        "apps/player/App.tsx must mount the design-system root (AppRoot)",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/app/AppRoot.tsx",
       values: [
-        "./assets/fonts/Satoshi-Light.ttf",
-        "./assets/fonts/Satoshi-Regular.ttf",
-        "./assets/fonts/Satoshi-Medium.ttf",
-        "./assets/fonts/Satoshi-Bold.ttf",
-        "./assets/fonts/Satoshi-Black.ttf",
+        "<ThemeProvider",
+        "themeStorage(AsyncStorage)",
+        "<HapticsProvider",
+        "<AppErrorBoundary",
+        "installReactNativeErrorHandler()",
+        "<LaunchSequence",
       ],
       message:
-        "apps/player/satoshi-text.tsx must load every local Satoshi face",
-      legacy: "legacy: delete when Player text moves to @duna/ui/native (M-F1)",
+        "The Player root must mount the Tideline theme provider, haptics, the observability error boundary and the first-open sequence",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/app.json",
+      values: [
+        "../../packages/ui/assets/fonts/Geist-Regular.ttf",
+        "../../packages/ui/assets/fonts/Geist-Medium.ttf",
+        "../../packages/ui/assets/fonts/Geist-SemiBold.ttf",
+        "../../packages/ui/assets/fonts/Geist-Bold.ttf",
+        "../../packages/ui/assets/fonts/GeistMono-Regular.ttf",
+        "../../packages/ui/assets/fonts/GeistMono-Medium.ttf",
+        "../../packages/ui/assets/fonts/GeistMono-SemiBold.ttf",
+        "../../packages/ui/assets/fonts/Jost-Medium.ttf",
+      ],
+      message:
+        "apps/player/app.json must embed the brand fonts (Jost Medium, Geist, Geist Mono) with the expo-font plugin",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/satoshi-text.tsx",
+      when: "apps/player/satoshi-text.tsx",
+      values: ['fontFace("ui"'],
+      message:
+        "The legacy Player text layer must render the Geist faces while it exists",
     },
     {
       kind: "declares",

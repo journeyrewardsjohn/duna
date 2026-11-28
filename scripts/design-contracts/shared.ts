@@ -179,18 +179,5 @@ export const shared: SurfaceContract = {
             "legacy: delete when the web fonts move to Jost/Geist (F2b, F3)",
         }) as const,
     ),
-    {
-      kind: "includes",
-      file: "packages/ui/src/tokens.ts",
-      values: [
-        'display: "Satoshi"',
-        'body: "Satoshi"',
-        'data: "Satoshi"',
-        'mono: "Satoshi"',
-      ],
-      message: "packages/ui/src/tokens.ts must keep the legacy font tokens",
-      legacy:
-        "legacy: delete when native type moves to Jost/Geist (native planner, M-F0/M-F1)",
-    },
   ],
 };

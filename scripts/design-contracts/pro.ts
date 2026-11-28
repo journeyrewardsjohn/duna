@@ -38,18 +38,47 @@ export const pro: SurfaceContract = {
     ].map((path) => ({ kind: "exists", path }) as const),
     {
       kind: "includes",
+      file: "apps/pro/App.tsx",
+      values: ["<AppRoot />", "SplashScreen.preventAutoHideAsync()"],
+      message: "apps/pro/App.tsx must mount the design-system root (AppRoot)",
+    },
+    {
+      kind: "includes",
+      file: "apps/pro/src/app/AppRoot.tsx",
+      values: [
+        "<ThemeProvider",
+        "themeStorage(AsyncStorage)",
+        "<HapticsProvider",
+        "<AppErrorBoundary",
+        "installReactNativeErrorHandler()",
+        "<LaunchSequence",
+      ],
+      message:
+        "The Pro root must mount the Tideline theme provider, haptics, the observability error boundary and the first-open sequence",
+    },
+    {
+      kind: "includes",
+      file: "apps/pro/app.json",
+      values: [
+        "../../packages/ui/assets/fonts/Geist-Regular.ttf",
+        "../../packages/ui/assets/fonts/Geist-Medium.ttf",
+        "../../packages/ui/assets/fonts/Geist-SemiBold.ttf",
+        "../../packages/ui/assets/fonts/Geist-Bold.ttf",
+        "../../packages/ui/assets/fonts/GeistMono-Regular.ttf",
+        "../../packages/ui/assets/fonts/GeistMono-Medium.ttf",
+        "../../packages/ui/assets/fonts/GeistMono-SemiBold.ttf",
+        "../../packages/ui/assets/fonts/Jost-Medium.ttf",
+      ],
+      message:
+        "apps/pro/app.json must embed the brand fonts (Jost Medium, Geist, Geist Mono) with the expo-font plugin",
+    },
+    {
+      kind: "includes",
       file: "apps/pro/satoshi-text.tsx",
       when: "apps/pro/satoshi-text.tsx",
-      values: [
-        "./assets/fonts/Satoshi-Light.ttf",
-        "./assets/fonts/Satoshi-Regular.ttf",
-        "./assets/fonts/Satoshi-Medium.ttf",
-        "./assets/fonts/Satoshi-Bold.ttf",
-        "./assets/fonts/Satoshi-Black.ttf",
-      ],
-      message: "apps/pro/satoshi-text.tsx must load every local Satoshi face",
-      legacy:
-        "legacy: delete when Pro text moves to @duna/ui/native (M-F1/M-R0)",
+      values: ['fontFace("ui"'],
+      message:
+        "The legacy Pro text layer must render the Geist faces while it exists",
     },
   ],
 };
