@@ -63,22 +63,29 @@ export function VenueMap({
           <Mapbox.Camera
             animationDuration={0}
             centerCoordinate={[longitude, latitude]}
+            // The first frame starts on the venue, not at world zoom.
+            defaultSettings={{
+              centerCoordinate: [longitude, latitude],
+              zoomLevel: ZOOM,
+            }}
             zoomLevel={ZOOM}
           />
-          <Mapbox.MarkerView
-            allowOverlap
-            coordinate={[longitude, latitude]}
-            id="venue"
-          >
-            <MapPin accessibilityLabel={name} kind="court" yours zoom={ZOOM} />
-          </Mapbox.MarkerView>
         </Mapbox.MapView>
+        {/* The camera is fixed on the venue, so its pin sits at the centre. */}
+        <View style={styles.pin}>
+          <MapPin accessibilityLabel={name} kind="court" yours zoom={ZOOM} />
+        </View>
       </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  pin: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   frame: {
     height: 160,
     overflow: "hidden",

@@ -76,6 +76,7 @@ import {
   parseDevShellUrl,
   parsePlayerDeepLink,
 } from "./deep-links";
+import { ReturningAccountGate } from "./AccountGate";
 import { NewSheet } from "./NewSheet";
 import { NEW_ACTION, TABS, type TabKey } from "./router";
 import { SCREENS } from "./screens";
@@ -165,6 +166,7 @@ export function DunaApp() {
   const [layoutLabOpen, setLayoutLabOpen] = useState(
     Boolean(layoutLabAutostart),
   );
+  const [gatePreview, setGatePreview] = useState(false);
   const [foundations, setFoundations] = useState<FoundationsOptions | null>(
     foundationsAutostart,
   );
@@ -242,6 +244,11 @@ export function DunaApp() {
           if (action.type === "open-sheet") setNewSheetOpen(true);
           else dispatch(action);
         }
+        return;
+      }
+      if (url?.startsWith("duna://dev/gate")) {
+        // Preview builds: the returning-account screen, for screenshots.
+        if (previewRef.current) setGatePreview(true);
         return;
       }
       if (url?.startsWith("duna://dev/layout-lab")) {
@@ -827,6 +834,17 @@ export function DunaApp() {
       </ShellContext.Provider>
       {layoutLabOpen && runtime.mode === "preview" ? (
         <PlayerLayoutLab onClose={() => setLayoutLabOpen(false)} />
+      ) : null}
+      {gatePreview && runtime.mode === "preview" ? (
+        <View style={StyleSheet.absoluteFill}>
+          <ReturningAccountGate
+            busy={false}
+            name={runtime.dashboard?.player.displayName ?? "John Sutton"}
+            onContinue={() => setGatePreview(false)}
+            onUseDifferentAccount={() => setGatePreview(false)}
+            photoUrl={runtime.dashboard?.player.avatarUrl}
+          />
+        </View>
       ) : null}
       {foundations && runtime.mode === "preview" ? (
         <PlayerFoundations

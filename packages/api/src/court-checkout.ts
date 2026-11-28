@@ -1470,6 +1470,12 @@ export async function startCourtCheckout(input: {
   readonly paymentSurface: "hosted" | "native";
   readonly createMatch?: boolean;
   readonly participants: readonly CourtBookingInviteInput[];
+  /**
+   * "self": the booker sends each invitation from their own phone (Messages,
+   * WhatsApp, the share sheet), so Duna texts no one. "duna" (default): Duna
+   * texts invited mobile numbers through the configured provider.
+   */
+  readonly inviteDelivery?: "duna" | "self";
   readonly expectedPayNowMinor: number;
   readonly expectedTotalMinor: number;
   readonly policyAccepted: boolean;
@@ -1772,16 +1778,17 @@ export async function startCourtCheckout(input: {
         createdAt: input.now,
       }),
     ]);
-    await sendBookingInviteSms({
-      participantRows,
-      organizerName: buyer.displayName,
-      venueName: resource.venueName,
-      courtName: resource.courtName,
-      startsAt,
-      timeZone: resource.timezone,
-      currency: priced.currency,
-      applicationOrigin: new URL(input.successUrl).origin,
-    });
+    if (input.inviteDelivery !== "self")
+      await sendBookingInviteSms({
+        participantRows,
+        organizerName: buyer.displayName,
+        venueName: resource.venueName,
+        courtName: resource.courtName,
+        startsAt,
+        timeZone: resource.timezone,
+        currency: priced.currency,
+        applicationOrigin: new URL(input.successUrl).origin,
+      });
     const match = await ensureCourtBookingMatch({
       bookingId: hold.bookingId,
       hostPersonId: subjectPersonId,
@@ -2035,16 +2042,17 @@ export async function startCourtCheckout(input: {
           })
           .where(eq(courtBookings.id, hold.bookingId)),
       ]);
-      await sendBookingInviteSms({
-        participantRows,
-        organizerName: buyer.displayName,
-        venueName: resource.venueName,
-        courtName: resource.courtName,
-        startsAt,
-        timeZone: resource.timezone,
-        currency: priced.currency,
-        applicationOrigin: new URL(input.successUrl).origin,
-      });
+      if (input.inviteDelivery !== "self")
+        await sendBookingInviteSms({
+          participantRows,
+          organizerName: buyer.displayName,
+          venueName: resource.venueName,
+          courtName: resource.courtName,
+          startsAt,
+          timeZone: resource.timezone,
+          currency: priced.currency,
+          applicationOrigin: new URL(input.successUrl).origin,
+        });
       return {
         mode: "stripe",
         bookingId: hold.bookingId,
@@ -2110,16 +2118,17 @@ export async function startCourtCheckout(input: {
         })
         .where(eq(courtBookings.id, hold.bookingId)),
     ]);
-    await sendBookingInviteSms({
-      participantRows,
-      organizerName: buyer.displayName,
-      venueName: resource.venueName,
-      courtName: resource.courtName,
-      startsAt,
-      timeZone: resource.timezone,
-      currency: priced.currency,
-      applicationOrigin: new URL(input.successUrl).origin,
-    });
+    if (input.inviteDelivery !== "self")
+      await sendBookingInviteSms({
+        participantRows,
+        organizerName: buyer.displayName,
+        venueName: resource.venueName,
+        courtName: resource.courtName,
+        startsAt,
+        timeZone: resource.timezone,
+        currency: priced.currency,
+        applicationOrigin: new URL(input.successUrl).origin,
+      });
     return {
       mode: "stripe",
       bookingId: hold.bookingId,

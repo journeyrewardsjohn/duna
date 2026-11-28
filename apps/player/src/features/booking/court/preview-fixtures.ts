@@ -13,7 +13,14 @@ import type { CourtFlowState } from "./court-flow";
 import type { ConfirmedBooking } from "./CourtBookingFlow";
 
 export type CourtFlowPreviewStep =
-  "players" | "pay" | "confirming" | "confirmed" | "failed";
+  | "players"
+  | "duna-players"
+  | "invite"
+  | "invite-manual"
+  | "pay"
+  | "confirming"
+  | "confirmed"
+  | "failed";
 
 export interface CourtFlowPreview {
   readonly state: (initial: CourtFlowState) => Partial<CourtFlowState>;
@@ -21,6 +28,8 @@ export interface CourtFlowPreview {
   readonly slot?: CourtAvailability["slots"][number];
   readonly confirmed?: ConfirmedBooking;
   readonly bookerName?: string;
+  /** A sheet open over the step (screenshots of the roster sheets). */
+  readonly sheet?: "duna-players" | "invite" | "invite-manual";
 }
 
 export function isPreviewStep(
@@ -28,6 +37,9 @@ export function isPreviewStep(
 ): value is CourtFlowPreviewStep {
   return (
     value === "players" ||
+    value === "duna-players" ||
+    value === "invite" ||
+    value === "invite-manual" ||
     value === "pay" ||
     value === "confirming" ||
     value === "confirmed" ||
@@ -77,19 +89,27 @@ export function courtFlowPreview(input: {
     price: { amountMinor: 7500, currency: "USD" },
     daylightStatus: "daylight",
   };
+  const sheet =
+    input.step === "duna-players" ||
+    input.step === "invite" ||
+    input.step === "invite-manual"
+      ? input.step
+      : undefined;
+  const step = (sheet ? "players" : input.step) as CourtFlowState["step"];
   return {
+    ...(sheet ? { sheet } : {}),
     bookerName: "John Sutton",
     quote,
     slot,
     state: () => ({
-      step: input.step,
+      step,
       guests: GUESTS,
       paymentMode: "split",
       intent: "host",
-      policyAccepted: input.step !== "pay",
-      policyRead: input.step !== "pay",
-      phase: input.step === "confirming" ? 1 : 3,
-      ...(input.step === "failed"
+      policyAccepted: step !== "pay",
+      policyRead: step !== "pay",
+      phase: step === "confirming" ? 1 : 3,
+      ...(step === "failed"
         ? {
             failure: {
               message: "That court was taken a moment ago. Pick another time.",

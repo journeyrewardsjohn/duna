@@ -161,7 +161,10 @@ export function rosterSeats(input: {
       participant,
     });
   }
-  const total = Math.max(input.capacity ?? DEFAULT_SEATS, seats.length);
+  // A doubles court draws four seats even when the venue allows more
+  // people on it; the roster still grows seat by seat past that.
+  const drawn = Math.min(input.capacity ?? DEFAULT_SEATS, DEFAULT_SEATS);
+  const total = Math.max(drawn, seats.length);
   for (let index = seats.length; index < total; index += 1)
     seats.push({ kind: "open", key: `open-${index}` });
   return seats;

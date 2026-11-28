@@ -157,7 +157,11 @@ export function CourtTimePicker({
       day: day!,
     });
   }, [selection.date, venue.latitude, venue.longitude]);
-  const conditions = conditionsAt(availability, chosenSlot);
+  // Before a time is chosen, the day's first open time stands in.
+  const conditions = conditionsAt(
+    availability,
+    chosenSlot ?? availability?.slots[0],
+  );
 
   return (
     <View style={{ gap: tokens.space["5"] }} testID="court-time-picker">

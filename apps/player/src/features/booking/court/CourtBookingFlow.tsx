@@ -22,6 +22,7 @@
  * there until money moves, sheets that close, Dynamic Type, VoiceOver.
  */
 import {
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -32,6 +33,7 @@ import {
 } from "react-native";
 import type { PersonSummary } from "@duna/core";
 import { formatMoney } from "@duna/core";
+import { demoPlayer } from "@duna/core/demo";
 import { report } from "@duna/observability";
 import {
   Cross,
@@ -88,7 +90,16 @@ import {
 } from "./court-flow";
 import { localMinute, slotsAt } from "./court-times";
 import { CourtTimePicker } from "./CourtTimePicker";
-import { bookingInviteUrl, inviteMessage, matchUrl } from "./invite-links";
+import {
+  bookingInviteUrl,
+  INVITE_STATE_WORDS,
+  inviteMessage,
+  mailtoUrl,
+  matchUrl,
+  smsUrl,
+  whatsappUrl,
+  type InviteState,
+} from "./invite-links";
 import { ActionRow, Card, Fact, Seat, SectionLabel, Segmented } from "./parts";
 import { ReservationCrest } from "./ReservationCrest";
 import {
@@ -206,7 +217,10 @@ function Flow({
   const runtime = usePlayerRuntime();
   const haptics = useHaptics();
   const { colors, tokens } = useTheme();
-  const { height } = useWindowDimensions();
+  const { height, fontScale } = useWindowDimensions();
+  // At the largest text sizes the action scrolls with the step instead of
+  // covering half the sheet.
+  const largeText = fontScale >= 1.6;
   const insets = useSafeAreaInsets();
   const live = runtime.mode === "live" ? runtime.client : undefined;
   const {
@@ -238,8 +252,12 @@ function Flow({
   );
   const [slow, setSlow] = useState(false);
   const [pendingBookingId, setPendingBookingId] = useState<string>();
-  const [playersOpen, setPlayersOpen] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const [playersOpen, setPlayersOpen] = useState(
+    preview?.sheet === "duna-players",
+  );
+  const [inviteOpen, setInviteOpen] = useState(
+    preview?.sheet === "invite" || preview?.sheet === "invite-manual",
+  );
   const [policyOpen, setPolicyOpen] = useState(false);
   const idempotency = useRef<{ attempt: number; key: string } | null>(null);
   const stepRef = useRef(state.step);
@@ -295,7 +313,10 @@ function Flow({
         ? quoteState.previous
         : undefined);
 
-  const player = runtime.dashboard?.player as PersonSummary | undefined;
+  // Preview builds have no signed-in person: the demo player stands in.
+  const player = (runtime.dashboard?.player ??
+    (runtime.mode === "preview" ? demoPlayer : undefined)) as
+    PersonSummary | undefined;
   const booker: Booker = {
     ...(player?.id ? { personId: player.id } : {}),
     name: player?.displayName ?? preview?.bookerName ?? "You",
@@ -334,6 +355,8 @@ function Flow({
         paymentMode: state.paymentMode,
         paymentSurface: Platform.OS === "web" ? "hosted" : "native",
         createMatch: intent === "host",
+        // The booker sends each invitation from their own phone (owner, 28 Nov).
+        inviteDelivery: "self",
         participants: [...checkoutParticipants(state.guests)],
         expectedPayNowMinor: quote.payNowMinor,
         expectedTotalMinor: quote.totalMinor,
@@ -472,7 +495,8 @@ function Flow({
   };
 
   const busy = state.step === "confirming";
-  const dark = state.step === "confirming";
+  // Confirming and its outcome sit on Night Court (owner feedback 4).
+  const dark = state.step === "confirming" || state.step === "failed";
   // Fills the sheet without passing its frame (bottom sheet or centred).
   const sheetHeight = Math.min(height - insets.top - insets.bottom - 64, 940);
 
@@ -514,6 +538,11 @@ function Flow({
             : undefined
         }
         onRetry={() => dispatch({ type: "retry" })}
+        onNewTime={() => {
+          dispatch({ type: "retry" });
+          dispatch({ type: "back" });
+          dispatch({ type: "back" });
+        }}
       />
     );
   } else if (state.step === "confirmed" && confirmed) {
@@ -692,19 +721,22 @@ function Flow({
               )}
             </View>
           </Cross>
+          {largeText ? footer : null}
         </ScrollView>
-        <View
-          style={{
-            paddingHorizontal: tokens.space["4"],
-            paddingTop: tokens.space["3"],
-            paddingBottom: tokens.space["3"],
-            borderTopColor: colors.line,
-            borderTopWidth: StyleSheet.hairlineWidth,
-            backgroundColor: colors.surface,
-          }}
-        >
-          {footer}
-        </View>
+        {largeText ? null : (
+          <View
+            style={{
+              paddingHorizontal: tokens.space["4"],
+              paddingTop: tokens.space["3"],
+              paddingBottom: tokens.space["3"],
+              borderTopColor: colors.line,
+              borderTopWidth: StyleSheet.hairlineWidth,
+              backgroundColor: colors.surface,
+            }}
+          >
+            {footer}
+          </View>
+        )}
       </>
     );
   }
@@ -729,7 +761,7 @@ function Flow({
         if (!busy) onClose();
       }}
       testID="court-booking-flow"
-      theme={dark ? { sheet: tokens.brand["night-court"] } : undefined}
+      theme={{ sheet: dark ? tokens.brand["night-court"] : colors.ground }}
       visible
     >
       {dark ? <ThemeOverride theme="dark">{content}</ThemeOverride> : content}
@@ -758,6 +790,7 @@ function Flow({
           return undefined;
         }}
         onClose={() => setInviteOpen(false)}
+        startManual={preview?.sheet === "invite-manual"}
         shareNote={
           state.paymentMode === "split" && quote
             ? `They pay their share (about ${formatMoney(quote.participantShareMinor, quote.currency)})`
@@ -800,6 +833,17 @@ function timeRange(
   return `${timeOf(startsAt, timeZone)}–${timeOf(endsAt, timeZone)}`;
 }
 
+function shortDay(iso: string, timeZone?: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: timeZone ?? "UTC",
+  })
+    .format(new Date(iso))
+    .replace(",", "");
+}
+
 function dayOf(iso: string, timeZone?: string): string {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -833,6 +877,8 @@ function FlowHeader({
       <HeaderButton icon="chevron-left" label="Back" onPress={onBack} />
       <Text
         family="mono"
+        maxFontSizeMultiplier={1.4}
+        numberOfLines={1}
         style={styles.fillCenter}
         tone="text-2"
         variant="micro"
@@ -883,6 +929,8 @@ function ChosenTime({
   readonly onChange: () => void;
 }) {
   const { colors, tokens } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const stacked = fontScale >= 1.6;
   return (
     <Pressable
       accessibilityHint="Goes back to the times; your players stay"
@@ -891,6 +939,7 @@ function ChosenTime({
       onPress={onChange}
       style={({ pressed }) => [
         styles.chosen,
+        stacked ? styles.chosenStacked : null,
         {
           gap: tokens.space["3"],
           padding: tokens.space["3"],
@@ -901,8 +950,10 @@ function ChosenTime({
       ]}
       testID="flow-chosen-time"
     >
-      <Icon color={tokens.brand.dune} name="schedule" size="control" />
-      <View style={styles.fill}>
+      {stacked ? null : (
+        <Icon color={tokens.brand.dune} name="schedule" size="control" />
+      )}
+      <View style={stacked ? null : styles.fill}>
         <Text
           style={{ color: tokens.brand.salt }}
           variant="phone-body"
@@ -1105,21 +1156,20 @@ function PayStep({
         options={[
           {
             value: "full",
-            title:
+            title: "Pay everything",
+            detail:
               state.paymentMode === "full" && lines
-                ? `Pay everything · ${money(lines.payNowMinor)}`
-                : "Pay everything",
-            detail: "You cover the whole court",
+                ? `${money(lines.payNowMinor)}, whole court`
+                : "Whole court",
           },
           {
             value: "split",
-            title:
-              state.paymentMode === "split" && lines
-                ? `Pay your part · ${money(lines.payNowMinor)}`
-                : "Pay your part",
-            detail: state.guests.length
-              ? `Split ${state.guests.length + 1} ways`
-              : "Add players to split it",
+            title: "Pay your part",
+            detail: !state.guests.length
+              ? "Add players first"
+              : state.paymentMode === "split" && lines
+                ? `${money(lines.payNowMinor)}, split ${state.guests.length + 1} ways`
+                : `Split ${state.guests.length + 1} ways`,
             disabled: state.guests.length === 0,
           },
         ]}
@@ -1215,6 +1265,7 @@ function PayStep({
         <Card testID="policy">
           <ActionRow
             detail={[
+              state.policyAccepted ? "Accepted" : "Required: read and accept",
               policy.refundBeforeHours !== undefined
                 ? `Refund until ${policy.refundBeforeHours} hours before`
                 : undefined,
@@ -1226,11 +1277,7 @@ function PayStep({
             onPress={onPolicy}
             selected={state.policyAccepted}
             testID="policy-open"
-            title={
-              state.policyAccepted
-                ? `${policy.title} · accepted`
-                : `${policy.title} · read and accept`
-            }
+            title={policy.title}
           />
         </Card>
       ) : null}
@@ -1370,7 +1417,9 @@ function FailedStep({
   onRetry,
   onClose,
   onPlans,
+  onNewTime,
 }: {
+  readonly onNewTime: () => void;
   readonly failure: {
     readonly message: string;
     readonly money: MoneyOutcome;
@@ -1423,7 +1472,18 @@ function FailedStep({
           <ActionButton label="See it in Plans" onPress={onPlans} />
         ) : null
       ) : failure.money === "not-charged" ? (
-        <ActionButton label="Try again" onPress={onRetry} testID="flow-retry" />
+        <>
+          <ActionButton
+            label="Try again"
+            onPress={onRetry}
+            testID="flow-retry"
+          />
+          <ActionButton
+            kind="secondary"
+            label="Choose another time"
+            onPress={onNewTime}
+          />
+        </>
       ) : null}
       <ActionButton
         kind={pending ? "primary" : "quiet"}
@@ -1501,6 +1561,25 @@ function ConfirmedStep({
       ? "Court booked"
       : "Your share is paid";
 
+  // The checkout's roster has names, not numbers: the booker's own entry
+  // (still on this phone) supplies the number or email to address it to.
+  const contactFor = (displayName: string) => {
+    const guest = guests.find(
+      (entry) =>
+        !entry.personId &&
+        (entry.name ?? entry.phoneE164 ?? entry.email) === displayName,
+    );
+    return guest
+      ? {
+          ...(guest.phoneE164 ? { phone: guest.phoneE164 } : {}),
+          ...(guest.email ? { email: guest.email } : {}),
+        }
+      : undefined;
+  };
+  const [inviteStates, setInviteStates] = useState<
+    Readonly<Record<string, InviteState>>
+  >({});
+
   const people = useMemo(() => {
     const byPerson = new Map(
       guests.flatMap((guest) =>
@@ -1520,6 +1599,7 @@ function ConfirmedStep({
             ? `${formatMoney(entry.shareAmountMinor, booking.currency)} to pay`
             : (STATUS_WORDS[entry.status] ?? "Invited"),
         inviteToken: entry.personId ? undefined : entry.inviteToken,
+        contact: entry.personId ? undefined : contactFor(entry.displayName),
         shareMinor: entry.shareAmountMinor,
       }));
     // The checkout's own roster when it sent one; else the people added.
@@ -1535,6 +1615,7 @@ function ConfirmedStep({
       photoUrl: guest.person?.avatarUrl,
       status: "Invited",
       inviteToken: undefined,
+      contact: undefined,
       shareMinor: 0,
     }));
   }, [booking.currency, booking.participants, guests]);
@@ -1565,29 +1646,105 @@ function ConfirmedStep({
     }
   };
 
-  const sendLink = async (person: {
-    readonly name: string;
-    readonly inviteToken?: string;
-    readonly shareMinor: number;
-  }) => {
-    if (!person.inviteToken) return;
+  type Invitee = (typeof people)[number];
+  const messageFor = (person: Invitee) =>
+    person.inviteToken
+      ? inviteMessage({
+          organizerName: booker.name,
+          what: booking.match ? "a beach volleyball match" : "a beach court",
+          place: venue.name,
+          when: `${shortDay(booking.startsAt, venue.timezone)} ${timeOf(booking.startsAt, venue.timezone)}`,
+          url: bookingInviteUrl(dunaWebUrl, person.inviteToken),
+        })
+      : undefined;
+
+  /** Opens the person's own app; Duna can say it opened, never that it sent. */
+  const openInvite = async (
+    person: Invitee,
+    how: "messages" | "whatsapp" | "mail" | "share",
+  ) => {
+    const body = messageFor(person);
+    if (!body) return;
     haptics.selection();
     try {
-      await Share.share({
-        message: inviteMessage({
-          inviteeName: person.name,
-          organizerName: booker.name.split(/\s+/)[0] ?? booker.name,
-          venueName: venue.name,
-          whenText: `${day}, ${time}`,
-          url: bookingInviteUrl(dunaWebUrl, person.inviteToken),
-          ...(person.shareMinor > 0
-            ? { shareText: formatMoney(person.shareMinor, booking.currency) }
-            : {}),
-        }),
-      });
+      if (how === "share") {
+        const result = await Share.share({ message: body });
+        if (result.action === Share.sharedAction)
+          setInviteStates((current) => ({
+            ...current,
+            [person.key]: "shared",
+          }));
+        return;
+      }
+      const url =
+        how === "messages"
+          ? person.contact?.phone
+            ? smsUrl([person.contact.phone], body, Platform.OS)
+            : undefined
+          : how === "whatsapp"
+            ? person.contact?.phone
+              ? whatsappUrl(person.contact.phone, body)
+              : undefined
+            : person.contact?.email
+              ? mailtoUrl(
+                  person.contact.email,
+                  `${venue.name}, ${shortDay(booking.startsAt, venue.timezone)}`,
+                  body,
+                )
+              : undefined;
+      if (!url) return;
+      await Linking.openURL(url);
+      setInviteStates((current) => ({
+        ...current,
+        [person.key]:
+          how === "messages"
+            ? "opened-messages"
+            : how === "whatsapp"
+              ? "opened-whatsapp"
+              : "opened-mail",
+      }));
     } catch (reason) {
       setNote(
-        `Sharing didn't open. Reference ${report(reason, { event: "player.court.invite_share_failed" })}.`,
+        how === "messages"
+          ? "Messages isn't available on this device. Try WhatsApp or Share another way."
+          : `That app didn't open. Reference ${report(reason, { event: "player.court.invite_open_failed" })}.`,
+      );
+    }
+  };
+
+  /** One group message, only when the person chooses it. */
+  const textEveryone = async () => {
+    const phones = people.flatMap((person) =>
+      person.inviteToken && person.contact?.phone ? [person] : [],
+    );
+    if (phones.length < 2) return;
+    // One shared link per person would mix up claims: the group message
+    // carries the booking link; each person still has their own seat.
+    const body = inviteMessage({
+      organizerName: booker.name,
+      what: booking.match ? "a beach volleyball match" : "a beach court",
+      place: venue.name,
+      when: `${shortDay(booking.startsAt, venue.timezone)} ${timeOf(booking.startsAt, venue.timezone)}`,
+      url: link,
+    });
+    const url = smsUrl(
+      phones.map((person) => person.contact!.phone!),
+      body,
+      Platform.OS,
+    );
+    if (!url) return;
+    haptics.selection();
+    try {
+      await Linking.openURL(url);
+      setInviteStates((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          phones.map((person) => [person.key, "opened-messages" as const]),
+        ),
+      }));
+    } catch {
+      setNote(
+        "Messages isn't available on this device. Try WhatsApp or Share another way.",
       );
     }
   };
@@ -1791,17 +1948,55 @@ function ConfirmedStep({
             status="You booked it"
           />
           {people.map((person) => (
-            <PersonLine
-              action={
-                person.inviteToken
-                  ? { label: "Send link", onPress: () => void sendLink(person) }
-                  : undefined
-              }
-              key={person.key}
-              name={person.name}
-              photoUrl={person.photoUrl}
-              status={person.status}
-            />
+            <View key={person.key} style={{ gap: tokens.space["2"] }}>
+              <PersonLine
+                name={person.name}
+                photoUrl={person.photoUrl}
+                status={
+                  person.inviteToken
+                    ? `${INVITE_STATE_WORDS[inviteStates[person.key] ?? "ready"]}${person.shareMinor > 0 ? ` · pays ${formatMoney(person.shareMinor, booking.currency)}` : ""}`
+                    : person.status
+                }
+              />
+              {person.inviteToken ? (
+                <View
+                  style={[styles.inviteActions, { gap: tokens.space["2"] }]}
+                >
+                  {person.contact?.phone ? (
+                    <InvitePill
+                      icon="phone-bubble"
+                      label="Message"
+                      name={person.name}
+                      onPress={() => void openInvite(person, "messages")}
+                      primary
+                    />
+                  ) : person.contact?.email ? (
+                    <InvitePill
+                      icon="mail"
+                      label="Email"
+                      name={person.name}
+                      onPress={() => void openInvite(person, "mail")}
+                      primary
+                    />
+                  ) : null}
+                  {person.contact?.phone &&
+                  whatsappUrl(person.contact.phone, "x") ? (
+                    <InvitePill
+                      icon="message"
+                      label="WhatsApp"
+                      name={person.name}
+                      onPress={() => void openInvite(person, "whatsapp")}
+                    />
+                  ) : null}
+                  <InvitePill
+                    icon="send"
+                    label="Share another way"
+                    name={person.name}
+                    onPress={() => void openInvite(person, "share")}
+                  />
+                </View>
+              ) : null}
+            </View>
           ))}
           {invitedIds.length ? (
             <Text tone="positive" variant="phone-meta">
@@ -1831,9 +2026,19 @@ function ConfirmedStep({
           ) : null}
           {people.some((person) => person.inviteToken) ? (
             <Text tone="text-2" variant="phone-meta">
-              Duna texts or emails each invitation. "Send link" lets you send it
-              yourself too.
+              You send each invitation from your own phone: Duna opens the app
+              with the words and their link filled in, and you press Send.
             </Text>
+          ) : null}
+          {people.filter(
+            (person) => person.inviteToken && person.contact?.phone,
+          ).length > 1 ? (
+            <ActionButton
+              icon="users"
+              kind="secondary"
+              label="Message everyone in one group"
+              onPress={() => void textEveryone()}
+            />
           ) : null}
         </Card>
         <Card>
@@ -1916,6 +2121,55 @@ function ConfirmedStep({
   );
 }
 
+function InvitePill({
+  icon,
+  label,
+  name,
+  onPress,
+  primary = false,
+}: {
+  readonly icon: GlyphName;
+  readonly label: string;
+  readonly name: string;
+  readonly onPress: () => void;
+  readonly primary?: boolean;
+}) {
+  const { colors, tokens } = useTheme();
+  return (
+    <Pressable
+      accessibilityHint="Opens the app with the invitation filled in; you press Send"
+      accessibilityLabel={`${label}: invite ${name}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.pill,
+        {
+          flexDirection: "row",
+          gap: tokens.space["1"],
+          borderRadius: tokens.radius.pill,
+          borderColor: primary ? colors.action : colors["line-strong"],
+          backgroundColor: primary ? colors.action : "transparent",
+          paddingHorizontal: tokens.space["3"],
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}
+    >
+      <Icon
+        color={primary ? colors["on-action"] : colors.text}
+        name={icon}
+        size="inline"
+      />
+      <Text
+        style={primary ? { color: colors["on-action"] } : undefined}
+        variant="phone-meta"
+        weight={600}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function PersonLine({
   name,
   photoUrl,
@@ -1985,6 +2239,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chosen: { flexDirection: "row", alignItems: "center", minHeight: 56 },
+  chosenStacked: { flexDirection: "column", alignItems: "flex-start" },
   seats: { flexDirection: "row", flexWrap: "wrap" },
   avatarRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   confirming: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -2006,6 +2261,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 4,
   },
+  inviteActions: { flexDirection: "row", flexWrap: "wrap", paddingLeft: 56 },
   pill: {
     minHeight: 36,
     borderWidth: 1,

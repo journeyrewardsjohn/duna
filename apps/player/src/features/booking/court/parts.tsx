@@ -254,7 +254,7 @@ export function Seat({
   status,
   onPress,
   onRemove,
-  size = 64,
+  size = 60,
 }: {
   readonly seat: RosterSeat;
   /** A short line under the name ("You", "Invited", "Paid"). */
@@ -278,7 +278,7 @@ export function Seat({
         }}
         style={({ pressed }) => [
           styles.seat,
-          { width: size + 24, opacity: pressed ? 0.6 : 1 },
+          { width: size + 16, opacity: pressed ? 0.6 : 1 },
         ]}
         testID="roster-open-seat"
       >
@@ -305,7 +305,7 @@ export function Seat({
   const first = seat.name.split(/\s+/)[0] ?? seat.name;
   const label = `${seat.name}${status ? `, ${status}` : ""}`;
   return (
-    <View style={[styles.seat, { width: size + 24 }]}>
+    <View style={[styles.seat, { width: size + 16 }]}>
       <Pressable
         accessibilityLabel={label}
         accessibilityRole={onPress ? "button" : "text"}
@@ -330,7 +330,11 @@ export function Seat({
         />
       </Pressable>
       <Text numberOfLines={1} variant="phone-meta" weight={600}>
-        {seat.kind === "booker" ? `${first} (you)` : first}
+        {seat.kind === "booker"
+          ? first === "You"
+            ? "You"
+            : `${first} (you)`
+          : first}
       </Text>
       {status ? (
         <Text numberOfLines={1} tone="text-2" variant="phone-meta">

@@ -199,7 +199,8 @@ function CourtTimes({ venueId }: { readonly venueId: string }) {
   const footer = (
     <View
       style={{
-        paddingHorizontal: edges.left + tokens.space["4"],
+        paddingLeft: edges.left + tokens.space["4"],
+        paddingRight: edges.right + tokens.space["4"],
         paddingTop: tokens.space["3"],
         paddingBottom: edges.bottom + tokens.space["3"],
         borderTopColor: colors.line,

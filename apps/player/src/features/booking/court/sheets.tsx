@@ -22,6 +22,7 @@ import {
   View,
 } from "react-native";
 import type { PersonSummary } from "@duna/core";
+import { demoPeople } from "@duna/core/demo";
 import { report } from "@duna/observability";
 import {
   EmptyState,
@@ -161,6 +162,28 @@ export function DunaPlayersSheet({
       setResults(undefined);
       return;
     }
+    if (runtime.mode === "preview") {
+      // Preview builds: the demo people, so the sheet can be seen.
+      setSuggestions(
+        (runtime.people ?? demoPeople).slice(0, 8).map((person, index) => ({
+          person,
+          relationship: index < 3 ? "recent-partner" : "nearby",
+          sharedTeams: index < 3 ? 3 - index : 0,
+          following: false,
+          followsYou: false,
+          reliability: {
+            label: index % 2 ? "reliable" : "highly-reliable",
+            tracked: 8,
+            attended: 8,
+            noShows: 0,
+          },
+          gender: "Not listed",
+          eligible: true,
+          eligibilityReasons: [],
+        })) as unknown as readonly TeammateResult[],
+      );
+      return;
+    }
     if (!client) return;
     let active = true;
     setError(undefined);
@@ -264,7 +287,7 @@ export function DunaPlayersSheet({
             value={query}
           />
         </View>
-        {!client ? (
+        {!client && runtime.mode !== "preview" ? (
           <EmptyState
             text="Sign in to see your partners and everyone on Duna."
             title="Players appear when you're signed in"
@@ -490,8 +513,11 @@ export function InviteSheet({
   onAdd,
   onClose,
   shareNote,
+  startManual = false,
 }: {
   readonly visible: boolean;
+  /** Open on the typed-details path (contacts refused; previews). */
+  readonly startManual?: boolean;
   /** Returns an error message when the guest can't be added. */
   readonly onAdd: (guest: BookingParticipant) => string | undefined;
   readonly onClose: () => void;
@@ -507,7 +533,7 @@ export function InviteSheet({
 
   useEffect(() => {
     if (!visible) return;
-    setStage({ kind: "start" });
+    setStage({ kind: startManual ? "denied" : "start" });
     setName("");
     setTarget("");
     setError(undefined);
@@ -611,8 +637,8 @@ export function InviteSheet({
           <SectionLabel>Who gets what</SectionLabel>
           <Text variant="phone-body">
             {guest.phoneE164
-              ? `When you book, Duna texts ${who.split(/\s+/)[0]} an invitation link to ${guest.phoneE164}.`
-              : `When you book, Duna emails ${who.split(/\s+/)[0]} an invitation link at ${guest.email}.`}
+              ? `After you book, you send ${who.split(/\s+/)[0]} the invitation yourself: Duna opens Messages or WhatsApp to ${guest.phoneE164} with the words and link filled in.`
+              : `After you book, you send ${who.split(/\s+/)[0]} the invitation yourself: Duna opens your mail to ${guest.email} with the words and link filled in.`}
           </Text>
           <Text tone="text-2" variant="phone-meta">
             {shareNote
@@ -620,8 +646,8 @@ export function InviteSheet({
               : "They join your booking; you're paying for the court."}
           </Text>
           <Text tone="text-2" variant="phone-meta">
-            Only this name and this number or email leave your phone, and only
-            when you book. You can also send the link yourself afterwards.
+            Duna doesn't text or email anyone. Only this name and this number or
+            email are saved with the booking, so their seat shows as invited.
           </Text>
         </View>
         <ActionButton
@@ -726,9 +752,9 @@ export function InviteSheet({
         {!manual ? (
           <>
             <Text tone="text-2" variant="phone-body">
-              Choose one person from your contacts. Duna uses only their name
-              and the number or email you pick, and only when you book. Your
-              address book is never uploaded.
+              Choose one person from your contacts. Duna keeps only their name
+              and the number or email you pick, and you send the invitation
+              yourself after booking. Your address book is never uploaded.
             </Text>
             <ActionButton
               busy={stage.kind === "asking"}

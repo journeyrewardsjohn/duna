@@ -63,11 +63,18 @@ export function PersonAvatar({
 }) {
   const { colors, tokens } = useTheme();
   const ground = avatarGround(name);
+  // On a Night Court ground (dark theme, the sign-in screen) a Night Court
+  // mark would vanish: it takes the lifted court tone instead.
+  const onNight =
+    colors.ground.toLowerCase() === tokens.brand["night-court"].toLowerCase();
   const fill =
     ground === "night-court"
-      ? tokens.brand["night-court"]
+      ? onNight
+        ? colors["mesh-night-court-b"]
+        : tokens.brand["night-court"]
       : ground === "tidewater"
-        ? colors["mesh-tidewater-a"]
+        ? // The same blue in light and dark (the mesh token darkens in dark).
+          tokens.ramp["tideblue-600"]
         : ground === "hardwood"
           ? tokens.brand.hardwood
           : tokens.brand.dune;

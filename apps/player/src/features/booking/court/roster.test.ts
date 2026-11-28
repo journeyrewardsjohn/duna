@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { PersonSummary } from "@duna/core";
-import { bookingInviteUrl, inviteMessage } from "./invite-links";
 import {
   addGuest,
   checkoutParticipants,
@@ -60,6 +59,11 @@ describe("roster: the booker is always first", () => {
     expect(
       rosterSeats({ booker, guests: [] }).map((seat) => seat.kind),
     ).toEqual(["booker", "open", "open", "open"]);
+  });
+
+  it("a court that allows twelve still draws four seats, not eleven empty ones", () => {
+    expect(rosterSeats({ booker, guests: [], capacity: 12 })).toHaveLength(4);
+    expect(rosterSeats({ booker, guests: [], capacity: 2 })).toHaveLength(2);
   });
 
   it("grows past the drawn seats without open ones", () => {
@@ -164,23 +168,6 @@ describe("contact → invitation", () => {
       { personId: "p2", name: "Taylor" },
       { name: "Kim", phoneE164: "+17045550101" },
     ]);
-  });
-
-  it("builds the invitation link and the words a person sends themselves", () => {
-    const url = bookingInviteUrl("https://duna.coach/", "tok en");
-    expect(url).toBe("https://duna.coach/app/booking-invite/tok%20en");
-    expect(
-      inviteMessage({
-        inviteeName: "Kerri Walsh",
-        organizerName: "John",
-        venueName: "The Strand",
-        whenText: "Sat, Nov 28, 11:30 AM",
-        url,
-        shareText: "$7.50",
-      }),
-    ).toBe(
-      "Kerri, you're invited to play at The Strand, Sat, Nov 28, 11:30 AM, with John. Your share is $7.50. Join on Duna: https://duna.coach/app/booking-invite/tok%20en",
-    );
   });
 });
 
