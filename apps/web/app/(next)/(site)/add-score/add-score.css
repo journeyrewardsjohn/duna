@@ -1,0 +1,508 @@
+/*
+ * Add a score without an account (SITE-3, docs/design/website.md 2.5).
+ * Imported by the add-score pages only, after the design system, site.css
+ * and pages.css. Same rules as site.css: tokens only (literal lengths are
+ * drawn sizes and layout maxima), the `site` layer, motion is Rise and Cross
+ * from the kit, played once; reduced motion shows end states. No imports, no
+ * important flag, no legacy sheet.
+ */
+@layer site {
+  .td {
+    .as-page {
+      display: grid;
+      padding-bottom: clamp(56px, 8vw, 96px);
+    }
+
+    .as-hero {
+      display: grid;
+      gap: var(--td-space-3);
+      padding-block: clamp(16px, 3vw, 40px) var(--td-space-6);
+    }
+
+    .as-hero__title {
+      max-width: 18ch;
+      font-size: clamp(34px, 4vw, 48px);
+    }
+
+    .as-hero__lead {
+      max-width: 52ch;
+    }
+
+    .as-body--narrow {
+      max-width: 760px;
+    }
+
+    .as-flow {
+      display: grid;
+      grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+      gap: clamp(24px, 4vw, 56px);
+      align-items: start;
+
+      @media (max-width: 1000px) {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .as-flow__main {
+      display: grid;
+      gap: var(--td-space-4);
+      min-width: 0;
+    }
+
+    /* Four steps as four bars: done and current filled (prototype). */
+    .as-progress {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--td-space-2);
+      margin: 0 0 var(--td-space-2);
+      padding: 0;
+      list-style: none;
+
+      li {
+        display: grid;
+        gap: var(--td-space-2);
+        min-width: 0;
+        color: var(--td-text-3);
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 18px;
+      }
+
+      li[data-state] {
+        color: var(--td-text);
+      }
+    }
+
+    .as-progress__bar {
+      display: block;
+      height: 3px;
+      border-radius: var(--td-radius-pill);
+      background: var(--td-line);
+      transition: background-color var(--td-duration-rise) var(--td-ease-rise);
+
+      li[data-state] > & {
+        background: var(--td-text);
+      }
+    }
+
+    .as-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--td-space-5);
+      min-width: 0;
+      padding: clamp(18px, 3vw, 28px);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-2xl);
+      background: var(--td-surface);
+    }
+
+    .as-panel__title {
+      margin: 0;
+      font: var(--td-type-heading-20);
+      outline: none;
+    }
+
+    .as-hint {
+      margin: 0;
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+      font-size: 14px;
+      line-height: 20px;
+    }
+
+    .as-error {
+      margin: 0;
+      color: var(--td-danger);
+      font-size: 14px;
+      line-height: 20px;
+    }
+
+    .as-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-3);
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .as-actions--start {
+      justify-content: flex-start;
+    }
+
+    .as-control {
+      display: grid;
+      gap: var(--td-space-2);
+      min-width: 0;
+    }
+
+    .as-control__label {
+      padding: 0;
+      color: var(--td-text-2);
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 20px;
+    }
+
+    .as-field-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--td-space-4);
+      align-items: start;
+
+      @media (max-width: 560px) {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    /* ---------- Where ---------- */
+
+    .as-where {
+      display: grid;
+      gap: var(--td-space-2);
+    }
+
+    .as-picked {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) auto;
+      gap: var(--td-space-3);
+      align-items: center;
+      padding: var(--td-space-3);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface-sunken);
+    }
+
+    .as-picked__mark {
+      display: grid;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      color: var(--td-text-2);
+    }
+
+    .as-picked__text {
+      display: grid;
+      min-width: 0;
+
+      strong {
+        overflow: hidden;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      span {
+        overflow: hidden;
+        color: var(--td-text-3);
+        font: var(--td-type-meta);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .as-newcourt {
+      display: grid;
+      gap: var(--td-space-4);
+      padding: var(--td-space-4);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-ground);
+    }
+
+    .as-newcourt__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--td-space-3);
+    }
+
+    /* ---------- Score ---------- */
+
+    .as-sets {
+      display: grid;
+      gap: var(--td-space-3);
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .as-sets__head,
+    .as-sets__row {
+      display: grid;
+      grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 40px;
+      gap: var(--td-space-2);
+      align-items: center;
+    }
+
+    /* Phones: the set's label and its remove button above, the two scores
+       side by side at full width below, so the numbers stay big. */
+    @media (max-width: 560px) {
+      .as-sets__head,
+      .as-sets__row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+          "label remove"
+          "you them";
+        row-gap: var(--td-space-1);
+      }
+
+      .as-sets__head {
+        grid-template-areas: "you them";
+
+        > :first-child,
+        > :last-child {
+          display: none;
+        }
+      }
+
+      .as-sets__row > :nth-child(1) {
+        grid-area: label;
+      }
+
+      .as-sets__row > :nth-child(2) {
+        grid-area: you;
+      }
+
+      .as-sets__row > :nth-child(3) {
+        grid-area: them;
+      }
+
+      .as-sets__row > :nth-child(4) {
+        grid-area: remove;
+        justify-self: end;
+      }
+    }
+
+    .as-sets__head span {
+      color: var(--td-text-3);
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .as-sets__label {
+      color: var(--td-text-3);
+      font: 600 12px/16px var(--td-font-mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* Score numerals: Geist Mono, large enough for a sandy thumb. */
+    .as-sets__row .td-number__control {
+      font-family: var(--td-font-mono);
+      font-size: 22px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+    }
+
+    .as-live {
+      display: grid;
+      gap: var(--td-space-2);
+    }
+
+    /* ---------- Players ---------- */
+
+    .as-side {
+      display: grid;
+      gap: var(--td-space-3);
+      min-width: 0;
+      margin: 0;
+      padding: var(--td-space-4);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-lg);
+    }
+
+    .as-name {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 96px;
+      gap: var(--td-space-3);
+      align-items: start;
+    }
+
+    .as-claim-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--td-space-3);
+      align-items: start;
+
+      > :last-child {
+        grid-column: 1 / -1;
+      }
+
+      @media (max-width: 560px) {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .as-claim-row__who {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: var(--td-text-3);
+      font: 600 12px/16px var(--td-font-mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .as-claim-row + .as-claim-row {
+      padding-top: var(--td-space-3);
+      border-top: 1px solid var(--td-line);
+    }
+
+    /* ---------- Result ---------- */
+
+    .as-result {
+      display: grid;
+      gap: var(--td-space-5);
+    }
+
+    .as-result__cards {
+      display: grid;
+      gap: var(--td-space-4);
+    }
+
+    .as-would {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: var(--td-space-4);
+      align-items: center;
+      padding: var(--td-space-4);
+      border-radius: var(--td-radius-xl);
+      background: var(--td-surface-sunken);
+
+      @media (max-width: 480px) {
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: start;
+      }
+    }
+
+    .as-would__text {
+      display: grid;
+      gap: var(--td-space-2);
+
+      p {
+        margin: 0;
+      }
+    }
+
+    .as-summary {
+      display: grid;
+      margin: 0;
+
+      div {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: var(--td-space-2) var(--td-space-4);
+        padding: var(--td-space-3) 0;
+        border-top: 1px solid var(--td-line);
+      }
+
+      dt {
+        color: var(--td-text-2);
+      }
+
+      dd {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--td-space-2);
+        align-items: center;
+        margin: 0;
+        font-weight: 600;
+      }
+    }
+
+    .as-num {
+      font-family: var(--td-font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .as-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px var(--td-space-2);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-pill);
+      color: var(--td-text-2);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .as-claim {
+      display: grid;
+      gap: var(--td-space-3);
+      padding: var(--td-space-5);
+      border-radius: var(--td-radius-xl);
+      background: var(--td-ground);
+    }
+
+    .as-claim__title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 26px;
+    }
+
+    .as-claim__steps {
+      display: grid;
+      gap: var(--td-space-2);
+      margin: 0;
+      padding-left: var(--td-space-5);
+      list-style: decimal;
+      color: var(--td-text-2);
+      font-size: 15px;
+      line-height: 22px;
+    }
+
+    .as-claim-summary {
+      display: grid;
+      gap: var(--td-space-2);
+    }
+
+    .as-confirm {
+      display: grid;
+      gap: var(--td-space-3);
+      padding: var(--td-space-4);
+      border: 1px solid var(--td-line-strong);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface);
+
+      p {
+        margin: 0;
+      }
+    }
+
+    /* ---------- Aside ---------- */
+
+    .as-aside {
+      position: sticky;
+      top: 96px;
+      display: grid;
+      gap: var(--td-space-4);
+
+      @media (max-width: 1000px) {
+        position: static;
+      }
+    }
+
+    .as-note {
+      display: grid;
+      gap: var(--td-space-2);
+      padding: var(--td-space-5);
+      border: 1px solid var(--td-line);
+      border-radius: var(--td-radius-2xl);
+      background: var(--td-surface);
+
+      p:not(.site-label) {
+        margin: 0;
+        color: var(--td-text-2);
+        font-size: 15px;
+        line-height: 23px;
+      }
+    }
+  }
+}

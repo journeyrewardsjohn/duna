@@ -278,6 +278,22 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
 
 ## 5. What the owner needs to do for production
 
+### Add a score without an account and Places protection (SITE-3, 28 November 2026)
+
+- Places key: `GOOGLE_PLACES_API_KEY` (already set in web Production) must have **Places API (New)**
+  enabled; the routes now send a session token per open picker (autocomplete keystrokes and the
+  details call bill as one session). Set a daily quota on the key in the provider console as a cost
+  ceiling (suggested: autocomplete 10,000 sessions/day, details 2,000/day, Maps Static 2,000/day)
+  and a billing alert. Without the key the flow still works with typed places.
+- Rate-limit store: the database-backed `rate_limit_buckets` table (no new service). The per-address
+  budgets apply as soon as `DATABASE_URL` is set; `UPSTASH_*` is not used by this code.
+- Cron: `/api/cron/add-score-cleanup` daily at 05:25 UTC in `apps/web/vercel.json`, authorised by
+  `CRON_SECRET` (already set). The web proxy only guards `/app/**`, so no allowlist entry is needed.
+- Migration `0120_add_score_drafts_venue_candidates` (additive) must run before the deploy that
+  serves `/add-score`.
+- Owner decisions: an invisible bot challenge on claim (none exists in the repo); the promotion rule
+  from candidate to public listing (spec: three confirmed matches or one staff approval) waits for B9.
+
 ### WorkOS
 
 1. [RBL] Create/promote the WorkOS Production environment; set `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_COOKIE_PASSWORD` (new random, >= 32 chars) in Vercel `duna-web` AND `duna-hq` Production, then redeploy both.

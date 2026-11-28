@@ -187,6 +187,27 @@ Invariants an integration must preserve:
   approval may book for a dependent. The booking belongs to the dependent; the
   order belongs to whoever's wallet paid. A dependent can see but not cancel it.
 
+## Add a score without an account (`public.addScore`, `player.addScore`, `admin.addScore`, SITE-3)
+
+Contracts: `packages/api/src/contracts/add-score.ts`; how it works: `docs/product/add-score.md`.
+
+| Procedure                                                                | Who                                      | What                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `public.addScore.save({ token?, step, data })`                           | Anyone                                   | Saves one step (`where`, `score`, `players`) of the anonymous draft. The first save returns `newToken`; the web app keeps it in the HTTP-only `duna-score-draft` cookie. Answers `saved`, `invalid` (field errors), `expired` or `claimed`. |
+| `public.addScore.read({ token? })`                                       | Anyone                                   | `none`, `expired`, `claimed` (with the match) or `active` (the draft, its completed steps and soft warnings).                                                                                                                               |
+| `public.addScore.preview({ token })`                                     | Anyone                                   | What the result would do: the rating engine on a copy, never written; `not-ready` lists missing steps.                                                                                                                                      |
+| `public.addScore.discard({ token })`                                     | Anyone                                   | Deletes the draft now.                                                                                                                                                                                                                      |
+| `player.addScore.claim({ token, teammates, opponents, idempotencyKey })` | Signed in, `matches:write`, not under 13 | One `pending-verification` match through `recordCompletedMatch`; idempotent; never claimable by a second person.                                                                                                                            |
+| `admin.addScore.candidates({ status, limit })`                           | Admin                                    | Candidate venues players named; never public.                                                                                                                                                                                               |
+| `admin.addScore.resolveCandidate(promote / merge / dismiss)`             | Admin                                    | Promote makes a draft venue; merge links an existing venue; dismiss needs a reason. Audited.                                                                                                                                                |
+
+Anonymous calls have their own budgets inside the service (per hashed address and per draft) on top
+of the public procedure limit; a refusal is `TOO_MANY_REQUESTS` with the seconds to wait.
+
+The Places routes (`/api/places/autocomplete`, `/details`, `/map`) answer 429 with `Retry-After`
+over a per-address budget, take `session=<token>` and pass it to the provider, and cache identical
+requests for 10 minutes.
+
 ## Duna Pay (`operator.pay`, owner B2)
 
 Shapes are frozen in `packages/api/src/contracts/pay.ts`; the model is in
@@ -211,6 +232,28 @@ its fixture from `@duna/core/demo/pay`.
 Payouts are created only by the hourly `/api/cron/money-payouts` job and the
 existing owner-confirmed manual payout, and only from releasable tranches
 (settled, delivered, not held).
+
+## Team availability (`operator.teamAvailability`, owner B3a)
+
+Shapes are frozen in `packages/api/src/contracts/team-availability.ts`; the
+product rules are in [`docs/product/team.md`](product/team.md). Every
+procedure is live and returns its fixture from
+`@duna/core/demo/team-availability` in demo mode. "Is this coach free" is
+`availabilityFor` in `@duna/scheduling` (pure); session booking
+(`session-delivery.ts`), coverage and the grid all call it.
+
+| Procedure                                                                                 | Scope                                                                                             | Notes                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `staff`                                                                                   | `members:read`                                                                                    | Schedules (newest first), blackouts, time off, each with derived `sessionsNeedingCover`; copies legacy availability on first view                                  |
+| `upsertSchedule`, `transitionSchedule`, `addBlackout`, `removeBlackout`, `requestTimeOff` | `members:read` + the member themselves, or `members:write`                                        | Overnight windows are stored as two rows and returned whole; activating a schedule ends an open-ended predecessor the day before                                   |
+| `decideTimeOff`                                                                           | approve/decline: `members:write`, not your own (owner may); cancel: the member or `members:write` | Approval opens coverage requests for the affected sessions                                                                                                         |
+| `coverageGrid`                                                                            | `members:read`                                                                                    | Club time zone; a coach teaching a session counts as available for it                                                                                              |
+| `coverageRequests`                                                                        | `members:read`                                                                                    | Filter by status and time                                                                                                                                          |
+| `coverageAction`                                                                          | `members:write`                                                                                   | `suggest` re-ranks; `ask` records the ask (Concierge sends); `assign` re-checks the substitute, reassigns the session and writes an audit row; `decline`; `cancel` |
+
+Errors: `FORBIDDEN` (not yours and not a manager), `NOT_FOUND` (outside the
+caller's club), `CONFLICT` (state machine or the substitute is no longer
+free), `BAD_REQUEST` (invalid time zone or window).
 
 ## Club setup (`operator.setup`, owner B1)
 
@@ -237,6 +280,29 @@ its fixture from `@duna/core/demo/setup` (one failed run per failure reason).
 Service functions with no procedure yet: `processPendingSetupRuns` (advance
 waiting or stalled reads, for a cron) and `purgeExpiredSetupRunData` (the
 proposed 180-day retention), both in `packages/api/src/services/setup`.
+
+## Team pay (`operator.teamPay`, owner B3b)
+
+Shapes are frozen in `packages/api/src/contracts/team-pay.ts`; the product
+rules are in [`docs/product/team.md`](product/team.md). Every procedure is
+live and returns its fixture from `@duna/core/demo/team-pay` in demo mode.
+The computation is the pure `computePayRun` in
+`packages/api/src/services/team-pay/compute.ts`; Duna computes and exports
+and pays nobody here.
+
+| Procedure                          | Scope                                                                      | Notes                                                                                                                                            |
+| ---------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `staffCompensation`                | `members:read` + the member themselves, `members:write` or `payments:read` | Current model, history, goal with `earned` from delivered sessions in the goal window                                                            |
+| `setCompensation`, `setIncomeGoal` | `payments:write`                                                           | A new model closes the current one the day before; same-day replacement only if no run used it; rates in the club currency                       |
+| `payPeriods`, `createPayPeriod`    | read `members:read`; create `payments:write`                               | End date from frequency; twice-monthly starts on the 1st or 16th; no overlaps (`CONFLICT`)                                                       |
+| `payRuns`, `payRun`                | `members:read` + `members:write` or `payments:read`                        | Lines with sessions count, minutes, earnings, labelled adjustments, total; exports with who and when                                             |
+| `computePayRun`                    | `payments:write`                                                           | Idempotent by key; new revision; cancels unapproved revisions; after an approved run it pays only sessions (and salary) not yet paid             |
+| `adjustLine`, `cancelPayRun`       | `payments:write`                                                           | Only while `ready-for-approval`; `duna-pay` refused (W-2 never; contractors until B3c)                                                           |
+| `approvePayRun`                    | `payments:write`                                                           | Idempotent; an approved run is immutable                                                                                                         |
+| `exportPayRun`                     | `payments:write`                                                           | Generic CSV (columns in `export-file.ts`), private storage, 15-minute signed link; other layouts and missing storage answer "not configured yet" |
+
+`operator.teamPayouts.*` (B3c) stays "not implemented yet" by design; see
+[`docs/money/contractor-payouts.md`](money/contractor-payouts.md).
 
 ## Safety invariants
 
