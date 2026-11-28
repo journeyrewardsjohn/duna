@@ -344,6 +344,10 @@ async function firstScreenMedia(page: Page) {
           fetchPriority: image.fetchPriority,
         };
       })
+      // An LCP candidate, not an icon: a tenth of the first screen or more.
+      .filter(
+        (image) => image.area >= 0.1 * window.innerWidth * window.innerHeight,
+      )
       .sort((a, b) => b.area - a.area);
     return { videos, largest: visible[0] };
   });
