@@ -12,9 +12,7 @@ import type { ReactNode } from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CoachVideoScreen } from "../../coach-video";
-import { GetPaidScreen } from "../../get-paid";
 import { ProMessagingScreen } from "../../messaging-screen";
-import { MoneyScreen } from "../../money-screen";
 import { OperatorCreateScreen } from "../../operator-create";
 import { SessionNotesScreen } from "../../session-notes";
 import { TicketScannerScreen } from "../../ticket-scanner";
@@ -23,8 +21,10 @@ import { AvailabilityScreen, TimeAwayScreen } from "../features/availability";
 import { CalendarScreen } from "../features/calendar";
 import { ScorerScreen } from "../features/courtside";
 import { CoverScreen } from "../features/cover";
+import { GetPaidScreen } from "../features/get-paid";
+import { ClubMoneyScreen } from "../features/money";
 import { MoreScreen } from "../features/more";
-import { PeopleScreen } from "../features/people";
+import { PersonScreen } from "../features/people";
 import { AttendanceScreen, SessionScreen } from "../features/session";
 import { styles as legacy } from "../legacy/styles";
 import { colors, rgba } from "../shared/palette";
@@ -80,8 +80,6 @@ function SafeWindow({
   );
 }
 
-const openMessages = (shell: ShellNavigation, personId: string) =>
-  shell.open("messages", { personId });
 const openNotes = (
   shell: ShellNavigation,
   sessionId: string,
@@ -156,13 +154,8 @@ export const SCREENS = {
   availability: () => <AvailabilityScreen />,
   timeAway: () => <TimeAwayScreen />,
   cover: () => <CoverScreen />,
-  people: (_entry, { shell }) => (
-    <PeopleScreen
-      onMessage={(personId) => openMessages(shell, personId)}
-      onRecordNotes={(sessionId, personId) =>
-        openNotes(shell, sessionId, personId)
-      }
-    />
+  people: (entry) => (
+    <PersonScreen key={entry.personId} personId={entry.personId} />
   ),
   film: (_entry, { shell }) => (
     <CoachVideoScreen onClose={shell.closeWindow} palette={legacyPalette()} />
@@ -181,17 +174,12 @@ export const SCREENS = {
   ),
   // Ask Duna: the shell keeps it mounted so its conversation survives.
   ai: () => null,
-  money: (_entry, { shell, tab }) => (
-    <MoneyScreen
-      onClose={() => shell.back(tab)}
-      onCollect={() => shell.open("getPaid")}
-      palette={{ ...legacyPalette(), navy: colors.navy }}
-    />
-  ),
-  getPaid: (_entry, { shell }) => (
+  money: () => <ClubMoneyScreen />,
+  getPaid: (entry, { shell }) => (
     <GetPaidScreen
+      initialPersonId={entry.personId}
+      key={entry.nonce}
       onClose={shell.closeWindow}
-      onCreate={() => shell.open("create")}
     />
   ),
   create: (_entry, { shell, refresh }) => (

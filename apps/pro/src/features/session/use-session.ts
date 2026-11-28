@@ -14,7 +14,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProRuntime } from "../../../runtime";
 import { useDay } from "../today/use-day";
 import { classifyFailure, type Failure } from "./failure";
-import { previewCalendarSession } from "./preview-session";
+import {
+  PREVIEW_BOOKING_ID,
+  previewBookingEntry,
+  previewCalendarSession,
+} from "./preview-session";
 import {
   sessionFromAtRisk,
   sessionFromCalendar,
@@ -58,6 +62,8 @@ export function useSession(sessionId: string | undefined): {
   const calendarEntry = useMemo(() => {
     if (!sessionId) return undefined;
     if (preview) {
+      if (sessionId === PREVIEW_BOOKING_ID)
+        return previewBookingEntry(Date.now());
       const entry = day.entries.find((candidate) => candidate.id === sessionId);
       return entry ? previewCalendarSession(entry) : undefined;
     }

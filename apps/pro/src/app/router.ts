@@ -129,11 +129,14 @@ export const ROUTES = {
     { legacy: false },
   ),
   // People (Students for coaches).
+  // People (M-R4): the roster is the tab's root; this route is one
+  // person's page (plan, bookings, family, notes), opened with `personId`.
   people: route(
     "people",
-    "Roster",
+    "Person",
     "users",
-    "Players, guardians, balances, notes and history",
+    "A person's plan, credits, bookings, family and notes",
+    { legacy: false, listed: false },
   ),
   film: route(
     "people",
@@ -162,14 +165,15 @@ export const ROUTES = {
     "money",
     "Club money",
     "wallet",
-    "Sales, payouts, refunds and what is owed",
+    "Ready to pay out, what frees up, payouts and recent sales",
+    { legacy: false },
   ),
   getPaid: route(
     "money",
     "Get paid",
     "tap-to-pay",
-    "Collect in person or send a payment link",
-    { presentation: "window" },
+    "Collect in person: Tap to Pay, credits or a cash wallet",
+    { presentation: "window", legacy: false },
   ),
   // Opened from the top bar, in whichever tab is showing.
   create: route(null, "Create", "plus", "Sessions, services, goods and plans", {
@@ -253,7 +257,7 @@ export const TABS: readonly TabDefinition[] = [
     titles: { coach: "Students", owner: "People" },
     systemImage: "person.2",
     icon: "users",
-    defaultRoute: "people",
+    defaultRoute: null,
     summary: "Players, guardians, notes and film",
   },
   {

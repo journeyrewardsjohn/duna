@@ -27,19 +27,12 @@ import {
 import {
   ActivityIndicator,
   Image,
-  ImageBackground,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from "react-native";
-import Svg, {
-  Defs,
-  LinearGradient as SvgLinearGradient,
-  Path,
-  Rect,
-  Stop,
-} from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import {
   askDunaAi,
   confirmProDunaAiAction,
@@ -59,6 +52,8 @@ import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
+import { WelcomeScreen } from "./src/features/welcome";
+import { ProLockup } from "./src/shared/ProLockup";
 import {
   registerMessagingNotifications,
   unregisterMessagingNotifications,
@@ -135,25 +130,9 @@ const authBaseUrl = (
 ).replace(/\/+$/, "");
 const previewEnabled = process.env.EXPO_PUBLIC_DUNA_PREVIEW === "true";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const runtimeDunaWordmark = require("./assets/duna-horizontal-blue.png");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const runtimeDunaMark = require("./assets/duna-mark.png");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const welcomePoster = require("./assets/duna-welcome-poster.jpg");
-
+/** The Duna Pro lockup (Crest mark, drawn wordmark, PRO) on the current ground. */
 function RuntimeMark() {
-  return (
-    <View style={runtimeStyles.wordmarkRow}>
-      <Image
-        accessibilityLabel="Duna"
-        resizeMode="contain"
-        source={runtimeDunaWordmark}
-        style={runtimeStyles.wordmarkImage}
-      />
-      <Text style={runtimeStyles.pro}>PRO</Text>
-    </View>
-  );
+  return <ProLockup markHeight={56} />;
 }
 
 function RuntimeLoadingState() {
@@ -197,22 +176,6 @@ function CenteredState({
   );
 }
 
-function WelcomeWash() {
-  return (
-    <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Defs>
-        <SvgLinearGradient id="pro-welcome-wash" x1="0" x2="0" y1="0" y2="1">
-          <Stop offset="0" stopColor="#071625" stopOpacity="0.04" />
-          <Stop offset="0.42" stopColor="#071625" stopOpacity="0.12" />
-          <Stop offset="0.7" stopColor="#071625" stopOpacity="0.74" />
-          <Stop offset="1" stopColor="#071625" stopOpacity="0.98" />
-        </SvgLinearGradient>
-      </Defs>
-      <Rect fill="url(#pro-welcome-wash)" height="100%" width="100%" />
-    </Svg>
-  );
-}
-
 function AccountContours() {
   return (
     <Svg
@@ -236,70 +199,6 @@ function AccountContours() {
         />
       ))}
     </Svg>
-  );
-}
-
-function WelcomeState({
-  error,
-  signIn,
-  signUp,
-}: {
-  readonly error?: string;
-  readonly signIn: () => Promise<void>;
-  readonly signUp: () => Promise<void>;
-}) {
-  return (
-    <ImageBackground
-      resizeMode="cover"
-      source={welcomePoster}
-      style={runtimeStyles.entry}
-    >
-      <StatusBar style="light" />
-      <WelcomeWash />
-      <View style={runtimeStyles.entryBrand}>
-        <Image
-          resizeMode="contain"
-          source={runtimeDunaMark}
-          style={runtimeStyles.entryMark}
-        />
-        <Text style={runtimeStyles.entryWordmark}>PRO</Text>
-      </View>
-      <View style={runtimeStyles.entryContent}>
-        <Text style={runtimeStyles.entryBody}>
-          Welcome to Duna Pro. The one place for everything your business needs
-          to win on and off the court.
-        </Text>
-        {error && <Text style={runtimeStyles.entryError}>{error}</Text>}
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void signUp()}
-          style={({ pressed }) => [
-            runtimeStyles.entryPrimaryButton,
-            pressed && runtimeStyles.buttonPressed,
-          ]}
-        >
-          <Text style={runtimeStyles.entryPrimaryText}>
-            Launch Your Volleyball Business
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void signIn()}
-          style={({ pressed }) => [
-            runtimeStyles.entrySecondaryButton,
-            pressed && runtimeStyles.buttonPressed,
-          ]}
-        >
-          <Text style={runtimeStyles.entrySecondaryText}>
-            Log in to Duna Pro
-          </Text>
-        </Pressable>
-        <Text style={runtimeStyles.entryFootnote}>
-          Already a Duna Member?{"\n"}Use the same email or phone number to log
-          in.
-        </Text>
-      </View>
-    </ImageBackground>
   );
 }
 
@@ -627,7 +526,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     return <RuntimeLoadingState />;
   }
   if (!isSignedIn) {
-    return <WelcomeState error={authError} signIn={signIn} signUp={signUp} />;
+    return <WelcomeScreen error={authError} signIn={signIn} signUp={signUp} />;
   }
   const preparingAccount = Boolean(organizationId && loading && !dashboard);
   if (!continueRequested || preparingAccount) {
@@ -901,77 +800,6 @@ const runtimeStyles = StyleSheet.create({
     lineHeight: 19,
     textAlign: "center",
   },
-  entry: {
-    backgroundColor: "#071625",
-    flex: 1,
-    overflow: "hidden",
-  },
-  entryBody: {
-    alignSelf: "center",
-    color: "rgba(255,255,255,0.92)",
-    fontSize: 15,
-    lineHeight: 21,
-    marginBottom: 60,
-    maxWidth: 310,
-    textAlign: "center",
-  },
-  entryBrand: {
-    alignItems: "center",
-    left: 20,
-    position: "absolute",
-    right: 20,
-    top: "18%",
-    zIndex: 2,
-  },
-  entryContent: {
-    bottom: 30,
-    left: 25,
-    position: "absolute",
-    right: 25,
-    zIndex: 2,
-  },
-  entryError: {
-    color: "#FFD9CC",
-    fontSize: 12,
-    lineHeight: 17,
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  entryFootnote: {
-    color: "rgba(255,255,255,0.62)",
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 15,
-    textAlign: "center",
-  },
-  entryMark: { height: 135, width: 125 },
-  entryPrimaryButton: {
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 25,
-    justifyContent: "center",
-    minHeight: 50,
-  },
-  entryPrimaryText: { color: "#1B1B19", fontSize: 14, fontWeight: "500" },
-  entrySecondaryButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderColor: "rgba(255,255,255,0.16)",
-    borderRadius: 25,
-    borderWidth: 1,
-    justifyContent: "center",
-    marginTop: 10,
-    minHeight: 50,
-  },
-  entrySecondaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "500" },
-  entryWordmark: {
-    color: "#FFFFFF",
-    fontSize: 24,
-    fontWeight: "500",
-    letterSpacing: 9,
-    marginLeft: 9,
-    marginTop: 8,
-  },
   featureCard: {
     alignItems: "flex-start",
     backgroundColor: "#ffffff",
@@ -1047,17 +875,6 @@ const runtimeStyles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   primaryButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "900" },
-  pro: {
-    backgroundColor: "rgba(247,200,107,.12)",
-    borderRadius: 6,
-    color: "#3d6672",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-    overflow: "hidden",
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-  },
   secondaryButton: {
     alignItems: "center",
     borderColor: "#b9c2c6",
@@ -1105,6 +922,4 @@ const runtimeStyles = StyleSheet.create({
     letterSpacing: -1.2,
     lineHeight: 39,
   },
-  wordmarkRow: { alignItems: "center", flexDirection: "row", gap: 9 },
-  wordmarkImage: { height: 46, width: 146 },
 });

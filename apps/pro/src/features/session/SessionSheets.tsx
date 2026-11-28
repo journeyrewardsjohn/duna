@@ -22,7 +22,7 @@ import {
   renderParticipationCopy,
   validateLockExtension,
 } from "@duna/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { IconButton } from "../../app/ui";
 import type { CourtMatch } from "../today/day-model";
 import { CourtMatchRow } from "../today/parts";
@@ -286,10 +286,13 @@ export function CancelRefundSheet({
   summary,
   cancel,
   onDone,
+  preview,
 }: SheetBase & {
   readonly summary: string;
   readonly cancel: (reason: CancelReason, key: string) => Promise<void>;
   readonly onDone: () => void;
+  /** The backend's preview of who gets what back. */
+  readonly preview?: ReactNode;
 }) {
   const [reason, setReason] = useState<CancelReason | null>(null);
   useEffect(() => {
@@ -321,64 +324,11 @@ export function CancelRefundSheet({
       verb="Cancel and refund"
       visible={visible}
     >
+      {preview}
       <ChoiceList
         label="Why"
         onChange={setReason}
         options={CANCEL_REASONS}
-        value={reason}
-      />
-    </ConfirmSheet>
-  );
-}
-
-/** Cancel a calendar session (director, `strong`, reason in words). */
-export function CancelSessionSheet({
-  detail,
-  visible,
-  onClose,
-  cancel,
-  onDone,
-}: SheetBase & {
-  readonly cancel: (reason: string, key: string) => Promise<void>;
-  readonly onDone: () => void;
-}) {
-  const [reason, setReason] = useState("");
-  useEffect(() => {
-    if (visible) setReason("");
-  }, [visible]);
-  const roster = detail.people.filter((person) => person.active).length;
-  return (
-    <ConfirmSheet
-      cancelLabel="Keep the session"
-      description="The court and coach are released and everyone booked is told, with your reason."
-      destructive
-      event="pro.session.cancel_calendar_failed"
-      notReadyHint="Say why in a few words; players see it."
-      onClose={onClose}
-      onDone={onDone}
-      perform={(key) => cancel(reason.trim(), key)}
-      ready={reason.trim().length >= 3}
-      rows={[
-        { label: "Who is told", value: people(roster) },
-        { label: "Session", value: `${detail.title} · ${sessionWhen(detail)}` },
-        { label: "What happens", value: "A cancellation cannot be undone." },
-      ]}
-      testID="sheet-cancel-session"
-      tier={2}
-      title={`Cancel ${detail.title}?`}
-      verb="Cancel and tell everyone"
-      visible={visible}
-    >
-      <Text tone="text-2" variant="phone-meta" weight={600}>
-        Reason players will see
-      </Text>
-      <DunaTextInput
-        accessibilityLabel="Reason players will see"
-        maxLength={500}
-        multiline
-        onChangeText={setReason}
-        placeholder="Weather, coach unavailable, venue closed…"
-        testID="cancel-reason"
         value={reason}
       />
     </ConfirmSheet>

@@ -9,6 +9,10 @@ const migrated: readonly string[] = [
   "apps/pro/src/features/availability",
   "apps/pro/src/features/cover",
   "apps/pro/src/features/earnings",
+  "apps/pro/src/features/people",
+  "apps/pro/src/features/welcome",
+  "apps/pro/src/features/money",
+  "apps/pro/src/features/get-paid",
 ];
 
 /** Duna Pro native (`apps/pro`). Owners: M-F5, M-R0 … M-R6, M-N1 for app config. */

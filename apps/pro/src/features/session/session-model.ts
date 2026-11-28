@@ -22,6 +22,12 @@ import {
 } from "@duna/core";
 import { formatTime, formatTimeRange } from "@duna/tideline-core";
 import type { AttendanceStatus, AttendanceTarget } from "./attendance-queue";
+import {
+  cancelPlanFor,
+  entryKindFromSource,
+  type CourtBookingCapability,
+  type SessionEntryKind,
+} from "./cancel-plan";
 
 /** Who the screen is for: a coach, or a director (owner, admin, manager). */
 export type SessionAudience = "coach" | "owner";
@@ -145,6 +151,8 @@ export interface SessionGroup {
 export interface SessionDetail {
   readonly id: string;
   readonly source: "calendar" | "occurrence";
+  /** What the entry is (a session, a player's court booking, open play…). */
+  readonly entryKind: SessionEntryKind;
   /** The group-session subject the participation procedures take. */
   readonly subject: {
     readonly subjectType: "catalog-session-occurrence";
@@ -235,9 +243,11 @@ export function sessionFromCalendar(
   return {
     id: entry.id,
     source: "calendar",
+    entryKind: entryKindFromSource(entry.sourceType),
     subject: null,
     attendanceTarget: "registration",
-    title: entry.title,
+    // The workspace labels bookings "… · court booking"; the screen says it.
+    title: entry.title.replace(/ · court booking$/, ""),
     startsAt: Date.parse(entry.startsAt),
     endsAt: Date.parse(entry.endsAt),
     timeZone: entry.timezone ?? fallbackTimeZone,
@@ -311,6 +321,7 @@ export function sessionFromOccurrence(
   return {
     id: occurrence.id,
     source: "occurrence",
+    entryKind: "group-occurrence",
     subject: participation
       ? { subjectType: "catalog-session-occurrence", subjectId: occurrence.id }
       : null,
@@ -397,6 +408,7 @@ export function sessionFromAtRisk(
     {
       id: risk.subjectId,
       source: "occurrence",
+      entryKind: "group-occurrence",
       subject: null,
       attendanceTarget: "participation",
       title: risk.title,
@@ -559,7 +571,8 @@ export type SessionActionKey =
   | "extend"
   | "run-anyway"
   | "cancel-refund"
-  | "cancel-session";
+  | "cancel-session"
+  | "cancel-booking";
 
 /** Interaction-kit tiers: 0 direct, 1 confirm, 2 strong. */
 export type SessionActionTier = 0 | 1 | 2;
@@ -633,7 +646,13 @@ const ACTIONS: Readonly<Record<SessionActionKey, Omit<SessionAction, "key">>> =
     },
     "cancel-session": {
       label: "Cancel session",
-      hint: "Cancels, releases the court and tells everyone",
+      hint: "Shows who gets what back before anything changes",
+      tier: 2,
+      destructive: true,
+    },
+    "cancel-booking": {
+      label: "Cancel booking",
+      hint: "Shows who gets what back before anything changes",
       tier: 2,
       destructive: true,
     },
@@ -648,6 +667,8 @@ export interface ActionContext {
   readonly now: number;
   /** Courtside has matches linked to this session. */
   readonly hasMatches?: boolean;
+  /** Whether the server has the staff court-booking cancellation. */
+  readonly courtBooking?: CourtBookingCapability;
 }
 
 /**
@@ -697,10 +718,14 @@ export function sessionActions(
       if (detail.group?.policy === "cancel" && beforeLock)
         list.push(action("run-anyway"));
     }
-    if (!started && detail.subject && state !== "settled")
-      list.push(action("cancel-refund"));
-    if (!started && !detail.subject && detail.source === "calendar")
-      list.push(action("cancel-session"));
+    const plan = cancelPlanFor(detail, {
+      audience: context.audience,
+      courtBooking: context.courtBooking,
+    });
+    if (!started && plan.kind !== "none") {
+      if (plan.kind !== "group-refund" || state !== "settled")
+        list.push(action(plan.action));
+    }
   } else if (!started && detail.subject) {
     list.push(action("request-cancel"));
   }
