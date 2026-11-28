@@ -6,10 +6,18 @@ import {
   partitionAuthkitHeaders,
 } from "@workos-inc/authkit-nextjs";
 import { type NextRequest, NextResponse } from "next/server";
+import { isHiddenTidelineGalleryRoute } from "./app/tideline/gallery-guard";
 import { isPublicHqRoute, routeMatches } from "./lib/public-routes";
 
 export default async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  // The Tideline gallery is development-only: a true 404 without its flag.
+  if (isHiddenTidelineGalleryRoute(pathname)) {
+    return new NextResponse("Not Found", {
+      status: 404,
+      headers: { "x-robots-tag": "noindex" },
+    });
+  }
   // These routes validate bearer credentials and tenant ownership themselves.
   // Eve also serves same-origin cookie clients through its signed session token.
   if (

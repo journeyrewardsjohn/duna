@@ -1,0 +1,69 @@
+/* Tideline Segmented control. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Segmented ---------- */
+
+    .td-seg {
+      position: relative;
+      display: inline-flex;
+      gap: 2px;
+      max-width: 100%;
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface-sunken);
+      box-shadow: inset 0 0 0 1px var(--td-line);
+      padding: 2px;
+    }
+
+    .td-seg--block {
+      display: flex;
+
+      .td-seg__opt {
+        flex: 1;
+      }
+    }
+
+    .td-seg__thumb {
+      position: absolute;
+      top: var(--segmented-control-indicator-top);
+      left: var(--segmented-control-indicator-left);
+      width: var(--segmented-control-indicator-width);
+      height: var(--segmented-control-indicator-height);
+      background: var(--td-surface-raised);
+      box-shadow: var(--td-shadow-surface);
+      transition:
+        left var(--td-duration-base) var(--td-ease-tide),
+        width var(--td-duration-base) var(--td-ease-tide);
+      border-radius: var(--td-radius-sm);
+    }
+
+    .td-seg__opt {
+      position: relative;
+      min-width: var(--td-control-sm);
+      margin: 0;
+      padding: 0 var(--td-space-4);
+      border: 0;
+      background: transparent;
+      color: var(--td-text-2);
+      font: var(--td-type-label);
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color var(--td-duration-base) var(--td-ease-ui);
+      min-height: calc(var(--td-control) - 4px);
+      padding-inline: var(--td-space-3);
+      border-radius: var(--td-radius-sm);
+
+      &[data-checked] {
+        color: var(--td-text);
+      }
+
+      &[data-disabled] {
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+
+      &:hover:not([data-checked], [data-disabled]) {
+        color: var(--td-text);
+      }
+    }
+  }
+}

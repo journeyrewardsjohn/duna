@@ -1,0 +1,263 @@
+/* Tideline Dialog and Sheet. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* The phone ramp: Archivo at normal width so names never wrap. */
+
+    @media (max-width: 599px) {
+      .td-dialog__title {
+        font: var(--td-type-phone-title-sm);
+        letter-spacing: var(--td-type-phone-title-sm-tracking);
+      }
+    }
+
+    /* ---------- Dialog and Sheet ---------- */
+
+    .td-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: var(--td-z-scrim);
+      width: auto;
+      height: auto;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: var(--td-scrim);
+      transition: opacity var(--td-duration-settle) var(--td-ease-ui);
+
+      &:is([data-starting-style], [data-ending-style]) {
+        opacity: 0;
+      }
+
+      &[data-hidden] {
+        display: none;
+      }
+    }
+
+    .td-dialog,
+    .td-sheet {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: var(--td-space-4);
+      margin: 0;
+      border: 0;
+      background: var(--td-surface-raised);
+      box-shadow: var(--td-shadow-floating);
+      font: var(--td-type-body);
+
+      &:focus-visible {
+        outline: none;
+      }
+    }
+
+    .td-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: var(--td-z-dialog);
+      width: min(520px, calc(100% - var(--td-space-8)));
+      height: fit-content;
+      max-height: calc(100dvh - var(--td-space-8));
+      margin: auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      border-radius: var(--td-radius-xl);
+      transition:
+        opacity var(--td-duration-sheet) var(--td-ease-ui),
+        translate var(--td-duration-sheet) var(--td-ease-tide);
+      padding: var(--td-space-6);
+
+      &:is([data-starting-style], [data-ending-style]) {
+        opacity: 0;
+        scale: calc(1 - 0.02 * var(--td-motion));
+        translate: 0 calc(8px * var(--td-motion));
+      }
+
+      &[data-ending-style] {
+        transition-duration: var(--td-duration-settle);
+        transition-timing-function: var(--td-ease-exit);
+      }
+
+      /* A sheet is placed by its top edge, so the centring comes off. */
+
+      &[data-presentation="sheet"] {
+        inset: auto;
+        width: 100%;
+        max-width: 560px;
+        max-height: 92dvh;
+        margin-block: 0;
+        padding: var(--td-space-6) var(--td-space-5)
+          calc(var(--td-space-6) + env(safe-area-inset-bottom));
+        border-radius: var(--td-radius-xl) var(--td-radius-xl) 0 0;
+        opacity: 1;
+        translate: none;
+        scale: 1;
+      }
+
+      @media (max-width: 599px) {
+        padding: var(--td-space-6) var(--td-space-5);
+      }
+    }
+
+    .td-dialog__title {
+      padding-inline-end: var(--td-control-sm);
+      font: var(--td-type-heading-18);
+      letter-spacing: var(--td-type-heading-18-tracking);
+    }
+
+    .td-dialog__description {
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+    }
+
+    .td-dialog__close {
+      position: absolute;
+      top: var(--td-space-4);
+      inset-inline-end: var(--td-space-4);
+    }
+
+    .td-dialog__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-3);
+      justify-content: flex-end;
+      margin-top: var(--td-space-2);
+
+      @media (max-width: 599px) {
+        flex-direction: column-reverse;
+
+        .td-btn {
+          width: 100%;
+        }
+      }
+    }
+
+    /* UI SDK moves the sheet itself; these match what it sets once it runs. */
+
+    [data-slot="drawer-viewport"] {
+      position: fixed;
+      inset: 0;
+      z-index: var(--td-z-dialog);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      pointer-events: none;
+
+      &[data-side="top"] {
+        justify-content: flex-start;
+      }
+
+      &:is([data-side="left"], [data-side="right"]) {
+        flex-direction: row;
+      }
+
+      &[data-side="left"] > * {
+        margin-right: auto;
+      }
+
+      &[data-side="right"] > * {
+        margin-left: auto;
+      }
+
+      & > * {
+        pointer-events: auto;
+      }
+    }
+
+    .td-sheet {
+      width: 100%;
+      max-height: 92dvh;
+      padding: var(--td-space-6) var(--td-space-5)
+        calc(var(--td-space-6) + env(safe-area-inset-bottom));
+      overflow-y: auto;
+      overscroll-behavior: contain;
+
+      /* Covers the gap a drag past the edge would open. */
+
+      &::after {
+        position: absolute;
+        background: inherit;
+        content: "";
+      }
+
+      &:is([data-side="bottom"], [data-side="top"]) {
+        max-width: 560px;
+        height: fit-content;
+        margin-inline: auto;
+
+        &::after {
+          inset-inline: 0;
+          height: 6rem;
+        }
+      }
+
+      &[data-side="bottom"] {
+        border-radius: var(--td-radius-xl) var(--td-radius-xl) 0 0;
+
+        &::after {
+          top: 100%;
+        }
+      }
+
+      &[data-side="top"] {
+        border-radius: 0 0 var(--td-radius-xl) var(--td-radius-xl);
+
+        &::after {
+          bottom: 100%;
+        }
+      }
+
+      &:is([data-side="left"], [data-side="right"]) {
+        width: min(420px, calc(100% - var(--td-space-12)));
+        height: 100%;
+        max-height: none;
+        padding-top: var(--td-space-8);
+
+        .td-sheet__grabber {
+          display: none;
+        }
+
+        &::after {
+          inset-block: 0;
+          width: 6rem;
+        }
+      }
+
+      &[data-side="right"] {
+        border-radius: var(--td-radius-xl) 0 0 var(--td-radius-xl);
+
+        &::after {
+          left: 100%;
+        }
+      }
+
+      &[data-side="left"] {
+        border-radius: 0 var(--td-radius-xl) var(--td-radius-xl) 0;
+
+        &::after {
+          right: 100%;
+        }
+      }
+    }
+
+    .td-sheet__grabber {
+      align-self: center;
+      margin-top: calc(var(--td-space-3) * -1);
+      background: var(--td-line-strong);
+      width: 36px;
+      height: 4px;
+      border-radius: var(--td-radius-pill);
+    }
+
+    @media (max-width: 599px) {
+      .td-dialog__title {
+        font: var(--td-type-heading-18);
+        letter-spacing: var(--td-type-heading-18-tracking);
+      }
+    }
+
+    .td-dialog__title {
+      font: var(--td-type-heading-18);
+      letter-spacing: var(--td-type-heading-18-tracking);
+    }
+  }
+}

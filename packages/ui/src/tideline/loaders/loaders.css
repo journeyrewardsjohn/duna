@@ -1,0 +1,278 @@
+/* Tideline Spinner, Skeleton, Sunrise, HorizonSweep, PageLoader and TopProgress. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Spinner: the everyday loader, a neutral ring ---------- */
+
+    .td-spinner {
+      display: inline-block;
+      flex: none;
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid color-mix(in srgb, currentColor 25%, transparent);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: td-spin var(--td-duration-loader-sunspot) linear infinite;
+    }
+
+    .td-spinner--sm {
+      width: 14px;
+      height: 14px;
+    }
+
+    .td-spinner--lg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* ---------- Loaders ---------- */
+
+    .td-loader {
+      display: inline-grid;
+      gap: var(--td-space-3);
+      justify-items: center;
+      color: var(--td-ink-2);
+    }
+
+    .td-loader--inline {
+      display: inline-flex;
+      color: inherit;
+    }
+
+    .td-loader__label {
+      font: var(--td-type-meta);
+    }
+
+    /* Sunrise: a thin arc over a horizon line. Full-page waits only. */
+
+    .td-sunrise__art {
+      width: 64px;
+      height: 40px;
+      overflow: visible;
+    }
+
+    .td-sunrise--lg .td-sunrise__art {
+      width: 88px;
+      height: 55px;
+    }
+
+    .td-sunrise__arc,
+    .td-sunrise__line {
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-width: 1.5;
+    }
+
+    .td-sunrise__arc {
+      stroke: var(--td-ink);
+      stroke-dasharray: 100;
+      animation: td-sunrise var(--td-duration-loader-sunrise)
+        var(--td-ease-tide) infinite;
+    }
+
+    .td-sunrise__line {
+      opacity: 0.5;
+    }
+
+    /* Horizon sweep: one thin line with a light passing along it. */
+
+    .td-sweep {
+      position: relative;
+      display: block;
+      width: 100%;
+      height: 2px;
+      overflow: hidden;
+      border-radius: 1px;
+      background: var(--td-line);
+
+      &::after {
+        position: absolute;
+        inset-block: 0;
+        left: 0;
+        width: 30%;
+        border-radius: inherit;
+        background: var(--td-ink);
+        animation: td-sweep var(--td-duration-loader-ripple) var(--td-ease-tide)
+          infinite;
+        content: "";
+      }
+    }
+
+    /* TopProgress: the sweep pinned to the top of its container. */
+
+    .td-topprogress {
+      position: absolute;
+      inset: 0 0 auto;
+      z-index: var(--td-z-sticky);
+      opacity: 0;
+      transition: opacity var(--td-duration-quick) var(--td-ease-ui);
+
+      &[data-visible] {
+        opacity: 1;
+      }
+    }
+
+    .td-skeleton {
+      display: flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      width: 100%;
+    }
+
+    .td-skeleton--card {
+      display: grid;
+      gap: var(--td-space-3);
+      padding: var(--td-space-4);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface);
+      box-shadow: var(--td-shadow-surface);
+    }
+
+    .td-skeleton--avatar {
+      width: auto;
+    }
+
+    .td-skeleton__lines {
+      display: grid;
+      flex: 1;
+      gap: var(--td-space-2);
+      min-width: 0;
+    }
+
+    /* A quiet shimmer over a muted block. */
+
+    .td-skel {
+      display: block;
+      border-radius: var(--td-radius-xs);
+      background: linear-gradient(
+          100deg,
+          var(--td-surface-sunken) 30%,
+          var(--td-line) 50%,
+          var(--td-surface-sunken) 70%
+        )
+        0 0 / 300% 100%;
+      animation: td-shimmer var(--td-duration-loader-shimmer) var(--td-ease-ui)
+        infinite;
+    }
+
+    .td-skeleton__line {
+      height: 10px;
+
+      &:last-child:not(:first-child) {
+        width: 62%;
+      }
+    }
+
+    .td-skeleton__avatar {
+      flex: none;
+      width: var(--td-size-avatar);
+      height: var(--td-size-avatar);
+      border-radius: 50%;
+    }
+
+    .td-skeleton__media {
+      aspect-ratio: 16 / 9;
+      border-radius: var(--td-radius-md);
+    }
+
+    .td-pageloader {
+      display: grid;
+      gap: var(--td-space-2);
+      place-content: center;
+      justify-items: center;
+      min-height: 320px;
+      padding: var(--td-space-8);
+      text-align: center;
+    }
+
+    .td-pageloader--fixed {
+      position: fixed;
+      inset: 0;
+      z-index: var(--td-z-dialog);
+      min-height: 100dvh;
+      background: var(--td-ground);
+    }
+
+    .td-pageloader__label {
+      color: var(--td-ink);
+      font: var(--td-type-label);
+    }
+
+    .td-pageloader__description {
+      max-width: 40ch;
+      color: var(--td-ink-2);
+      font: var(--td-type-body);
+    }
+
+    /* ---------- Reduced motion: every loop has a resting state ---------- */
+
+    @media (prefers-reduced-motion: reduce) {
+      .td-sunrise__arc,
+      .td-sweep::after,
+      .td-skel {
+        animation: none;
+      }
+
+      /* The spinner is the one loop that keeps turning, slowly. */
+
+      .td-spinner {
+        animation-duration: calc(var(--td-duration-loader-sunspot) * 3);
+      }
+
+      .td-sweep::after {
+        width: 100%;
+        opacity: 0.35;
+      }
+
+      .td-skel {
+        background: var(--td-surface-sunken);
+      }
+    }
+  }
+
+  @keyframes td-spin {
+    to {
+      rotate: 360deg;
+    }
+  }
+
+  /* The arc draws itself over the horizon, rests, and fades for the next. */
+
+  @keyframes td-sunrise {
+    0% {
+      stroke-dashoffset: 100;
+      opacity: 1;
+    }
+
+    55%,
+    80% {
+      stroke-dashoffset: 0;
+      opacity: 1;
+    }
+
+    100% {
+      stroke-dashoffset: 0;
+      opacity: 0;
+    }
+  }
+
+  @keyframes td-sweep {
+    from {
+      translate: -110% 0;
+    }
+
+    to {
+      translate: 340% 0;
+    }
+  }
+
+  @keyframes td-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+
+    to {
+      background-position: 0 0;
+    }
+  }
+}

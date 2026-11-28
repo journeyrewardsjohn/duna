@@ -1,0 +1,301 @@
+/* Tideline Button and IconButton. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Button ---------- */
+
+    .td-btn {
+      position: relative;
+      display: inline-flex;
+      gap: var(--td-space-2);
+      align-items: center;
+      justify-content: center;
+      min-width: var(--td-control);
+      min-height: var(--td-control);
+      margin: 0;
+      padding: 0 var(--td-space-6);
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: transparent;
+      color: var(--td-ink);
+      font: var(--td-type-label);
+      text-align: center;
+      text-decoration: none;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        box-shadow var(--td-duration-quick) var(--td-ease-ui),
+        color var(--td-duration-quick) var(--td-ease-ui),
+        scale var(--td-duration-instant) var(--td-ease-ui);
+      flex: none;
+      padding-inline: var(--td-space-4);
+      letter-spacing: var(--td-type-label-tracking);
+
+      &:active {
+        scale: calc(1 - 0.02 * var(--td-motion));
+      }
+
+      .td-btn__icon,
+      .td-btn__label {
+        position: relative;
+        display: inline-flex;
+        gap: var(--td-space-2);
+        align-items: center;
+      }
+
+      .td-btn__icon > *,
+      .td-btn__label {
+        transition: opacity var(--td-duration-quick) var(--td-ease-ui);
+      }
+
+      /* The spinner sits where the icon was, or over the label's centre. */
+
+      .td-btn__busy {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /*
+       * Loading keeps the width and the label. With an icon, the spinner
+       * takes the icon's place; without one, it covers the label, which
+       * stays in the layout and in the accessibility tree.
+       */
+
+      &:is([data-pending], [data-spinning]) {
+        cursor: progress;
+
+        .td-btn__busy {
+          opacity: 1;
+        }
+
+        .td-btn__icon--start > :not(.td-btn__busy) {
+          opacity: 0;
+        }
+
+        &:not(:has(.td-btn__icon--start)) .td-btn__label {
+          opacity: 0;
+        }
+      }
+
+      /* A press that returns a Promise waits out the same delay in CSS. */
+
+      &[data-pending]:not([data-spinning]) :is(.td-btn__busy, .td-btn__label) {
+        transition-delay: var(--td-delay-loading);
+      }
+    }
+
+    /*
+     * Each filled variant locks its label colour on the button itself, for
+     * links in every state and for every child, so a page's own `a` or text
+     * rules can never put a dark label on the navy fill.
+     */
+
+    .td-btn--primary,
+    a.td-btn--primary:is(:link, :visited, :hover, :active) {
+      background: var(--td-action);
+      color: var(--td-on-action);
+      -webkit-text-fill-color: var(--td-on-action);
+      box-shadow: none;
+
+      &:hover {
+        background: var(--td-action-hover);
+      }
+    }
+
+    .td-btn--secondary,
+    a.td-btn--secondary:is(:link, :visited, :hover, :active) {
+      background: var(--td-surface);
+      box-shadow:
+        inset 0 0 0 1px var(--td-line-strong),
+        0 1px 2px color-mix(in srgb, var(--td-text) 4%, transparent);
+      color: var(--td-text);
+      -webkit-text-fill-color: var(--td-text);
+
+      &:hover {
+        background: var(--td-surface-subtle);
+        box-shadow:
+          inset 0 0 0 1px var(--td-line-strong),
+          0 1px 2px color-mix(in srgb, var(--td-text) 4%, transparent);
+      }
+
+      &:active {
+        background: var(--td-surface-sunken);
+      }
+    }
+
+    .td-btn--ghost {
+      padding-inline: var(--td-space-3);
+
+      &:hover {
+        background: color-mix(in srgb, currentColor 8%, transparent);
+      }
+
+      &:active {
+        background: color-mix(in srgb, currentColor 12%, transparent);
+      }
+    }
+
+    .td-btn--danger,
+    a.td-btn--danger:is(:link, :visited, :hover, :active) {
+      background: var(--td-danger);
+      color: var(--td-on-danger);
+      -webkit-text-fill-color: var(--td-on-danger);
+
+      &:hover {
+        box-shadow: inset 0 0 0 999px
+          color-mix(in srgb, var(--td-on-danger) 10%, transparent);
+      }
+    }
+
+    /* The one main action on a dark ground, where navy would vanish. */
+
+    .td-btn--light,
+    a.td-btn--light:is(:link, :visited, :hover, :active) {
+      background: var(--td-on-mesh);
+      color: var(--td-tide-900);
+      -webkit-text-fill-color: var(--td-tide-900);
+      box-shadow: none;
+
+      &:hover {
+        background: var(--td-tide-50);
+      }
+    }
+
+    .td-btn:is(
+        .td-btn--primary,
+        .td-btn--secondary,
+        .td-btn--danger,
+        .td-btn--light
+      )
+      * {
+      color: inherit;
+      -webkit-text-fill-color: inherit;
+    }
+
+    .td-btn--sm {
+      min-width: var(--td-control-sm);
+      min-height: var(--td-control-sm);
+      padding-inline: var(--td-space-3);
+      border-radius: var(--td-radius-sm);
+    }
+
+    .td-btn--lg {
+      min-height: var(--td-control-lg);
+      font-weight: var(--td-type-label-weight);
+      padding-inline: var(--td-space-5);
+      font: var(--td-type-label);
+    }
+
+    .td-btn--block {
+      display: flex;
+      width: 100%;
+    }
+
+    /* Disabled, but not while loading: a loading label stays readable. */
+
+    .td-btn:is(:disabled, [data-disabled]):not([data-pending], [data-loading]) {
+      background: var(--td-surface-sunken);
+      color: var(--td-text-disabled);
+      -webkit-text-fill-color: var(--td-text-disabled);
+      cursor: not-allowed;
+      scale: 1;
+      box-shadow: none;
+    }
+
+    /* ---------- IconButton ---------- */
+
+    .td-iconbtn {
+      position: relative;
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-control);
+      height: var(--td-control);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: transparent;
+      color: var(--td-ink);
+      cursor: pointer;
+      transition:
+        background-color var(--td-duration-quick) var(--td-ease-ui),
+        scale var(--td-duration-instant) var(--td-ease-ui);
+
+      &:hover {
+        background: color-mix(in srgb, currentColor 8%, transparent);
+      }
+
+      &:is(:disabled, [data-disabled]):not([data-pending], [data-loading]) {
+        background: transparent;
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+
+      &:active {
+        scale: calc(1 - 0.02 * var(--td-motion));
+      }
+
+      .td-btn__busy {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      &:is([data-pending], [data-spinning]) {
+        cursor: progress;
+
+        .td-btn__busy {
+          opacity: 1;
+        }
+
+        .td-iconbtn__icon {
+          opacity: 0;
+        }
+      }
+    }
+
+    .td-iconbtn--tonal {
+      background: var(--td-surface-sunken);
+      color: var(--td-text);
+    }
+
+    .td-iconbtn--outline {
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 1px var(--td-line-strong);
+    }
+
+    .td-iconbtn--sm {
+      width: var(--td-control-sm);
+      height: var(--td-control-sm);
+    }
+
+    /*
+     * The primary label is white in every state and theme. `!important`
+     * inside a layer outranks every unlayered rule a host page has, important
+     * or not, so no page style for links or text can turn it dark.
+     */
+
+    .td-btn--primary,
+    a.td-btn--primary:is(:link, :visited, :hover, :active, :focus),
+    .td-btn--primary * {
+      color: var(--td-on-action) !important;
+      -webkit-text-fill-color: var(--td-on-action) !important;
+    }
+
+    .td-btn--primary:is(:disabled, [data-disabled]):not(
+        [data-pending],
+        [data-loading]
+      ) {
+      background: var(--td-action-disabled);
+    }
+  }
+}

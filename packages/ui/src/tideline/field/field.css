@@ -1,0 +1,249 @@
+/* Tideline Field, Input, Textarea and NumberInput. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Field, Input, Textarea ---------- */
+
+    .td-field {
+      display: grid;
+      gap: var(--td-space-2);
+      min-width: 0;
+    }
+
+    .td-field__label {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: baseline;
+      color: var(--td-ink);
+      font: var(--td-type-label);
+    }
+
+    .td-field__optional {
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+    }
+
+    .td-field__hint {
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+    }
+
+    .td-field__error {
+      display: flex;
+      gap: var(--td-space-1);
+      align-items: flex-start;
+      color: var(--td-danger);
+      font: var(--td-type-meta);
+
+      &:empty {
+        display: none;
+      }
+
+      .td-icon {
+        width: 18px;
+        height: 18px;
+      }
+    }
+
+    .td-input,
+    .td-inputgroup,
+    .td-number__group {
+      width: 100%;
+      min-height: var(--td-control);
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 1px var(--td-line-strong);
+      color: var(--td-text);
+      font: var(--td-type-body);
+      transition: box-shadow var(--td-duration-quick) var(--td-ease-ui);
+    }
+
+    .td-input {
+      display: block;
+      margin: 0;
+      padding: 0 var(--td-space-4);
+      appearance: none;
+
+      &::placeholder {
+        color: var(--td-text-3);
+        opacity: 1;
+      }
+
+      &:hover {
+        box-shadow: inset 0 0 0 1px var(--td-border-control);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--td-focus-color);
+        outline-offset: 2px;
+        box-shadow: inset 0 0 0 1px var(--td-focus);
+      }
+
+      &:is([aria-invalid="true"], [data-invalid]) {
+        box-shadow: inset 0 0 0 2px var(--td-danger);
+      }
+
+      &:is(:disabled, [data-disabled]) {
+        background: var(--td-surface-sunken);
+        box-shadow: inset 0 0 0 1px var(--td-line);
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+    }
+
+    &[data-density="hq"] :is(.td-input, .td-inputgroup, .td-number__group) {
+      border-radius: var(--td-radius-sm);
+    }
+
+    .td-textarea {
+      min-height: 112px;
+      padding-block: var(--td-space-3);
+      resize: vertical;
+    }
+
+    .td-inputgroup {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: center;
+      padding-inline: var(--td-space-4) var(--td-space-1);
+
+      &:hover {
+        box-shadow: inset 0 0 0 1px var(--td-border-control);
+      }
+
+      &:has(.td-inputgroup__input:focus-visible) {
+        outline: 2px solid var(--td-focus-color);
+        outline-offset: 2px;
+        box-shadow: inset 0 0 0 1px var(--td-focus);
+      }
+
+      &:has([aria-invalid="true"]) {
+        box-shadow: inset 0 0 0 2px var(--td-danger);
+      }
+
+      &[data-disabled] {
+        background: var(--td-surface-sunken);
+        box-shadow: inset 0 0 0 1px var(--td-line);
+        color: var(--td-text-disabled);
+      }
+    }
+
+    .td-inputgroup__icon {
+      display: inline-flex;
+      color: var(--td-text-2);
+    }
+
+    .td-inputgroup__input {
+      flex: 1;
+      min-width: 0;
+      height: var(--td-control);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      appearance: none;
+
+      &::placeholder {
+        color: var(--td-text-3);
+        opacity: 1;
+      }
+
+      &:focus-visible {
+        outline: none;
+      }
+
+      &::-webkit-search-cancel-button {
+        display: none;
+      }
+    }
+
+    .td-inputgroup__clear {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-control-sm);
+      height: var(--td-control-sm);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: transparent;
+      color: var(--td-text-2);
+      cursor: pointer;
+
+      &:hover {
+        background: var(--td-surface-sunken);
+        color: var(--td-text);
+      }
+
+      &:not([data-filled]) {
+        visibility: hidden;
+      }
+    }
+
+    /* ---------- NumberInput ---------- */
+
+    .td-number {
+      display: block;
+      min-width: 0;
+    }
+
+    .td-number__group {
+      display: flex;
+      align-items: center;
+      padding: 0 var(--td-space-1);
+
+      &:has(.td-number__control:focus-visible) {
+        outline: 2px solid var(--td-focus-color);
+        outline-offset: 2px;
+        box-shadow: inset 0 0 0 1px var(--td-focus);
+      }
+
+      &:has([aria-invalid="true"]) {
+        box-shadow: inset 0 0 0 2px var(--td-danger);
+      }
+    }
+
+    .td-number__control {
+      flex: 1;
+      min-width: 0;
+      height: var(--td-control);
+      margin: 0;
+      padding: 0 var(--td-space-2);
+      border: 0;
+      background: transparent;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+
+      &:focus-visible {
+        outline: none;
+      }
+    }
+
+    .td-number__step {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-control-sm);
+      height: var(--td-control-sm);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: transparent;
+      color: var(--td-text);
+      cursor: pointer;
+
+      &:hover {
+        background: var(--td-surface-sunken);
+      }
+
+      &[data-disabled] {
+        color: var(--td-text-disabled);
+        cursor: not-allowed;
+      }
+    }
+  }
+}

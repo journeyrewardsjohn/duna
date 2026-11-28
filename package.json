@@ -38,6 +38,7 @@
     "verify:readable-type": "tsx scripts/verify-readable-type.ts",
     "knowledge:generate": "tsx scripts/generate-duna-feature-knowledge.ts",
     "knowledge:check": "tsx scripts/generate-duna-feature-knowledge.ts --check",
+    "tideline:tokens": "tsx scripts/build-tideline-tokens.ts",
     "verify": "pnpm format:check && pnpm knowledge:check && pnpm verify:design-system && pnpm verify:readable-type && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:mobile-runtime && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {

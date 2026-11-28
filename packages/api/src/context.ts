@@ -23,6 +23,7 @@ import {
   resolveWorkOSCredentials,
 } from "./workos-environment";
 import { ensurePredictionCreditAccount } from "./prediction-market";
+import { currentAgeBand } from "./age-band";
 
 export type ApiAgeBand = "unknown" | "under-13" | "teen" | "adult";
 
@@ -593,7 +594,9 @@ async function resolveWorkOSActor(input: {
     roles: [...roles],
     organizationId: organization?.id,
     scopes: [...new Set([...scopesForRoles([...roles]), ...customScopes])],
-    ageBand: person.ageBand as ApiAgeBand,
+    // Recomputed from the birth date on every request; the stored band is
+    // written once and goes stale on birthdays (see ./age-band.ts).
+    ageBand: currentAgeBand(person, new Date()),
     isDemo: false,
   };
 }

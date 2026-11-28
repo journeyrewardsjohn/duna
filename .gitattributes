@@ -1,1 +1,8 @@
 *.pdf binary
+
+# Tideline append-only lists: one line per component family. Parallel branches
+# that each append a line merge without conflicts. Keep these files to those
+# lines (see docs/design/tideline-components.md).
+packages/ui/src/tideline/index.ts merge=union
+packages/ui/src/tideline/styles.css merge=union
+apps/hq/app/tideline/sections/index.ts merge=union

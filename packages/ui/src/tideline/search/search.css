@@ -1,0 +1,128 @@
+/* Tideline SearchField. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- SearchField ---------- */
+
+    .td-search {
+      display: grid;
+      gap: var(--td-space-2);
+      min-width: 0;
+    }
+
+    .td-search__box {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: center;
+      min-height: var(--td-control);
+      padding: 0 var(--td-space-1) 0 var(--td-space-4);
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      color: var(--td-text-2);
+      position: relative;
+      padding-inline: var(--td-space-3) var(--td-space-1);
+      box-shadow: inset 0 0 0 1px var(--td-line-strong);
+      transition: box-shadow var(--td-duration-quick) var(--td-ease-ui);
+
+      &:has(.td-search__input:focus-visible) {
+        outline: 2px solid var(--td-focus-color);
+        outline-offset: 2px;
+        box-shadow: inset 0 0 0 1px var(--td-focus);
+      }
+    }
+
+    .td-search__icon {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-size-icon);
+      height: var(--td-size-icon);
+    }
+
+    .td-search__input {
+      flex: 1;
+      min-width: 0;
+      height: var(--td-control);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--td-text);
+      font: var(--td-type-body);
+      appearance: none;
+
+      &::placeholder {
+        color: var(--td-text-3);
+        opacity: 1;
+      }
+
+      &:focus-visible {
+        outline: none;
+      }
+
+      &::-webkit-search-cancel-button {
+        display: none;
+      }
+    }
+
+    .td-search__clear {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-control-sm);
+      height: var(--td-control-sm);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      cursor: pointer;
+      border-radius: var(--td-radius-sm);
+      background: transparent;
+      color: var(--td-text-2);
+
+      &:not([data-filled]) {
+        visibility: hidden;
+      }
+
+      &:hover {
+        background: var(--td-surface-sunken);
+        color: var(--td-text);
+      }
+    }
+
+    .td-search__status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-3);
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .td-search__message {
+      min-height: 18px;
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+
+      &:empty {
+        display: none;
+      }
+    }
+
+    .td-search[data-state="error"] .td-search__message {
+      color: var(--td-danger);
+    }
+
+    .td-search[data-state="offline"] {
+      .td-search__box {
+        box-shadow: inset 0 0 0 2px var(--td-live);
+      }
+
+      .td-search__message {
+        color: var(--td-live-ink);
+      }
+    }
+
+    .td-search__results {
+      display: grid;
+      gap: var(--td-space-2);
+    }
+  }
+}

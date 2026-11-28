@@ -1,0 +1,162 @@
+/* Tideline Progress and Stepper. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Progress ---------- */
+
+    .td-progress {
+      display: grid;
+      gap: var(--td-space-2);
+      min-width: 0;
+    }
+
+    .td-progress__meta {
+      display: flex;
+      gap: var(--td-space-3);
+      justify-content: space-between;
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+    }
+
+    .td-progress__label {
+      color: var(--td-ink);
+      font: var(--td-type-label);
+    }
+
+    .td-progress__value {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-progress__track {
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--td-radius-xs);
+      background: var(--td-surface-sunken);
+      height: 4px;
+      box-shadow: none;
+    }
+
+    .td-progress__fill {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--td-action);
+      transition: width var(--td-duration-sheet) var(--td-ease-tide);
+
+      &[data-indeterminate] {
+        width: 40%;
+        animation: td-tide-sweep var(--td-duration-loader-ripple)
+          var(--td-ease-ui) infinite;
+      }
+    }
+
+    /* ---------- Stepper ---------- */
+
+    .td-stepper {
+      display: grid;
+    }
+
+    .td-stepper__step {
+      position: relative;
+      display: flex;
+      gap: var(--td-space-3);
+      padding-bottom: var(--td-space-4);
+      min-height: 48px;
+
+      /* The line to the next step. */
+
+      &:not(:last-child)::before {
+        position: absolute;
+        border-radius: 2px;
+        background: var(--td-line-strong);
+        content: "";
+        inset-block: 28px 4px;
+        inset-inline-start: 11.5px;
+        width: 1px;
+      }
+
+      &[data-state="complete"]:not(:last-child)::before {
+        background: var(--td-action);
+      }
+
+      &:last-child {
+        min-height: 0;
+        padding-bottom: 0;
+      }
+    }
+
+    .td-stepper__marker {
+      display: grid;
+      flex: none;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--td-surface);
+      color: var(--td-text-2);
+      font-variant-numeric: tabular-nums;
+      width: 24px;
+      height: 24px;
+      box-shadow: inset 0 0 0 1.5px var(--td-border-control);
+      font: var(--td-type-micro);
+
+      .td-icon {
+        width: 14px;
+        height: 14px;
+        stroke-width: 2;
+      }
+    }
+
+    .td-stepper__step[data-state="complete"] .td-stepper__marker {
+      background: var(--td-action);
+      box-shadow: none;
+      color: var(--td-on-action);
+    }
+
+    .td-stepper__step[data-state="current"] .td-stepper__marker {
+      color: var(--td-text);
+      box-shadow: inset 0 0 0 1.5px var(--td-action);
+    }
+
+    .td-stepper__text {
+      display: grid;
+      align-content: start;
+      gap: 2px;
+      padding-top: 2px;
+    }
+
+    .td-stepper__title {
+      color: var(--td-ink-2);
+      font: var(--td-type-label);
+    }
+
+    .td-stepper__step:not([data-state="upcoming"]) .td-stepper__title {
+      color: var(--td-ink);
+    }
+
+    .td-stepper__description {
+      color: var(--td-ink-2);
+      font: var(--td-type-meta);
+    }
+
+    /* ---------- Reduced motion: every loop has a resting state ---------- */
+
+    @media (prefers-reduced-motion: reduce) {
+      .td-progress__fill[data-indeterminate] {
+        animation: none;
+      }
+
+      .td-progress__fill[data-indeterminate] {
+        width: 100%;
+        opacity: 0.5;
+      }
+    }
+  }
+
+  @keyframes td-tide-sweep {
+    from {
+      translate: -110% 0;
+    }
+
+    to {
+      translate: 260% 0;
+    }
+  }
+}

@@ -1,0 +1,197 @@
+/* Tideline Avatar, AvatarStack, AvatarLevel and PlayerSlot. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Avatar ---------- */
+
+    .td-avatar {
+      --td-avatar-size: var(--td-size-avatar);
+      position: relative;
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-avatar-size);
+      height: var(--td-avatar-size);
+      overflow: hidden;
+      border-radius: 50%;
+      font: var(--td-type-label);
+      line-height: 1;
+      user-select: none;
+      background: var(--td-surface-sunken);
+      box-shadow: inset 0 0 0 1px var(--td-line);
+      color: var(--td-text);
+      font-size: calc(var(--td-avatar-size) * 0.36);
+    }
+
+    .td-avatar--xs {
+      --td-avatar-size: 24px;
+    }
+
+    .td-avatar--sm {
+      --td-avatar-size: 32px;
+    }
+
+    .td-avatar--lg {
+      --td-avatar-size: 56px;
+    }
+
+    .td-avatar--club {
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface-sunken);
+      color: var(--td-text);
+    }
+
+    .td-avatar--more {
+      background: var(--td-surface-sunken);
+      color: var(--td-text-2);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-avatar__image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .td-avatarstack {
+      display: inline-flex;
+
+      > .td-avatar {
+        box-shadow: 0 0 0 2px var(--td-surface);
+      }
+
+      > .td-avatar + .td-avatar {
+        margin-inline-start: -8px;
+      }
+    }
+
+    .td-avlevel {
+      display: inline-grid;
+      flex: none;
+      gap: 6px;
+      justify-items: center;
+    }
+
+    .td-avlevel__wrap {
+      position: relative;
+      display: inline-grid;
+      justify-items: center;
+
+      > .td-avatar {
+        --td-avatar-size: 48px;
+      }
+    }
+
+    .td-avlevel--sm .td-avlevel__wrap > .td-avatar {
+      --td-avatar-size: 32px;
+    }
+
+    .td-avlevel--lg .td-avlevel__wrap > .td-avatar {
+      --td-avatar-size: 56px;
+    }
+
+    /* The level chip: energy fill, always with on-energy text inside it. */
+
+    .td-level {
+      display: inline-grid;
+      place-items: center;
+      font: var(--td-type-micro);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      min-width: 26px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: var(--td-radius-sm);
+      background: var(--td-energy-wash);
+      box-shadow: 0 0 0 1.5px var(--td-surface);
+      color: var(--td-energy-ink);
+      font-weight: var(--td-type-micro-weight);
+    }
+
+    .td-avlevel__wrap > .td-level {
+      position: absolute;
+      bottom: -8px;
+    }
+
+    .td-avlevel__name {
+      max-width: 80px;
+      margin-top: 4px;
+      overflow: hidden;
+      color: var(--td-ink);
+      font: var(--td-type-meta);
+      font-weight: var(--td-type-label-weight);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ---------- PlayerSlot and AddPlayers ---------- */
+
+    .td-pslot {
+      display: inline-grid;
+      gap: 4px;
+      justify-items: center;
+      min-width: 64px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: none;
+      color: var(--td-ink);
+    }
+
+    button.td-pslot {
+      min-height: var(--td-size-target);
+      cursor: pointer;
+    }
+
+    .td-pslot__open {
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      background: transparent;
+      box-shadow: none;
+      outline: 1px dashed var(--td-border-control);
+      outline-offset: -1px;
+      color: var(--td-ink-2);
+    }
+
+    .td-pslot[data-state="open"] .td-avlevel__name {
+      margin-top: 10px;
+      color: var(--td-ink-2);
+    }
+
+    .td-pslot__paid {
+      display: inline-flex;
+      gap: 2px;
+      align-items: center;
+      color: var(--td-positive);
+      font: var(--td-type-micro);
+
+      .td-icon {
+        width: 14px;
+        height: 14px;
+      }
+    }
+
+    .td-pslot__unpaid {
+      color: var(--td-attention);
+      font: var(--td-type-micro);
+    }
+
+    .td-avatarstack > .td-avatar {
+      box-shadow: 0 0 0 2px var(--td-surface);
+    }
+
+    .td-avlevel__wrap > .td-avatar {
+      --td-avatar-size: 40px;
+    }
+
+    button.td-pslot:hover .td-pslot__open {
+      background: var(--td-surface-sunken);
+      color: var(--td-ink);
+    }
+  }
+}

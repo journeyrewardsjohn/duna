@@ -1,0 +1,131 @@
+/* Tideline Toast. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- Toast ---------- */
+
+    .td-toasts {
+      position: fixed;
+      inset: auto;
+      z-index: var(--td-z-toast);
+      width: min(380px, calc(100vw - var(--td-space-8)));
+      margin: var(--td-space-4);
+      padding: 0;
+      overflow: visible;
+      border: 0;
+      background: transparent;
+
+      &[data-side="bottom"] {
+        bottom: 0;
+      }
+
+      &[data-side="top"] {
+        top: 0;
+      }
+
+      &[data-align="end"] {
+        inset-inline-end: 0;
+      }
+
+      &[data-align="start"] {
+        inset-inline-start: 0;
+      }
+
+      &[data-align="center"] {
+        left: 50%;
+        margin-inline: 0;
+        translate: -50%;
+      }
+
+      [data-slot="toast-list"] {
+        display: flex;
+        flex-direction: column;
+        gap: var(--td-space-2);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      &[data-side="bottom"] [data-slot="toast-list"] {
+        flex-direction: column-reverse;
+      }
+    }
+
+    /* A toast is an inverse surface: ink fill, inverse text. */
+
+    .td-toast {
+      --td-focus-color: var(--td-text-inverse);
+      display: flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      min-height: 56px;
+      padding: var(--td-space-2) var(--td-space-2) var(--td-space-2)
+        var(--td-space-4);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-text);
+      box-shadow: var(--td-shadow-floating);
+      color: var(--td-text-inverse);
+      translate: var(--toast-swipe-x, 0) var(--toast-swipe-y, 0);
+      transition:
+        opacity var(--td-duration-settle) var(--td-ease-ui),
+        translate var(--td-duration-settle) var(--td-ease-tide);
+
+      &[data-starting-style] {
+        opacity: 0;
+        translate: 0 calc(16px * var(--td-motion));
+      }
+
+      &[data-ending-style] {
+        opacity: 0;
+      }
+
+      &[data-swiping] {
+        transition: none;
+      }
+
+      .td-btn {
+        background: transparent;
+        box-shadow: inset 0 0 0 1px currentColor;
+        color: inherit;
+        -webkit-text-fill-color: currentColor;
+      }
+    }
+
+    .td-toast__icon {
+      color: var(--td-energy);
+    }
+
+    .td-toast__body {
+      display: grid;
+      flex: 1;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .td-toast__title {
+      font: var(--td-type-label);
+    }
+
+    .td-toast__description {
+      font: var(--td-type-meta);
+    }
+
+    .td-toast__close {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-control-sm);
+      height: var(--td-control-sm);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: var(--td-radius-md);
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+
+      &:hover {
+        background: color-mix(in srgb, currentColor 14%, transparent);
+      }
+    }
+  }
+}
