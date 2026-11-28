@@ -8,8 +8,11 @@
  *   player.trainingPrograms    protectedProcedure (the signed-in athlete's own schedule)
  *
  * Every procedure returns its fixture from @duna/core/demo/training-programs
- * in demo mode and throws `notImplementedYet` otherwise until B4 lands the
- * service in ../services/training-programs/. Read ./README.md first.
+ * in demo mode and calls the B4 service in ../services/training-programs/
+ * otherwise. Schedule reads need "training:read" (front desk included);
+ * plans and after-practice records need "training:write" (the service
+ * checks); programs are changed by managers and owners, sessions by them or
+ * the program's coaches. See docs/product/training.md.
  */
 import {
   trainingProgramsDemo,
@@ -17,6 +20,7 @@ import {
 } from "@duna/core/demo/training-programs";
 import { TRPCError } from "@trpc/server";
 import { organizationProcedure, protectedProcedure, router } from "../auth";
+import type { ApiActor } from "../context";
 import {
   trainingProgramsAddSessionInputSchema,
   trainingProgramsAssignCoachesInputSchema,
@@ -48,7 +52,8 @@ import {
   trainingProgramsUpdateInputSchema,
 } from "../contracts/training-programs";
 import { usesDemoData } from "../services/data-source";
-import { notImplementedYet } from "./not-implemented";
+import { organizationTimezone } from "../services/team-availability";
+import * as service from "../services/training-programs";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
 import { z } from "zod";
 
@@ -82,6 +87,27 @@ function demoConflict(conflictId: string) {
 
 const sessionInput = z.object({ sessionId: z.uuid() });
 
+function trainingContext(ctx: {
+  readonly actor: ApiActor;
+  readonly organizationId: string;
+  readonly requestId: string;
+  readonly now: Date;
+  readonly ipAddress?: string;
+}): service.TrainingContext {
+  return {
+    actor: ctx.actor,
+    organizationId: ctx.organizationId,
+    requestId: ctx.requestId,
+    now: ctx.now,
+    ...(ctx.ipAddress ? { ipAddress: ctx.ipAddress } : {}),
+  };
+}
+
+function requireActor(actor: ApiActor | undefined): ApiActor {
+  if (!actor) throw new TRPCError({ code: "UNAUTHORIZED" });
+  return actor;
+}
+
 export const trainingProgramsOperatorRouter = router({
   status: read
     .output(domainSeamStatusSchema)
@@ -91,7 +117,7 @@ export const trainingProgramsOperatorRouter = router({
   list: read
     .input(trainingProgramsListInputSchema)
     .output(trainingProgramsListSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           items: demo.summaries.filter(
@@ -99,63 +125,67 @@ export const trainingProgramsOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "list");
+      return service.listPrograms(trainingContext(ctx), input);
     }),
 
   /** One program with slots, exceptions, weeks and coaches (TR-Program). */
   program: read
     .input(trainingProgramsProgramInputSchema)
     .output(trainingProgramsProgramSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) return demoProgram(input.programId);
-      return notImplementedYet(DOMAIN, "program");
+      return service.programDetail(trainingContext(ctx), input.programId);
     }),
 
   /** "Create from a sentence": a reviewable draft; nothing is saved (TR-New). */
   proposeFromSentence: write
     .input(trainingProgramsProposeInputSchema)
     .output(trainingProgramsProposalSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return { ...demo.proposal, sourceText: input.sentence };
       }
-      return notImplementedYet(DOMAIN, "proposeFromSentence");
+      return service.proposeFromSentence(
+        trainingContext(ctx),
+        input.sentence,
+        await organizationTimezone(ctx.organizationId),
+      );
     }),
 
   /** Create a draft program and its schedule from a reviewed draft. */
   create: write
     .input(trainingProgramsCreateInputSchema)
     .output(trainingProgramsProgramSchema)
-    .mutation(() => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData())
         return demoProgram(trainingProgramsDemoIds.draftProgram);
-      return notImplementedYet(DOMAIN, "create");
+      return service.createProgram(trainingContext(ctx), input);
     }),
 
   update: write
     .input(trainingProgramsUpdateInputSchema)
     .output(trainingProgramsProgramSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) return demoProgram(input.programId);
-      return notImplementedYet(DOMAIN, "update");
+      return service.updateProgram(trainingContext(ctx), input);
     }),
 
   /** draft → active; generates sessions from the weekly slots. */
   activate: write
     .input(trainingProgramsProgramInputSchema)
     .output(trainingProgramsProgramSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return { ...demoProgram(input.programId), status: "active" as const };
       }
-      return notImplementedYet(DOMAIN, "activate");
+      return service.activateProgram(trainingContext(ctx), input.programId);
     }),
 
   /** draft | active → cancelled; future sessions are cancelled with the reason. */
   cancel: write
     .input(trainingProgramsCancelInputSchema)
     .output(trainingProgramsProgramSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...demoProgram(input.programId),
@@ -163,14 +193,14 @@ export const trainingProgramsOperatorRouter = router({
           cancellation: { cancelledAt: NOW, reason: input.reason },
         };
       }
-      return notImplementedYet(DOMAIN, "cancel");
+      return service.cancelProgram(trainingContext(ctx), input);
     }),
 
   /** Sessions in a window, for one program or the whole club (TR-Schedule). */
   sessions: read
     .input(trainingProgramsSessionsInputSchema)
     .output(trainingProgramsSessionsSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           items: demo.sessions.filter(
@@ -181,14 +211,14 @@ export const trainingProgramsOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "sessions");
+      return service.listSessions(trainingContext(ctx), input);
     }),
 
   /** Add a one-off session or event inside a program (source "manual"). */
   addSession: write
     .input(trainingProgramsAddSessionInputSchema)
     .output(trainingProgramsSessionSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...demoSession(demo.sessions[1]!.id),
@@ -200,14 +230,14 @@ export const trainingProgramsOperatorRouter = router({
           source: "manual" as const,
         };
       }
-      return notImplementedYet(DOMAIN, "addSession");
+      return service.addSession(trainingContext(ctx), input);
     }),
 
   /** Cancel keeps the session and its reason; notifying goes through Concierge. */
   cancelSession: write
     .input(trainingProgramsCancelSessionInputSchema)
     .output(trainingProgramsSessionSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...demoSession(input.sessionId),
@@ -215,31 +245,31 @@ export const trainingProgramsOperatorRouter = router({
           cancellation: { cancelledAt: NOW, reason: input.reason },
         };
       }
-      return notImplementedYet(DOMAIN, "cancelSession");
+      return service.cancelSession(trainingContext(ctx), input);
     }),
 
   assignSessionCoaches: write
     .input(trainingProgramsAssignCoachesInputSchema)
     .output(trainingProgramsSessionSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) return demoSession(input.sessionId);
-      return notImplementedYet(DOMAIN, "assignSessionCoaches");
+      return service.assignSessionCoaches(trainingContext(ctx), input);
     }),
 
   /** Attach a practice plan, or a focus plus an estimated load, or neither. */
   setSessionPlan: write
     .input(trainingProgramsSetSessionPlanInputSchema)
     .output(trainingProgramsSessionSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) return demoSession(input.sessionId);
-      return notImplementedYet(DOMAIN, "setSessionPlan");
+      return service.setSessionPlan(trainingContext(ctx), input);
     }),
 
   /** Computed conflicts with suggested resolutions (TR-Schedule). */
   conflicts: read
     .input(trainingProgramsProgramInputSchema)
     .output(trainingProgramsConflictsSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           items: demo.conflicts.filter(
@@ -247,13 +277,13 @@ export const trainingProgramsOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "conflicts");
+      return service.listConflicts(trainingContext(ctx), input.programId);
     }),
 
   resolveConflict: write
     .input(trainingProgramsResolveConflictInputSchema)
     .output(trainingProgramsConflictSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...demoConflict(input.conflictId),
@@ -261,34 +291,34 @@ export const trainingProgramsOperatorRouter = router({
           resolution: input.resolution,
         };
       }
-      return notImplementedYet(DOMAIN, "resolveConflict");
+      return service.resolveConflict(trainingContext(ctx), input);
     }),
 
   /** After practice: attendance, coach RPE, block outcomes (TR-After). */
   sessionOutcome: read
     .input(sessionInput)
     .output(trainingProgramsOutcomeSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData())
         return { ...demo.outcome, sessionId: input.sessionId };
-      return notImplementedYet(DOMAIN, "sessionOutcome");
+      return service.sessionOutcome(trainingContext(ctx), input.sessionId);
     }),
 
   recordSessionOutcome: write
     .input(trainingProgramsRecordOutcomeInputSchema)
     .output(trainingProgramsOutcomeSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return { ...demo.outcome, ...input, recordedAt: NOW };
       }
-      return notImplementedYet(DOMAIN, "recordSessionOutcome");
+      return service.recordSessionOutcome(trainingContext(ctx), input);
     }),
 
   /** Practice plans list (Training › Practice plans). */
   practicePlans: read
     .input(trainingProgramsPracticePlansInputSchema)
     .output(trainingProgramsPracticePlansSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           items: demo.practicePlanSummaries.filter(
@@ -296,14 +326,14 @@ export const trainingProgramsOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "practicePlans");
+      return service.listPracticePlans(trainingContext(ctx), input);
     }),
 
   /** One plan with blocks, assumptions and totals (PP-Builder). */
   practicePlan: read
     .input(trainingProgramsPracticePlanInputSchema)
     .output(trainingProgramsPracticePlanSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const summary = demo.practicePlanSummaries.find(
           (plan) => plan.id === input.practicePlanId,
@@ -311,23 +341,26 @@ export const trainingProgramsOperatorRouter = router({
         if (!summary) throw new TRPCError({ code: "NOT_FOUND" });
         return { ...demo.practicePlan, ...summary };
       }
-      return notImplementedYet(DOMAIN, "practicePlan");
+      return service.practicePlanDetail(
+        trainingContext(ctx),
+        input.practicePlanId,
+      );
     }),
 
   /** Saving makes a new plan version; totals are recomputed by the service. */
   savePracticePlan: write
     .input(trainingProgramsSavePracticePlanInputSchema)
     .output(trainingProgramsPracticePlanSchema)
-    .mutation(() => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) return demo.practicePlan;
-      return notImplementedYet(DOMAIN, "savePracticePlan");
+      return service.savePracticePlan(trainingContext(ctx), input);
     }),
 
   /** Duna assumes focus, timing, load, contacts and jumps; nothing is saved. */
   proposePracticePlan: write
     .input(trainingProgramsProposePracticePlanInputSchema)
     .output(trainingProgramsPracticePlanSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...demo.practicePlan,
@@ -335,7 +368,7 @@ export const trainingProgramsOperatorRouter = router({
           assumptions: input.assumptions,
         };
       }
-      return notImplementedYet(DOMAIN, "proposePracticePlan");
+      return service.proposePracticePlan(trainingContext(ctx), input);
     }),
 });
 
@@ -347,20 +380,20 @@ export const trainingProgramsPlayerRouter = router({
   /** The programs the signed-in athlete (or their junior) is in. */
   myPrograms: protectedProcedure
     .output(trainingProgramsListSchema)
-    .query(() => {
+    .query(async ({ ctx }) => {
       if (usesDemoData()) {
         return {
           items: demo.summaries.filter((item) => item.status === "active"),
         };
       }
-      return notImplementedYet(DOMAIN, "myPrograms");
+      return service.myPrograms(requireActor(ctx.actor), ctx.now);
     }),
 
   /** The athlete's own sessions in a window, cancellations included. */
   mySchedule: protectedProcedure
     .input(trainingProgramsMyScheduleInputSchema)
     .output(trainingProgramsSessionsSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           items: demo.sessions.filter(
@@ -369,6 +402,6 @@ export const trainingProgramsPlayerRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "mySchedule");
+      return service.mySchedule(requireActor(ctx.actor), input);
     }),
 });
