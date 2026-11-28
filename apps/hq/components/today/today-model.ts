@@ -128,7 +128,7 @@ export function attentionItems({
       id: `alert-${alert.id}`,
       title: alert.title,
       detail: alert.detail,
-      href: hqModuleHref("schedule"),
+      href: hqHref("schedule"),
       action: alert.action || "Review",
       icon: alert.tone === "warning" ? "alert" : "info",
     });

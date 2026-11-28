@@ -75,11 +75,10 @@ test.describe("CH-2 See today", () => {
   });
   test("CH-2.2 Schedule shows the day by coach", async ({ page }) => {
     await openHqArea(page, "Schedule");
-    await page.getByRole("button", { name: "Coaches" }).click();
-    await expect(page.getByRole("button", { name: "Coaches" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await page.getByRole("button", { name: "Coaches", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Coaches", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 });
 
@@ -95,9 +94,24 @@ test.describe("CH-3 Run and check in a session", () => {
       page.getByRole("heading", { name: "Sunset doubles training" }).first(),
     ).toBeVisible();
   });
-  test.fixme("CH-3.2 Check players in, with Undo for a mistaken tap [H2]", async () => {
-    // Expected: tier 0 (reversible) with an Undo toast; the roster count
-    // Rallies on change.
+  test("CH-3.2 Check players in, with Undo for a mistaken tap [H2]", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Schedule");
+    // A coach sees their own day; their lesson's players are listed here.
+    const strip = page.getByRole("region", { name: "Not checked in" });
+    const count = strip.locator(".sch-now__count");
+    const before = Number(await count.textContent());
+    const button = strip.getByRole("button", { name: /^Check in / }).first();
+    const name = (await button.getAttribute("aria-label"))!.replace(
+      /^Check in (.+) for .+$/,
+      "$1",
+    );
+    await button.click();
+    await expectToast(page, `${name} checked in`);
+    await expect(count).toHaveText(String(before - 1));
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(count).toHaveText(String(before));
   });
 });
 

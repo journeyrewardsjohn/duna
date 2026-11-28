@@ -194,7 +194,7 @@ parents, gets paid. Mostly on the phone (Pro, Watch); plans in HQ.
 | CH-2.2 | Opens Schedule by coach                                                                                            | HQ         | H2              | Main    |
 | CH-2.n | Opens Pro Today: agenda by court and by coach, one-line conditions, light icon by the time                         | Pro        | M-R1            | Native  |
 | CH-3.1 | Opens the session from Today → its operations page                                                                 | HQ         | H2              | Main    |
-| CH-3.2 | Checks players in → tier 0 with Undo; the roster count Rallies                                                     | HQ         | H2              | Planned |
+| CH-3.2 | Checks players in → tier 0 with Undo; the roster count Rallies                                                     | HQ         | H2              | Main    |
 | CH-3.n | Checks in courtside on the phone, offline-tolerant                                                                 | Pro        | M-R2            | Native  |
 | CH-4.1 | Scores a match point by point from the session → NetScore, one state per match status                              | HQ         | H2, C1          | Planned |
 | CH-4.2 | Finishes the match and publishes the result after a confirm                                                        | HQ         | H9              | Planned |
@@ -306,8 +306,8 @@ approves requests, stops play for weather.
 | FO-2.1 | Sets access rules: approved players only, by hours or days                             | HQ      | B9, H14  | Planned |
 | FO-2.2 | Links the facility's waiver to access                                                  | HQ      | H14      | Planned |
 | FO-2.3 | Approves (tier 0, Undo) or declines (tier 1, player told) access requests              | HQ      | H14, B7  | Planned |
-| FO-3.1 | Stops play on a court for weather → tier 2 confirm restating courts, time, people told | HQ      | H2, B9   | Planned |
-| FO-3.2 | Sees conditions (wind on court, light) beside the court schedule                       | HQ      | H2, B11  | Planned |
+| FO-3.1 | Stops play on a court for weather → tier 2 confirm restating courts, time, people told | HQ      | H2, B9   | Main    |
+| FO-3.2 | Sees conditions (wind on court, light) beside the court schedule                       | HQ      | H2, B11  | Main    |
 | FO-3.n | Stops play from the phone at the court                                                 | Pro     | none     | **Gap** |
 | FO-4.1 | A player finds the facility and requests access on the web                             | Web     | none     | **Gap** |
 | FO-4.2 | Opens Today as the facility's operator                                                 | HQ      | H1       | Main    |

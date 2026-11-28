@@ -523,54 +523,6 @@ export async function recordActivityAttendanceAction(
   }
 }
 
-export async function proposeCalendarChangeAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    const created = await caller.operator.proposeCalendarChange({
-      sessionId: field(formData, "sessionId"),
-      startsAt: new Date(field(formData, "startsAt")).toISOString(),
-      endsAt: new Date(field(formData, "endsAt")).toISOString(),
-      courtId: optionalField(formData, "courtId"),
-      coachPersonId: optionalField(formData, "coachPersonId"),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    return result(
-      created.status === "conflict" ? "error" : "success",
-      created.status === "conflict"
-        ? "That move conflicts with a reserved resource."
-        : "Move preview ready. Confirm it to update the schedule and notify affected players.",
-      undefined,
-      created.id,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function confirmCalendarChangeAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.confirmCalendarChange({
-      proposalId: field(formData, "proposalId"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      "Schedule moved, resources re-reserved, and the change recorded.",
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
 export async function addCalendarParticipantAction(
   _previous: OperatorActionState,
   formData: FormData,
@@ -651,29 +603,6 @@ export async function addEventPlayerEntryAction(
       personName: entry.displayName,
       entryPaymentTreatment: entry.paymentTreatment,
     };
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function removeCalendarParticipantAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.removeCalendarParticipant({
-      registrationId: field(formData, "registrationId"),
-      reason:
-        field(formData, "reason") ||
-        "Removed from the session by an organization operator.",
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      "Player removed. Their in-app and push updates are queued.",
-    );
   } catch (error) {
     return errorState(error);
   }
@@ -1073,124 +1002,6 @@ export async function updateDivisionMatchScheduleAction(
     });
     revalidateOperator();
     return result("success", "Match time and court assignment updated.");
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function createCalendarBlockAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const resourceType = field(formData, "resourceType");
-    const mode = field(formData, "mode");
-    if (resourceType !== "court" && resourceType !== "coach") {
-      throw new Error("Choose a court or coach.");
-    }
-    if (mode !== "blocked" && mode !== "maintenance") {
-      throw new Error("Choose blocked time or maintenance.");
-    }
-    const caller = await getServerCaller();
-    await caller.operator.createCalendarBlock({
-      resourceType,
-      resourceId: field(formData, "resourceId"),
-      startsAt: new Date(field(formData, "startsAt")).toISOString(),
-      endsAt: new Date(field(formData, "endsAt")).toISOString(),
-      mode,
-      reason: field(formData, "reason"),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result("success", "Time blocked on the live resource calendar.");
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function createRecurringCalendarBlocksAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const resourceType = field(formData, "resourceType");
-    if (resourceType !== "court" && resourceType !== "coach") {
-      throw new Error("Choose a court or coach.");
-    }
-    const parsed = JSON.parse(field(formData, "blocks")) as unknown;
-    if (!Array.isArray(parsed)) {
-      throw new Error("Build a schedule draft before saving it.");
-    }
-    const blocks = parsed.map((value) => {
-      if (!value || typeof value !== "object") {
-        throw new Error("The schedule draft contains an invalid block.");
-      }
-      const block = value as Record<string, unknown>;
-      return {
-        weekday: Number(block.weekday),
-        startsAtMinute: Number(block.startsAtMinute),
-        endsAtMinute: Number(block.endsAtMinute),
-      };
-    });
-    const effectiveFrom = field(formData, "effectiveFrom");
-    const effectiveTo = field(formData, "effectiveTo");
-    const caller = await getServerCaller();
-    await caller.operator.createRecurringCalendarBlocks({
-      resourceType,
-      resourceId: field(formData, "resourceId"),
-      blocks,
-      effectiveFrom: effectiveFrom || undefined,
-      effectiveTo: effectiveTo || undefined,
-      mode: "blocked",
-      reason: field(formData, "reason"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      `${blocks.length} recurring schedule block${blocks.length === 1 ? "" : "s"} saved. Existing bookings were left intact.`,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function addCalendarEquipmentAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.addCalendarEquipment({
-      sessionId: field(formData, "sessionId"),
-      inventoryStockItemId: field(formData, "inventoryStockItemId"),
-      quantity: numberField(formData, "quantity"),
-      reason:
-        field(formData, "reason") || "Reserved from the organization calendar.",
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result("success", "Equipment reserved and visible on the session.");
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function removeCalendarEquipmentAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.removeCalendarEquipment({
-      reservationId: field(formData, "reservationId"),
-      reason:
-        field(formData, "reason") || "Released from the organization calendar.",
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result("success", "Equipment released from this session.");
   } catch (error) {
     return errorState(error);
   }

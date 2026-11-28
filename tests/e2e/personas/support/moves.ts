@@ -18,7 +18,7 @@ import { hq } from "./fixtures";
  */
 export const hqAreas = {
   Today: hqRoutes.home,
-  Schedule: hqModuleHref("schedule"),
+  Schedule: hqRoutes.schedule,
   Inbox: hqRoutes.inbox,
   People: hqRoutes.people,
   Team: hqRoutes.team,

@@ -129,6 +129,47 @@ const money: readonly ShellCommand[] = [
   },
 ];
 
+/** Schedule (H-SCHEDULE): the calendar tasks the front desk asks for by name. */
+const schedule: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("schedule")}?intent=date`,
+    label: "Go to date…",
+    group: "Schedule",
+    icon: "schedule",
+    keywords: ["calendar", "day", "jump", "date"],
+  },
+  {
+    // Opens the create sheet, which offers only what works here (blocks
+    // until bookings from HQ are switched on: schedule-capabilities.ts).
+    value: `go:${hqHref("schedule")}?intent=book`,
+    label: "Add to the schedule",
+    group: "Schedule",
+    icon: "court",
+    keywords: [
+      "book a court",
+      "booking",
+      "reserve",
+      "walk-in",
+      "block",
+      "lesson",
+    ],
+  },
+  {
+    value: `go:${hqHref("schedule")}?intent=who`,
+    label: "Who is free at…",
+    group: "Schedule",
+    icon: "users",
+    keywords: ["coach", "available", "availability", "cover"],
+  },
+  {
+    value: `go:${hqHref("schedule")}?intent=close`,
+    label: "Close courts",
+    group: "Schedule",
+    icon: "block",
+    keywords: ["closure", "block", "maintenance", "weather", "stop play"],
+  },
+];
+
 /**
  * People (H-PEOPLE): finding the club's people. Import and merge join the
  * list through `shellCommandsFor` when their capability switches are on
@@ -311,6 +352,7 @@ const run: readonly ShellCommand[] = [
 export const shellCommands: readonly ShellCommand[] = [
   ...places,
   ...create,
+  ...schedule,
   ...money,
   ...people,
   ...team,

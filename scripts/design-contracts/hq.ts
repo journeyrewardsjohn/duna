@@ -24,6 +24,8 @@ export const hq: SurfaceContract = {
     "apps/hq/components/people/",
     "apps/hq/app/(next)/(hq)/team/",
     "apps/hq/components/team/",
+    "apps/hq/app/(next)/(hq)/schedule/",
+    "apps/hq/components/schedule/",
   ],
   checks: [
     { kind: "noFontPackages", app: "hq" },
@@ -75,6 +77,7 @@ export const hq: SurfaceContract = {
       "apps/hq/components/offerings",
       "apps/hq/components/participation",
       "apps/hq/components/setup",
+      "apps/hq/components/schedule",
     ].map((root) => ({
       kind: "treeExcludes" as const,
       root,

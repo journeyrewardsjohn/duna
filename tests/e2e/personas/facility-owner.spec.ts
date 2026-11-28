@@ -1,5 +1,5 @@
 import { expect, hq, test } from "./support/fixtures";
-import { openHqArea } from "./support/moves";
+import { expectToast, openHqArea } from "./support/moves";
 
 /**
  * Facility owner (public courts): journeys FO-1 … FO-4 of
@@ -31,11 +31,34 @@ test.describe("FO-2 Decide who may play", () => {
 });
 
 test.describe("FO-3 Stop play", () => {
-  test.fixme("FO-3.1 Stop play on a court for weather, notifying booked players [H2, B9]", async () => {
-    // Expected: tier 2 confirm restating the courts, the time and how many
-    // people are told.
+  test("FO-3.1 Stop play on a court for weather, notifying booked players [H2, B9]", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Schedule");
+    await page.getByRole("button", { name: "Stop play…" }).click();
+    const sheet = page.getByRole("dialog", { name: "Stop play for weather" });
+    await expect(
+      sheet.getByRole("region", { name: "What this affects" }),
+    ).toBeVisible();
+    await sheet.getByRole("button", { name: "Review the stop" }).click();
+    // Tier 2: the courts, the time and who is told, restated before acting.
+    await expect(sheet).toContainText("Stop play on 2 courts?");
+    await expect(sheet).toContainText("Championship Court and Community Court");
+    await expect(sheet).toContainText(/told|Nobody is told/);
+    await sheet.getByRole("button", { name: "Stop play on 2 courts" }).click();
+    await expectToast(page, /2 courts closed/);
   });
-  test.fixme("FO-3.2 See conditions (wind on court, light) beside the court schedule [H2, B11]", async () => {});
+  test("FO-3.2 See conditions (wind on court, light) beside the court schedule [H2, B11]", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Schedule");
+    await expect(
+      page.getByRole("region", { name: /^Conditions for / }),
+    ).toBeVisible();
+    const grid = page.getByTestId("schedule-grid");
+    await expect(grid.getByText("Championship Court")).toBeVisible();
+    await expect(grid.getByText(/^Lit$|No lights/).first()).toBeVisible();
+  });
 });
 
 test.describe("FO-4 Players reach the facility", () => {

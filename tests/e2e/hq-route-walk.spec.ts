@@ -67,7 +67,7 @@ const offering = "d0130000-0000-4000-8000-000000000102";
 /** Concrete paths for every dynamic template (static ones walk as written). */
 const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
   [hqRoutes.ask]: ["/ask", "/ask/history"],
-  [hqRoutes.module]: ["/schedule", "/events", "/marketing", "/reports"],
+  [hqRoutes.module]: ["/events", "/marketing", "/reports"],
   // People (H-PEOPLE): Maya (adult, shares health) and Ava (a junior).
   [hqRoutes.member]: [`/people/${member}`, `/people/${junior}`],
   [hqRoutes.memberMemberships]: [`/people/${member}/memberships`],
@@ -150,8 +150,6 @@ const extraPaths = {
  */
 const knownFailures: Readonly<Record<string, string>> = {
   [extraPaths.eventDivision]: "H9: no demo event has an entry division (404).",
-  [extraPaths.eventCourtBooking]:
-    "H9: operator.activityDetail needs the connected database in demo mode.",
   [extraPaths.eventMatch]:
     "H9: operator.activityDetail needs the connected database in demo mode.",
   [extraPaths.adminMessagingSafety]:

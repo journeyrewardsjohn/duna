@@ -24,16 +24,13 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import {
   eventNavigationItems,
-  operatorPanelHref,
   type EventNavigationSlug,
   type OperatorPanel,
 } from "./navigation";
-import { ScheduleCalendar } from "./schedule-calendar";
 import { EventsTable } from "./events-table";
 import { EventHistoryWorkspace } from "./event-history-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
-import { VenueMatchOperations } from "./venue-match-operations";
 import { DunaAiWorkspace } from "./duna-ai-workspace";
 
 const moduleCopy: Record<
@@ -732,7 +729,6 @@ export function ModulePanel({
   dashboard,
   eventKinds,
   focusedDraftId,
-  matches,
   pageCopy,
   workspace,
   ticketApprovals,
@@ -743,7 +739,8 @@ export function ModulePanel({
   readonly dashboard: OperatorDashboard;
   readonly eventKinds?: readonly OperatorWorkspace["sessions"][number]["kind"][];
   readonly focusedDraftId?: string;
-  readonly matches: readonly OperatorScorableMatch[];
+  /** Unused since Schedule moved to the new shell; Today lists scorable matches. */
+  readonly matches?: readonly OperatorScorableMatch[];
   readonly pageCopy?: ModulePageCopy;
   readonly workspace: OperatorWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
@@ -771,9 +768,7 @@ export function ModulePanel({
                 }
               : module === "money"
                 ? { href: hqRoutes.moneySetup, label: "Configure money" }
-                : module === "schedule"
-                  ? { href: "/events/create", label: "Add to calendar" }
-                  : undefined;
+                : undefined;
   // Until H9 turns them into in-page filters, the old sidebar children are a
   // row of type links inside the Events list.
   const typeLinks =
@@ -790,10 +785,10 @@ export function ModulePanel({
           <h1>{copy.title}</h1>
           <p>{copy.description}</p>
         </div>
-        {createAction && module !== "schedule" && (
+        {createAction && (
           <div className="hq-page-heading__actions">
             {module === "events" && (
-              <Link className="hq-button" href={operatorPanelHref("schedule")}>
+              <Link className="hq-button" href={hqRoutes.schedule}>
                 Schedule
               </Link>
             )}
@@ -826,15 +821,7 @@ export function ModulePanel({
         <TicketApprovalQueue approvals={ticketApprovals} />
       )}
 
-      {module === "schedule" ? (
-        <>
-          <VenueMatchOperations
-            matches={matches}
-            timezone={dashboard.organization.timezone}
-          />
-          <ScheduleCalendar workspace={workspace} />
-        </>
-      ) : module === "places" ? (
+      {module === "places" ? (
         <VenuePortfolioPanel workspace={workspace} />
       ) : module === "events" ? (
         <EventsTable
