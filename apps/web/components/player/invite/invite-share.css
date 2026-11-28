@@ -1,0 +1,49 @@
+/*
+ * The invitation actions and rows a player sends themselves (`iv-*`,
+ * WEB-INVITE). Tokens only, in the `app` layer; imported by the component.
+ */
+@layer ui-sdk, tideline, site, app;
+
+@layer app {
+  .td {
+    .iv-actions {
+      display: flex;
+      flex-wrap: wrap;
+      min-width: 0;
+      gap: var(--td-space-2);
+    }
+
+    .iv-list {
+      display: grid;
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      gap: var(--td-space-3);
+      list-style: none;
+    }
+
+    .iv-row {
+      display: grid;
+      min-width: 0;
+      gap: var(--td-space-2);
+      padding: var(--td-space-3) var(--td-space-4);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface-sunken);
+    }
+
+    .iv-row__top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      min-width: 0;
+      gap: var(--td-space-2);
+    }
+
+    .iv-row__name {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font: var(--td-type-body);
+    }
+  }
+}

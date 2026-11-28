@@ -47,6 +47,9 @@ export async function startCourtCheckoutAction(input: {
       paymentMode: input.paymentMode,
       createMatch: input.checkoutIntent === "host",
       participants: [...input.participants],
+      // The booker sends each invitation from their own phone or computer:
+      // the server makes the invitation and its link and texts no one.
+      inviteDelivery: "self",
       expectedPayNowMinor: input.expectedPayNowMinor,
       expectedTotalMinor: input.expectedTotalMinor,
       policyAccepted: input.policyAccepted,
