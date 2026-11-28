@@ -1,4 +1,4 @@
-import { processDueCatalogParticipation } from "@duna/api";
+import { processDueParticipation } from "@duna/api";
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
@@ -17,14 +17,16 @@ function isAuthorized(request: Request) {
   );
 }
 
-// Applies player minimums and group-size pricing once a session's cutoff has
-// passed: cancels and refunds under-filled sessions, and returns unused
-// reserved credits. Every step is idempotent, so overlapping runs are safe.
+// The participation engine's schedule (PART-3): decides group sessions at
+// their lock (the snapshot rule, any extension or "run anyway"), cancels and
+// refunds under-filled sessions, returns unused reserved credits and keeps
+// releasing sessions the club cancelled. Every step claims its work
+// atomically, so overlapping runs are safe.
 export async function GET(request: Request) {
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const processed = await processDueCatalogParticipation({
+  const processed = await processDueParticipation({
     now: new Date(),
     limit: 50,
   });

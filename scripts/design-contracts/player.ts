@@ -8,7 +8,10 @@ import type { SurfaceContract } from "./types";
  */
 const root = "apps/player";
 /** Paths on the Duna Design System; `src/features/**` entries also get the adaptive-layout rule. */
-const migrated: readonly string[] = [];
+const migrated: readonly string[] = [
+  "apps/player/src/app",
+  "apps/player/src/features/home",
+];
 
 export const player: SurfaceContract = {
   surface: "player",
@@ -37,9 +40,11 @@ export const player: SurfaceContract = {
         "apps/player/package.json must bundle font files, not @expo-google-fonts/archivo",
     },
     ...[
+      "apps/player/assets/icon.png",
       "apps/player/assets/icon-dark.png",
       "apps/player/assets/icon-tinted.png",
       "apps/player/assets/monochrome-icon.png",
+      "apps/player/assets/brand/icon.svg",
     ].map((path) => ({ kind: "exists", path }) as const),
     {
       kind: "includes",
@@ -87,18 +92,65 @@ export const player: SurfaceContract = {
         "The legacy Player text layer must render the Geist faces while it exists",
     },
     {
-      kind: "declares",
-      root,
-      declarations: ["function HomeScreenV3(", "function HomeV3Screen("],
+      kind: "includes",
+      file: "apps/player/src/features/home/home-model.ts",
       values: [
-        "const bookingItems = bookings",
         "new Date(booking.endsAt).getTime() > now",
-        'title="Next up"',
+        "const futureBookings = input.bookings",
       ],
       message:
-        "Player Home must preserve the booking-derived schedule contract (Next up from future bookings only)",
-      legacy:
-        "legacy: delete when Home migrates (M-P1); keep the future-only rule in a test",
+        "Player Home keeps the booking-derived schedule contract (Next up from future bookings only)",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/features/home/HomeScreen.tsx",
+      values: [
+        'title="Next up"',
+        "<RatingRing",
+        "<ConditionsLine",
+        "<DunaMark",
+        'label="Ask Duna"',
+        "<LoadingState",
+        "<ErrorState",
+        "<OfflineState",
+        "<EmptyState",
+      ],
+      message:
+        "Player Home shows Next up, conditions, the two-ring Sand Rating and Ask Duna with the Crest mark, with loading, empty, error and offline states",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/app/DunaApp.tsx",
+      values: ["<NavigationChrome", "centerAction={{", "<TabRoot", "<NewSheet"],
+      message:
+        "The Player shell is the system tab bar (NavigationChrome) with the centre New action and one TabRoot per tab",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/app/router.ts",
+      values: [
+        'key: "find"',
+        'key: "play"',
+        'key: "improve"',
+        'key: "connect"',
+        'export const INITIAL_TAB: TabKey = "play"',
+      ],
+      message:
+        "The Player navigates by Find / Play / + / Improve / Connect (contract: Navigation)",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/app/TabRoot.tsx",
+      values: ["<AdaptiveScaffold", "<FoldScaffold", "useRegionLayout()"],
+      message:
+        "Player tab roots lay out by size class and posture with the adaptive scaffolds",
+    },
+    {
+      kind: "includes",
+      file: "apps/player/src/app/AccountScreen.tsx",
+      values: ["Create new organisation", "switchOrganization", "Sign out"],
+      message:
+        "The Player shell keeps the organisation switcher, Create new organisation and sign out (identity chrome)",
     },
     {
       kind: "declares",

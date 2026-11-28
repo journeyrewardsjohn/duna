@@ -8,12 +8,19 @@ function rgbOf(hex: string): string {
 
 /**
  * Pro's legacy palette names, re-pointed at Tideline 4.1.1 roles by meaning
- * (M-F0/M-F1) for light and dark. The retired flare orange becomes the warm
- * signal (its ink on light, Dune on dark); Solar stays for live screens built
- * on `@duna/ui/native`'s live zone.
+ * (M-F0/M-F1) for light and dark.
+ *
+ * The retired flare orange is split by meaning (M-P0): every `flare` call
+ * site in Pro today marks something live (a live court dot, the live
+ * schedule line and state, the Watch pulse, the live pill, the live now-card
+ * edge), so `flare` is the `live` role (Solar). Controls that used flare take
+ * `flareAction`, the `action` role (Night Court on light, Dune on dark); the
+ * Pro shell package (M-R0) moves its two flare-filled controls
+ * (`venueMatchActionLive`, the profile `dot`) onto it.
  */
 function legacyPalette(role: NativeColors, dark: boolean) {
-  const flare = dark ? role.sun : role["sun-ink"];
+  const flare = role.live;
+  const flareAction = role.action;
   return {
     canvas: role.ground,
     ink: dark ? role.ground : role.text,
@@ -26,6 +33,8 @@ function legacyPalette(role: NativeColors, dark: boolean) {
     aquaDeep: role["action-hover"],
     sand: role.sun,
     flare,
+    flareAction,
+    onFlareAction: role["on-action"],
     positive: role.positive,
     warning: role.warning,
     danger: role.danger,
@@ -36,6 +45,7 @@ function legacyPalette(role: NativeColors, dark: boolean) {
     positiveRgb: rgbOf(role.positive),
     dangerRgb: rgbOf(role.danger),
     flareRgb: rgbOf(flare),
+    flareActionRgb: rgbOf(flareAction),
     inkRgb: rgbOf(dark ? role.ground : role.text),
     depthRgb: rgbOf(role.surface),
   };

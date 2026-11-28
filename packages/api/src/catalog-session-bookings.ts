@@ -21,12 +21,18 @@ import {
 } from "./catalog-checkout";
 import { ACTIVE_CATALOG_BOOKING_STATUSES } from "./catalog-participation";
 import {
-  catalogItemParticipationRules,
-  occurrenceParticipationState,
-  participationOpenedAt,
   positiveInteger,
   type OccurrenceParticipationState,
 } from "./catalog-participation-rules";
+import { lateCancellationCharge } from "@duna/core";
+import { evaluateCatalogSessionParticipation } from "./catalog-participation";
+import {
+  catalogSessionPicture,
+  decisionRule,
+  effectiveLockAt,
+  loadDecision,
+} from "./services/participation/catalog";
+import { participationAdjustments } from "@duna/db";
 import { refundOrganizationOrder } from "./catalog-service";
 import type { ApiActor } from "./context";
 
@@ -607,6 +613,10 @@ export interface PlayerCatalogSessionBooking {
   readonly creditsSettled?: number;
   readonly creditsReturned?: number;
   readonly participation?: OccurrenceParticipationState;
+  /** PART decision 4: credits a cancellation now costs (after the lock). */
+  readonly lateCancelCharge?: number;
+  /** PART-4 fills it: this person's place on the waitlist. */
+  readonly waitlistPosition?: number;
   readonly cancellable: boolean;
   /** Cancel by this time to get the booking's credits or payment back. */
   readonly refundableUntil?: string;
@@ -780,6 +790,20 @@ export async function loadPlayerCatalogSessionBookings(input: {
     windows.set(organizationId, await refundWindow(organizationId));
   }
   const name = (personId: string) => nameById.get(personId) ?? "Duna member";
+  // One participation picture per session: the snapshot rule, the lock and
+  // the confirmed count (the same count capacity and the minimum use).
+  const pictures = new Map<
+    string,
+    Awaited<ReturnType<typeof catalogSessionPicture>>
+  >();
+  for (const { occurrence, item } of rows) {
+    if (!pictures.has(occurrence.id)) {
+      pictures.set(
+        occurrence.id,
+        await catalogSessionPicture({ occurrence, item, now: input.now }),
+      );
+    }
+  }
 
   return rows.map(({ fulfillment, order, occurrence, item, organization }) => {
     const details = fulfillment.details;
@@ -793,11 +817,15 @@ export async function loadPlayerCatalogSessionBookings(input: {
     const paid =
       order.status === "paid" || order.status === "partially-refunded";
     const window = windows.get(organization.id)!;
-    const refundableUntil = window.refundable
-      ? new Date(
-          occurrence.startsAt.getTime() - window.refundBeforeMinutes * 60_000,
-        )
-      : undefined;
+    const picture = pictures.get(occurrence.id);
+    // Decision 1: with a group rule, the lock is the free-cancellation deadline.
+    const refundableUntil = !window.refundable
+      ? undefined
+      : picture
+        ? picture.lockAt
+        : new Date(
+            occurrence.startsAt.getTime() - window.refundBeforeMinutes * 60_000,
+          );
     const cancellable =
       active &&
       occurrence.status === "scheduled" &&
@@ -816,11 +844,25 @@ export async function loadPlayerCatalogSessionBookings(input: {
       typeof item.configuration.venueId === "string"
         ? venueById.get(item.configuration.venueId)
         : undefined;
-    const rules = catalogItemParticipationRules(
-      item.configuration,
-      occurrence.capacity,
-    );
     const credits = Number(details.creditsApplied ?? 0);
+    const reserved = Number.isSafeInteger(credits) && credits > 0 ? credits : 0;
+    const lateCancelCharge =
+      picture &&
+      active &&
+      reserved > 0 &&
+      refundableUntil &&
+      input.now > refundableUntil
+        ? lateCancellationCharge({
+            tiers: picture.rule.tiers,
+            finalGroupSize:
+              picture.decision?.decidedGroupSize ?? picture.confirmed,
+            quantity: positiveInteger(details.quantity, 1),
+            reserved:
+              typeof details.creditsSettled === "number"
+                ? details.creditsSettled
+                : reserved,
+          })
+        : undefined;
     return {
       bookingId: fulfillment.id,
       orderId: order.id,
@@ -900,19 +942,8 @@ export async function loadPlayerCatalogSessionBookings(input: {
         typeof details.creditsReturned === "number"
           ? details.creditsReturned
           : undefined,
-      participation:
-        rules && active
-          ? occurrenceParticipationState({
-              rules,
-              occurrence,
-              bookedCount: bookedByOccurrence.get(occurrence.id) ?? 0,
-              openedAt: participationOpenedAt({
-                occurrenceCreatedAt: occurrence.createdAt,
-                itemPublishedAt: item.publishedAt,
-                configuration: item.configuration,
-              }),
-            })
-          : undefined,
+      participation: picture && active ? picture.state : undefined,
+      ...(lateCancelCharge !== undefined ? { lateCancelCharge } : {}),
       cancellable,
       refundableUntil: refundableUntil?.toISOString(),
       refundIfCancelledNow:
@@ -932,6 +963,8 @@ export interface CatalogSessionCancellationResult {
   readonly refundStatus:
     "credits-returned" | "submitted" | "review-required" | "not-applicable";
   readonly creditsReturned: number;
+  /** PART decision 4: what a late cancellation costs (the final price). */
+  readonly chargedCredits?: number;
   readonly message: string;
 }
 
@@ -1025,21 +1058,92 @@ export async function cancelCatalogSessionBooking(input: {
   }
   const organizationId = row.fulfillment.organizationId;
   const window = await refundWindow(organizationId);
-  const refundableUntil = new Date(
-    row.occurrence.startsAt.getTime() - window.refundBeforeMinutes * 60_000,
-  );
+  // A group session: the lock is the free-cancellation deadline (decision 1).
+  let decision = await loadDecision(row.occurrence.id);
+  if (decision && !decision.outcome && input.now >= effectiveLockAt(decision)) {
+    // The lock passed before the schedule decided: decide first, so a
+    // session cancelled under its minimum returns everything instead.
+    await evaluateCatalogSessionParticipation({
+      occurrenceId: row.occurrence.id,
+      requestId: `${input.requestId}:decide`,
+      now: input.now,
+    });
+    decision = await loadDecision(row.occurrence.id);
+    const fresh = await database.query.catalogFulfillments.findFirst({
+      where: eq(catalogFulfillments.id, row.fulfillment.id),
+    });
+    if (
+      !fresh ||
+      !(activeStatuses as readonly string[]).includes(fresh.status)
+    ) {
+      throw new CatalogSessionBookingError(
+        "NOT_CANCELLABLE",
+        "This session was cancelled because it did not reach its minimum. Everything was returned.",
+      );
+    }
+    row.fulfillment = fresh;
+  }
+  const refundableUntil = decision
+    ? effectiveLockAt(decision)
+    : new Date(
+        row.occurrence.startsAt.getTime() - window.refundBeforeMinutes * 60_000,
+      );
   const insideWindow = window.refundable && input.now <= refundableUntil;
   const paid =
     row.order.status === "paid" || row.order.status === "partially-refunded";
   const reservedCredits = Number(row.fulfillment.details.creditsApplied ?? 0);
   const hasValue = paid && (row.order.totalMinor > 0 || reservedCredits > 0);
+  const quantity = positiveInteger(row.fulfillment.details.quantity, 1);
+  const finalCharge = (() => {
+    if (!decision || reservedCredits <= 0) return undefined;
+    const rule = decisionRule(decision, row.occurrence.capacity);
+    const settled = row.fulfillment.details.creditsSettled;
+    return typeof settled === "number"
+      ? settled
+      : lateCancellationCharge({
+          tiers: rule.tiers,
+          finalGroupSize: decision.decidedGroupSize ?? 0,
+          quantity,
+          reserved: reservedCredits,
+        });
+  })();
   if (hasValue && !insideWindow && !input.acknowledgeNoRefund) {
     throw new CatalogSessionBookingError(
       "REFUND_WINDOW_CLOSED",
-      window.refundable
-        ? `Cancellations with credits or payment returned closed ${Math.round(window.refundBeforeMinutes / 60)} hours before the session. Cancelling now returns nothing.`
-        : "This organization's bookings are non-refundable. Cancelling returns nothing.",
+      !window.refundable
+        ? "This organization's bookings are non-refundable. Cancelling returns nothing."
+        : decision && finalCharge !== undefined
+          ? `Cancelling now costs ${finalCharge} credit${finalCharge === 1 ? "" : "s"}. You get them back if someone takes your place.`
+          : decision
+            ? "Cancelling now returns nothing unless someone takes your place."
+            : `Cancellations with credits or payment returned closed ${Math.round(window.refundBeforeMinutes / 60)} hours before the session. Cancelling now returns nothing.`,
     );
+  }
+  let chargedCredits: number | undefined;
+  if (hasValue && !insideWindow && decision?.outcome && window.refundable) {
+    // Decision 4: the late canceller pays the final price, never the reserve.
+    // Settling first returns the difference; what remains is the final price.
+    if (
+      reservedCredits > 0 &&
+      typeof row.fulfillment.details.creditsSettled !== "number"
+    ) {
+      await evaluateCatalogSessionParticipation({
+        occurrenceId: row.occurrence.id,
+        requestId: `${input.requestId}:settle`,
+        now: input.now,
+      });
+      const settled = await database.query.catalogFulfillments.findFirst({
+        where: eq(catalogFulfillments.id, row.fulfillment.id),
+      });
+      if (settled) row.fulfillment = settled;
+    }
+    const settled = row.fulfillment.details.creditsSettled;
+    chargedCredits =
+      reservedCredits > 0
+        ? typeof settled === "number"
+          ? settled
+          : reservedCredits
+        : undefined;
   }
 
   let refundStatus: CatalogSessionCancellationResult["refundStatus"] =
@@ -1110,6 +1214,21 @@ export async function cancelCatalogSessionBooking(input: {
       })
       .where(eq(catalogFulfillments.id, after.id));
   }
+  if (hasValue && !insideWindow && decision?.outcome && window.refundable) {
+    // The place can be refilled; the refund then follows (engine).
+    await database
+      .insert(participationAdjustments)
+      .values({
+        organizationId,
+        catalogFulfillmentId: row.fulfillment.id,
+        orderId: row.order.id,
+        kind: "late-cancel-final-price",
+        credits: 0,
+        amountMinor: 0,
+        // Database time, like the bookings that may refill the place.
+      })
+      .onConflictDoNothing();
+  }
   await database.insert(auditLog).values({
     organizationId,
     actorPersonId: input.actor.personId,
@@ -1139,6 +1258,7 @@ export async function cancelCatalogSessionBooking(input: {
     status: "cancelled",
     refundStatus,
     creditsReturned,
+    ...(chargedCredits !== undefined ? { chargedCredits } : {}),
     message:
       refundStatus === "credits-returned"
         ? `${row.title} cancelled. ${creditsReturned} credit${creditsReturned === 1 ? " was" : "s were"} returned to the wallet.`
@@ -1146,8 +1266,10 @@ export async function cancelCatalogSessionBooking(input: {
           ? `${row.title} cancelled. Your refund was submitted to the original payment method.`
           : refundStatus === "review-required"
             ? `${row.title} cancelled. The refund needs the organization's attention.`
-            : hasValue
-              ? `${row.title} cancelled after the refund window. Nothing was returned.`
-              : `${row.title} cancelled.`,
+            : chargedCredits !== undefined
+              ? `${row.title} cancelled. You paid ${chargedCredits} credit${chargedCredits === 1 ? "" : "s"}; they come back if someone takes your place.`
+              : hasValue
+                ? `${row.title} cancelled after the refund window. Nothing was returned.`
+                : `${row.title} cancelled.`,
   };
 }

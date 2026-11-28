@@ -32,7 +32,7 @@ export const pro: SurfaceContract = {
         "apps/pro/package.json must bundle font files, not @expo-google-fonts/archivo",
     },
     ...[
-      "apps/pro/assets/icon-light.png",
+      "apps/pro/assets/icon-dark.png",
       "apps/pro/assets/icon-tinted.png",
       "apps/pro/assets/monochrome-icon.png",
     ].map((path) => ({ kind: "exists", path }) as const),
