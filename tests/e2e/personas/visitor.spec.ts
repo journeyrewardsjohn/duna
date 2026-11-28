@@ -135,3 +135,107 @@ test.describe("VI-5 Clubs and machines", () => {
     expect(response.headers()["content-type"]).toMatch(/markdown|text\/plain/);
   });
 });
+
+test.describe("VI-6 Add a score without an account", () => {
+  test("VI-6.1 Adds a score and where they played, and sees what it would do", async ({
+    page,
+  }) => {
+    await page.route("**/api/places/autocomplete**", (route) =>
+      route.fulfill({ json: { suggestions: [] } }),
+    );
+    await page.goto("/add-score?where=Persona%20Point%20courts");
+    await expectPageReady(page, "Add a score. See where you start.");
+    // The first click can land before the page is interactive: retry it.
+    await expect(async () => {
+      await page
+        .getByRole("button", {
+          name: "Add “Persona Point courts” as a new court",
+        })
+        .click();
+      await expect(
+        page.getByRole("textbox", { name: "Court name" }),
+      ).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await page
+      .getByRole("textbox", { name: "Address or area" })
+      .fill("North end of the beach path");
+    await page.getByRole("button", { name: "Next: the score" }).click();
+    await page.getByRole("button", { name: "Next: who played" }).click();
+    await page
+      .getByRole("textbox", { name: "Player 1", exact: true })
+      .fill("Bo");
+    await page
+      .getByRole("checkbox", {
+        name: "Everyone on court agreed to record this match.",
+      })
+      .click();
+    await page.getByRole("button", { name: "See what it would do" }).click();
+    await expect(
+      page.getByText("What this result would do", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("New court", { exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("VI-6.2 Saving it to their name asks them to sign up and comes back to the claim", async ({
+    page,
+  }) => {
+    await page.route("**/api/places/autocomplete**", (route) =>
+      route.fulfill({ json: { suggestions: [] } }),
+    );
+    // VI-6.1's draft is in this persona's browser only if it reused the
+    // context; start one here so the step stands alone.
+    await page.goto("/add-score?where=Persona%20Cove");
+    // The first click can land before the page is interactive: retry it.
+    await expect(async () => {
+      await page
+        .getByRole("button", { name: "Add “Persona Cove” as a new court" })
+        .click();
+      await expect(
+        page.getByRole("textbox", { name: "Court name" }),
+      ).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await page
+      .getByRole("textbox", { name: "Address or area" })
+      .fill("By the lifeguard tower");
+    await page.getByRole("button", { name: "Next: the score" }).click();
+    await page.getByRole("button", { name: "Next: who played" }).click();
+    await page
+      .getByRole("textbox", { name: "Player 1", exact: true })
+      .fill("Cy");
+    await page
+      .getByRole("checkbox", {
+        name: "Everyone on court agreed to record this match.",
+      })
+      .click();
+    await page.getByRole("button", { name: "See what it would do" }).click();
+    await expect(
+      page.getByRole("link", { name: "Create my account" }),
+    ).toHaveAttribute("href", "/sign-up?returnTo=%2Fadd-score%2Fclaim");
+    await expect(
+      page.getByRole("link", { name: "I have an account" }),
+    ).toHaveAttribute("href", "/sign-in?returnTo=%2Fadd-score%2Fclaim");
+    // Signed out, the claim page sends them to sign in and back.
+    await page.goto("/add-score/claim");
+    await page.waitForURL(/\/sign-in\?returnTo=%2Fadd-score%2Fclaim/);
+  });
+
+  test("VI-6.3 A search that finds nothing offers to add the court and a score", async ({
+    page,
+  }) => {
+    await page.route("**/api/places/autocomplete**", (route) =>
+      route.fulfill({ json: { suggestions: [] } }),
+    );
+    await page.goto("/");
+    await page
+      .getByRole("button", { name: /^Where/ })
+      .first()
+      .click();
+    await page
+      .getByRole("combobox", { name: "Where" })
+      .fill("Qzxv Persona Lagoon");
+    await expect(
+      page.getByRole("link", { name: "Add the court and a score" }),
+    ).toHaveAttribute("href", "/add-score?where=Qzxv%20Persona%20Lagoon");
+  });
+});
