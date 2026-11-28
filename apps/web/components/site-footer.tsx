@@ -44,7 +44,15 @@ export function SiteFooter() {
             </Link>
             <Link href="/methodology">Rating methodology</Link>
             <Link href="/safety">Safety</Link>
-            <Link href="/legal/privacy">Privacy</Link>
+          </div>
+          <div>
+            <strong>Legal</strong>
+            <Link href="/legal">Legal center</Link>
+            <Link href="/legal/terms">Terms of Service</Link>
+            <Link href="/legal/hq-terms">Duna HQ Terms</Link>
+            <Link href="/legal/privacy">Privacy Policy</Link>
+            <Link href="/legal/cookies">Cookie Policy</Link>
+            <Link href="/legal/booking-and-refunds">Booking and refunds</Link>
           </div>
         </div>
       </div>

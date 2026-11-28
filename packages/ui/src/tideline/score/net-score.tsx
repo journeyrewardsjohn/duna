@@ -345,8 +345,8 @@ function StatusChip({ model }: { model: NetScoreModel }) {
  * The match score card (contract R16): a hairline net, set-by-set scores as
  * a table mirrored across the net in Geist Mono, a green check for the
  * winner (a trophy only for a title match; hollow while it waits for
- * confirmation), and one designed state for every `match_status`, plus
- * "not finished" for a match stopped part-way. Only live wears Solar.
+ * confirmation), and one designed state for every `match_status`,
+ * including "not finished" (a match stopped part-way). Only live wears Solar.
  *
  * A screen reader hears one sentence (who played, who won, the set scores,
  * the state); a live score change is said politely and never more than once

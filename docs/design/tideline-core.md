@@ -18,8 +18,9 @@ known only in `verified`, `complete` and `forfeit`; in `pending-verification` it
 is provisional (no badge); `disputed`, `cancelled`, `scheduled`, `warmup`,
 `live` and `not-finished` have none. Scheduled, warmup and cancelled show no
 numbers ("Pending", never `0-0`). Best-of-one shows the set's points as the
-headline. Check badge for a winner, trophy for a title match. `not-finished` is
-**proposed** and not in the `match_status` enum.
+headline. Check badge for a winner, trophy for a title match. `not-finished` (a
+match stopped part-way) is a `match_status` value; its unfinished set never
+counts.
 
 **Rating ring.** Geometry constants from brand book section 4 (r 96 track,
 r 84 three-segment band with an 8-unit gap, tick y 2 to 20). The arc is
