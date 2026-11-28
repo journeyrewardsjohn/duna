@@ -135,7 +135,7 @@ test.describe("Club, offering, event and coach pages", () => {
       page
         .locator("#places")
         .getByRole("link", { name: "More to play nearby" }),
-    ).toHaveAttribute("href", /^\/discover\/results\?where=place&/);
+    ).toHaveAttribute("href", /^\/discover\?where=place&/);
     await expect(
       page.locator("#places").getByText("Open now").first(),
     ).toBeVisible();
