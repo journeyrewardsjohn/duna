@@ -3,9 +3,6 @@ import "../pages.css";
 import type { Metadata } from "next";
 import { AppStoreLink } from "@/components/site/apps/store-link";
 import { ConceptCoachDay } from "@/components/site/concepts/concept-coach-day";
-import { ConceptDrill } from "@/components/site/concepts/concept-drill";
-import { ConceptPayout } from "@/components/site/concepts/concept-payout";
-import { ConceptScore } from "@/components/site/concepts/concept-score";
 import { ArrowLink, LinkButton } from "@/components/site/link-button";
 import { clubSignupHref, siteLinks } from "@/components/site/links";
 import { sitePhotos } from "@/components/site/media";
@@ -21,6 +18,11 @@ import {
 import { Reveal } from "@/components/site/reveal";
 import { ConceptStage } from "@/components/site/stage";
 import { absolutePublicUrl, serializeJsonLd } from "@/lib/pro-seo";
+import {
+  LaterConceptDrill,
+  LaterConceptPayout,
+  LaterConceptScore,
+} from "@/components/site/deferred";
 
 const title = "Duna Pro for coaches";
 const description =
@@ -163,7 +165,7 @@ export default function CoachesPage() {
             shape="wide"
             sizes="(max-width: 1000px) 100vw, 58vw"
           >
-            <ConceptDrill />
+            <LaterConceptDrill />
           </ConceptStage>
         }
         title="Drills drawn on the court you’re standing on."
@@ -201,7 +203,7 @@ export default function CoachesPage() {
             shape="wide"
             sizes="(max-width: 1000px) 100vw, 58vw"
           >
-            <ConceptScore />
+            <LaterConceptScore />
           </ConceptStage>
         }
         title="Score the scrimmage with one hand."
@@ -224,7 +226,7 @@ export default function CoachesPage() {
             shape="wide"
             sizes="(max-width: 1000px) 100vw, 58vw"
           >
-            <ConceptPayout label="Your payouts" />
+            <LaterConceptPayout label="Your payouts" />
           </ConceptStage>
         }
         title="Paid once the lesson is taught."

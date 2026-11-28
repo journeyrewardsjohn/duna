@@ -15,20 +15,22 @@ export {
 } from "./verbs";
 export {
   AnimatedList,
-  Cross,
   FirstOpen,
   NumberChange,
-  PageTransition,
-  PaneTransition,
   RallyOnChange,
   type AnimatedListProps,
-  type CrossProps,
   type FirstOpenProps,
   type NumberChangeProps,
-  type PageTransitionProps,
-  type PaneTransitionProps,
   type RallyOnChangeProps,
 } from "./motion";
+export {
+  Cross,
+  PageTransition,
+  PaneTransition,
+  type CrossProps,
+  type PageTransitionProps,
+  type PaneTransitionProps,
+} from "./cross";
 export {
   changedCharacters,
   crossViewTransition,

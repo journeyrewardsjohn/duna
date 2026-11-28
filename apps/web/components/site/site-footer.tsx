@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import { SiteBrand } from "./brand";
 import { siteLinks } from "./links";
 

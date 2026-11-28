@@ -1,6 +1,6 @@
 import type { DiscoveryMapItem } from "@duna/api/discovery-search";
 import { Icon } from "@duna/ui/tideline";
-import Link from "next/link";
+import Link from "@/components/site/site-link";
 import { ArrowLink } from "../link-button";
 import { siteLinks } from "../links";
 import { NetLine } from "../net-line";
