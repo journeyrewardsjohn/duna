@@ -192,6 +192,43 @@
       white-space: nowrap;
     }
 
+    .sch-now__who {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--td-space-2);
+      min-width: 0;
+    }
+
+    .sch-now__who > .td-avatar {
+      flex: none;
+    }
+
+    .sch-now__stack {
+      display: grid;
+      min-width: 0;
+    }
+
+    .sch-now__stack > small {
+      overflow: hidden;
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sch-now__due {
+      flex: none;
+      white-space: nowrap;
+    }
+
+    .sch-now__name,
+    .sch-now__stack > .sch-link {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .sch-link {
       padding: 0;
       border: 0;
@@ -644,12 +681,64 @@
       justify-content: space-between;
       gap: var(--td-space-2);
       min-height: 48px;
+      padding-block: var(--td-space-2);
       border-bottom: 1px solid var(--td-line);
+    }
+
+    .sch-roster li > .td-avatar {
+      flex: none;
     }
 
     .sch-roster__who {
       display: grid;
+      flex: 1 1 auto;
       min-width: 0;
+    }
+
+    .sch-roster__name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sch-roster__amount {
+      flex: none;
+      font: var(--td-type-meta);
+      white-space: nowrap;
+    }
+
+    .sch-panel__pay {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--td-space-2);
+    }
+
+    .sch-price {
+      display: flex;
+      align-items: baseline;
+      gap: var(--td-space-3);
+      margin: 0;
+      padding: var(--td-space-3);
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface-sunken);
+      color: var(--td-text);
+      font: var(--td-type-body);
+    }
+
+    .sch-price__label {
+      flex: none;
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+    }
+
+    .sch-draft {
+      margin-block-start: var(--td-space-2);
+      font-style: italic;
+    }
+
+    .sch-actions--end {
+      justify-content: flex-end;
     }
 
     .sch-roster .sch-actions {

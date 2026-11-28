@@ -19,6 +19,7 @@ import {
   teamAvailabilityDemoBlackouts,
   teamAvailabilityDemoCoverageRequests,
   teamAvailabilityDemoSchedules,
+  teamAvailabilityDemoStaff,
   teamAvailabilityDemoTimeOff,
 } from "@duna/core/demo/team-availability";
 import { TRPCError } from "@trpc/server";
@@ -43,6 +44,12 @@ import {
   teamAvailabilityTimeOffSchema,
   teamAvailabilityUpsertScheduleInputSchema,
 } from "../contracts/team-availability";
+import {
+  teamAvailabilityRangeInputSchema,
+  teamAvailabilityRangeSchema,
+} from "../contracts/schedule";
+import { ScheduleError } from "../services/schedule/shared";
+import { teamAvailabilityRange } from "../services/schedule/team-range";
 import { usesDemoData } from "../services/data-source";
 import * as service from "../services/team-availability";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
@@ -105,6 +112,84 @@ export const teamAvailabilityOperatorRouter = router({
         teamContext(ctx),
         input.staffProfileId,
       );
+    }),
+
+  /**
+   * Every active coach's availability for a date range in one call
+   * (SCHED-API, for HQ's Schedule): the shared rule's inputs without
+   * commitments. Demo: the fixture staff page for each demo coach.
+   */
+  range: read
+    .input(teamAvailabilityRangeInputSchema)
+    .output(teamAvailabilityRangeSchema)
+    .query(async ({ input, ctx }) => {
+      if (usesDemoData()) {
+        const page = teamAvailabilityDemo.staff;
+        const minutes = (time: string) =>
+          Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+        return {
+          from: input.from,
+          to: input.to,
+          staff: Object.values(teamAvailabilityDemoStaff).map((ref) => ({
+            staffProfileId: ref.staffProfileId,
+            personId: ref.personId,
+            displayName: ref.displayName,
+            schedules: teamAvailabilityDemoSchedules
+              .filter(
+                (schedule) => schedule.staffProfileId === ref.staffProfileId,
+              )
+              .map((schedule) => ({
+                id: schedule.id,
+                status: schedule.status,
+                effectiveFrom: schedule.effectiveFrom,
+                ...(schedule.effectiveTo
+                  ? { effectiveTo: schedule.effectiveTo }
+                  : {}),
+                timezone: schedule.timezone,
+                windows: schedule.windows.map((window) => ({
+                  weekday: window.weekday,
+                  startMinute: minutes(window.startsAt),
+                  endMinute: minutes(window.endsAt),
+                  kind: window.kind,
+                })),
+              })),
+            blackouts: page.blackouts
+              .filter((row) => row.staffProfileId === ref.staffProfileId)
+              .map((row) => ({
+                id: row.id,
+                startsAt: row.startsAt,
+                endsAt: row.endsAt,
+              })),
+            timeOff: page.timeOff
+              .filter((row) => row.staffProfileId === ref.staffProfileId)
+              .map((row) => ({
+                id: row.id,
+                startsAt: row.startsAt,
+                endsAt: row.endsAt,
+                status: row.status,
+              })),
+            legacy: false,
+          })),
+        };
+      }
+      try {
+        return await teamAvailabilityRange({
+          organizationId: ctx.organizationId,
+          from: input.from,
+          to: input.to,
+        });
+      } catch (error) {
+        if (error instanceof ScheduleError) {
+          throw new TRPCError({
+            code:
+              error.code === "DATABASE_REQUIRED"
+                ? "PRECONDITION_FAILED"
+                : error.code,
+            message: error.message,
+          });
+        }
+        throw error;
+      }
     }),
 
   /** Create or replace a named schedule and its windows (stays draft). */

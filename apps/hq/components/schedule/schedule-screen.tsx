@@ -24,18 +24,19 @@ import {
   undoToast,
   useConfirm,
 } from "@duna/ui/tideline";
-import { localDateOf } from "@duna/scheduling";
+import { addCalendarDays, localDateOf } from "@duna/scheduling";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   checkInAction,
   coachAvailabilityAction,
   moveItemAction,
+  previewMoveAction,
 } from "@/app/(next)/(hq)/schedule/actions";
 import { SessionSheet } from "../participation/session-sheet";
 import { ClosureSheet, type ClosureDraft } from "./closure-sheet";
 import { CreateSheet, type CreateDraft } from "./create-sheet";
-import { ItemPanel } from "./item-panel";
+import { ItemPanel, type MoveRequest } from "./item-panel";
 import { NowAndNextStrip } from "./now-next";
 import { ScheduleAgenda } from "./schedule-agenda";
 import type { ScheduleData } from "./schedule-data";
@@ -44,6 +45,7 @@ import {
   clock,
   clockRange,
   durationWords,
+  money,
   explainConflicts,
   filterItems,
   itemKey,
@@ -67,6 +69,13 @@ import {
   type ScheduleQuery,
 } from "./schedule-model";
 import { act, reportError, useSheetSide } from "./schedule-parts";
+import {
+  conflictSentence,
+  handoffFor,
+  recipientsWords,
+  type DraftHandoff,
+} from "./schedule-desk";
+import { MoneyActionError } from "../money/money-action-result";
 import { PageHeader } from "../shell/page-header";
 
 export type ScheduleIntent = "book" | "who" | "date" | "close" | "weather";
@@ -111,6 +120,8 @@ export function ScheduleScreen({
   const [whoOpen, setWhoOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // A message prepared for the people a move or cancellation affects.
+  const [handoff, setHandoff] = useState<DraftHandoff | null>(null);
   const { permissions, timeZone } = data;
   // Coaches' availability, read once when first needed (see ensureAvailability).
   const [availability, setAvailability] = useState<Readonly<
@@ -134,8 +145,15 @@ export function ScheduleScreen({
         (coach) => !coach.staffProfileId || !availability[coach.staffProfileId],
       ).length
     : 0;
+  // One read for the whole team, for the days on screen (and the week after,
+  // where a create or move may land).
+  const shownDays = viewDays(query);
+  const availabilityFrom = addCalendarDays(shownDays[0]!, -1);
+  const availabilityTo = addCalendarDays(shownDays.at(-1)!, 7);
+  const [availabilityRange, setAvailabilityRange] = useState("");
   const ensureAvailability = useCallback(async () => {
-    if (availability) return availability;
+    const range = `${availabilityFrom}:${availabilityTo}`;
+    if (availability && availabilityRange === range) return availability;
     const ids = data.coaches.flatMap((coach) =>
       coach.staffProfileId ? [coach.staffProfileId] : [],
     );
@@ -144,14 +162,25 @@ export function ScheduleScreen({
       return {};
     }
     try {
-      const loaded = await coachAvailabilityAction(ids);
+      const loaded = await coachAvailabilityAction({
+        from: availabilityFrom,
+        to: availabilityTo,
+        staffProfileIds: ids,
+      });
       setAvailability(loaded);
+      setAvailabilityRange(range);
       return loaded;
     } catch {
       setAvailability({});
       return {};
     }
-  }, [availability, data.coaches]);
+  }, [
+    availability,
+    availabilityFrom,
+    availabilityRange,
+    availabilityTo,
+    data.coaches,
+  ]);
 
   useEffect(() => {
     setViewerZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -282,10 +311,11 @@ export function ScheduleScreen({
     [caps.moveBooking, permissions.change],
   );
 
-  // Availability is read the first time something needs it.
+  // Availability is read the first time something needs it ("Who is free";
+  // a session's move reads it itself).
   useEffect(() => {
-    if (createDraft || whoOpen) void ensureAvailability();
-  }, [createDraft, whoOpen, ensureAvailability]);
+    if (whoOpen) void ensureAvailability();
+  }, [whoOpen, ensureAvailability]);
 
   // Intents from the command palette (`?intent=`), handled once.
   useEffect(() => {
@@ -337,14 +367,11 @@ export function ScheduleScreen({
 
   const onOpen = (item: ScheduleItem) => go({ open: itemKey(item) });
 
-  const requestMove = async (
-    item: ScheduleItem,
-    next: { startsAt: string; endsAt: string; courtId?: string },
-  ) => {
+  const requestMove = async (item: ScheduleItem, next: MoveRequest) => {
     if (!canMove(item)) {
       errorToast(`${item.title} can't be moved from here.`, {
         description: permissions.change
-          ? "Only sessions can be moved on the calendar today."
+          ? "Player matches, events and blocks stay where they are; open them to change them."
           : "Your role can see the schedule but not change it.",
       });
       return;
@@ -378,6 +405,13 @@ export function ScheduleScreen({
     }
     const zone = item.timeZone;
     const when = clock(next.startsAt, zone);
+    if (
+      item.kind === "booking" &&
+      (item.source === "court-booking" || item.source === "demo")
+    ) {
+      await moveBooking(item, next, court);
+      return;
+    }
     const override: Override = {
       startsAt: next.startsAt,
       endsAt: next.endsAt,
@@ -402,6 +436,7 @@ export function ScheduleScreen({
           startsAt: next.startsAt,
           endsAt: next.endsAt,
           ...(override.courtId ? { courtId: override.courtId } : {}),
+          kind: item.kind,
           idempotencyKey,
         }),
       );
@@ -409,6 +444,7 @@ export function ScheduleScreen({
       act(
         moveItemAction({
           id: item.id,
+          kind: item.kind,
           source: item.source,
           startsAt: item.startsAt,
           endsAt: item.endsAt,
@@ -453,6 +489,190 @@ export function ScheduleScreen({
       onUndo: async () => {
         rollback();
         await reverse();
+      },
+    });
+  };
+
+  /**
+   * A court booking's move: the API previews it (still free by the shared
+   * rule? a new price? who would be told?), the person confirms (the price
+   * change restated, at the strong tier), and Undo moves it back to where
+   * the API says it was. A message is only ever prepared, in Inbox.
+   */
+  const moveBooking = async (
+    item: ScheduleItem,
+    next: MoveRequest,
+    court: (typeof allCourts)[number] | undefined,
+  ) => {
+    const zone = item.timeZone;
+    const when = clock(next.startsAt, zone);
+    const target = {
+      id: item.id,
+      source: item.source,
+      kind: item.kind,
+      startsAt: next.startsAt,
+      endsAt: next.endsAt,
+      ...(court && court.id !== item.courtId ? { courtId: court.id } : {}),
+    };
+    setPending((current) => new Set(current).add(item.id));
+    const answer = await previewMoveAction(target).catch((error: unknown) => {
+      reportError(error);
+      return null;
+    });
+    setPending((current) => {
+      const copy = new Set(current);
+      copy.delete(item.id);
+      return copy;
+    });
+    if (!answer) {
+      errorToast(`${item.title} couldn't be checked`, {
+        description: "Something went wrong on our side. Nothing was moved.",
+      });
+      return;
+    }
+    if (!answer.ok) {
+      errorToast(`${item.title} can't be moved`, {
+        description: answer.message,
+        ...(answer.reference ? { reference: answer.reference } : {}),
+      });
+      return;
+    }
+    const preview = answer.data;
+    const toCourt = court?.name ?? preview.to.courtName;
+    if (!preview.available) {
+      const [conflict] = preview.conflicts;
+      errorToast(`${item.title} can't go there`, {
+        description: `${conflict ? conflictSentence(conflict, toCourt, zone) : "That time isn't free"}. Nothing was moved.`,
+      });
+      return;
+    }
+    const override: Override = {
+      startsAt: next.startsAt,
+      endsAt: next.endsAt,
+      ...(court && court.id !== item.courtId
+        ? { courtId: court.id, courtName: court.name }
+        : {}),
+    };
+    const notify = (next.notify ?? true) && preview.draft.recipients.length > 0;
+    const price = preview.price;
+    const currency = price.currency ?? item.currency;
+    const priceChange = preview.requiresPriceConfirmation;
+    const amounts =
+      price.currentTotalMinor !== undefined && price.newTotalMinor !== undefined
+        ? {
+            from: money(price.currentTotalMinor, currency),
+            to: money(price.newTotalMinor, currency),
+          }
+        : undefined;
+    const priceWords =
+      price.action === "reprice"
+        ? amounts
+          ? `The price changes from ${amounts.from} to ${amounts.to}: the unpaid desk order takes the court's rate for the new time.`
+          : "The price changes to the court's rate for the new time."
+        : price.action === "kept"
+          ? "The price stays as booked."
+          : "";
+    const outcome = await confirm.run({
+      tier: priceChange ? "strong" : "confirm",
+      title: `Move ${item.title} to ${when}?`,
+      description: [
+        `From ${clockRange(item.startsAt, item.endsAt, zone)} on ${item.courtName ?? preview.from.courtName} to ${clockRange(next.startsAt, next.endsAt, zone)} on ${toCourt}, ${longDate(localDateOf(Date.parse(next.startsAt), zone))}.`,
+        priceWords,
+        preview.materialChange
+          ? "It moves by an hour or more, so the players may ask for a full refund."
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      affected: notify
+        ? `A message for ${recipientsWords(preview.draft)} is prepared in Inbox for you to review. Nothing is sent from here.`
+        : "Nobody is told from here.",
+      ...(priceChange
+        ? {
+            ...(amounts ? { amount: amounts.to } : {}),
+            recipients: item.who ?? item.title,
+            consequence: amounts
+              ? `The booking's price changes from ${amounts.from} to ${amounts.to}.`
+              : "The booking's price changes to the new time's rate.",
+          }
+        : {}),
+      verb:
+        priceChange && amounts
+          ? `Move it, new price ${amounts.to}`
+          : `Move to ${when}`,
+      cancelLabel: "Leave it where it was",
+      agentConfirm: `Moves ${item.title} to ${when} on ${toCourt}${priceChange ? " at the new price" : ""}`,
+      perform: ({ idempotencyKey }) =>
+        act(
+          moveItemAction({
+            ...target,
+            previewToken: preview.previewToken,
+            notify,
+            ...(priceChange ? { confirmedPriceChange: true } : {}),
+            idempotencyKey,
+          }),
+        ),
+      report: reportError,
+    });
+    if (outcome.status !== "done") return;
+    const result = outcome.result;
+    const rollback = (() => {
+      setOverrides((current) => new Map(current).set(item.id, override));
+      return () =>
+        setOverrides((current) => {
+          const copy = new Map(current);
+          copy.delete(item.id);
+          return copy;
+        });
+    })();
+    const drafted = notify
+      ? handoffFor(
+          `${item.title} moved to ${when}`,
+          result.draft,
+          result.conciergeDraft,
+        )
+      : null;
+    if (drafted) setHandoff(drafted);
+    const back = result.undo ?? {
+      startsAt: item.startsAt,
+      endsAt: item.endsAt,
+      courtId: item.courtId ?? "",
+    };
+    undoToast(`${item.title} moved to ${when}`, {
+      description: drafted
+        ? "A message draft is ready in Inbox."
+        : result.repriced && amounts
+          ? `New price ${amounts.to}.`
+          : undefined,
+      onUndo: async () => {
+        rollback();
+        await act(
+          moveItemAction({
+            id: item.id,
+            source: item.source,
+            kind: item.kind,
+            startsAt: back.startsAt,
+            endsAt: back.endsAt,
+            ...(back.courtId && back.courtId !== (court?.id ?? item.courtId)
+              ? { courtId: back.courtId }
+              : {}),
+            notify: false,
+            // Back to the price the person saw before the move.
+            ...(result.repriced ? { confirmedPriceChange: true } : {}),
+            idempotencyKey: crypto.randomUUID(),
+          }),
+        ).catch((error: unknown) => {
+          errorToast(`${item.title} couldn't be moved back`, {
+            description:
+              error instanceof MoneyActionError
+                ? error.userMessage
+                : "Something went wrong on our side.",
+            ...(error instanceof MoneyActionError && error.reference
+              ? { reference: error.reference }
+              : {}),
+          });
+          throw error;
+        });
       },
     });
   };
@@ -767,6 +987,36 @@ export function ScheduleScreen({
         title="Schedule"
       />
       <OfflineBanner writes="refused" />
+      {handoff ? (
+        <Notice
+          action={
+            <span className="sch-actions">
+              <Button href={handoff.href} size="sm" variant="secondary">
+                Open in Inbox
+              </Button>
+              <Button
+                onClick={() => setHandoff(null)}
+                size="sm"
+                variant="ghost"
+              >
+                Dismiss
+              </Button>
+            </span>
+          }
+          data-testid="draft-handoff"
+          role="status"
+          title="A message draft is ready in Inbox"
+          tone="info"
+        >
+          <p>
+            {handoff.title}. For {namesWords(handoff.recipients)}; nothing has
+            been sent, so review it in Inbox and send it from there.
+          </p>
+          {handoff.body ? (
+            <p className="sch-quiet sch-draft">“{handoff.body}”</p>
+          ) : null}
+        </Notice>
+      ) : null}
       <div
         className="sch-bar"
         role="toolbar"
@@ -1105,6 +1355,7 @@ export function ScheduleScreen({
           if (canCheckIn(item)) checkIn(item, person);
         }}
         onClose={() => go({ open: undefined }, true)}
+        onDrafted={setHandoff}
         onMove={(item, next) => {
           go({ open: undefined }, true);
           void requestMove(item, next);
@@ -1113,6 +1364,8 @@ export function ScheduleScreen({
           change: permissions.change,
           checkIn: openItem ? canCheckIn(openItem) : false,
           refund: permissions.refund,
+          money: permissions.money,
+          collect: permissions.collect,
           move: openItem ? canMove(openItem) : false,
           cancel: openItem
             ? openItem.kind !== "booking" || caps.cancelBooking
@@ -1122,8 +1375,11 @@ export function ScheduleScreen({
         }}
       />
       <CreateSheet
-        canBook={caps.createBooking}
-        coaches={coaches}
+        permissions={{
+          book: caps.createBooking,
+          money: permissions.money,
+          setPrice: permissions.refund,
+        }}
         courts={courts.length > 0 ? courts : allCourts}
         draft={createDraft}
         items={items}
