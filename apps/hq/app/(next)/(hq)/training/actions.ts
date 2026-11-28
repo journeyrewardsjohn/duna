@@ -150,14 +150,13 @@ export async function activateProgramAction(programId: string) {
 export async function cancelProgramAction(input: {
   readonly programId: string;
   readonly reason: string;
+  /** Prepares a Concierge draft a person reviews and sends in Inbox. */
+  readonly notifyAthletes: boolean;
 }) {
   return run("cancelProgram", async () => {
     const caller = await getServerCaller();
     // Athletes are told only through a message a person reviews and sends.
-    return caller.operator.trainingPrograms.cancel({
-      ...input,
-      notifyAthletes: false,
-    });
+    return caller.operator.trainingPrograms.cancel(input);
   });
 }
 
@@ -178,13 +177,12 @@ export async function addSessionAction(
 export async function cancelSessionAction(input: {
   readonly sessionId: string;
   readonly reason: string;
+  /** Prepares a Concierge draft a person reviews and sends in Inbox. */
+  readonly notifyAthletes: boolean;
 }) {
   return run("cancelSession", async () => {
     const caller = await getServerCaller();
-    return caller.operator.trainingPrograms.cancelSession({
-      ...input,
-      notifyAthletes: false,
-    });
+    return caller.operator.trainingPrograms.cancelSession(input);
   });
 }
 

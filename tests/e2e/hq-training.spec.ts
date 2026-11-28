@@ -143,9 +143,7 @@ test("cancelling a practice says plainly that athletes are not told yet", async 
   await form.getByLabel("Why it's cancelled").fill("Rain");
   await form.getByRole("button", { name: "Cancel the practice" }).click();
   const dialog = page.getByRole("dialog").or(page.getByRole("alertdialog"));
-  await expect(dialog).toContainText(
-    "Athletes are not notified automatically yet",
-  );
+  await expect(dialog).toContainText("nothing is sent automatically");
   await dialog.getByRole("button", { name: "Cancel the practice" }).click();
   await toast(page, "Practice cancelled");
   const draft = page.getByRole("region", { name: "Tell the athletes" });

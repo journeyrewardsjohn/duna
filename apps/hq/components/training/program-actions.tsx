@@ -9,6 +9,7 @@ import { hqHref } from "@duna/core/hq-routes";
 import { Icon } from "@duna/ui/icons";
 import {
   Button,
+  Checkbox,
   Chip,
   EmptyState,
   Field,
@@ -761,11 +762,14 @@ export function CancelProgram({
   const router = useRouter();
   const confirm = useConfirm();
   const [reason, setReason] = useState("");
+  const [notify, setNotify] = useState(true);
   const [done, setDone] = useState(false);
+  const [draft, setDraft] = useState<{ conversationId: string }>();
   if (done) {
     return (
       <MessageDraft
         body={`${program.title} is cancelled: ${reason.trim()}. Future practices are off. We're sorry for the change.`}
+        conciergeDraft={draft}
         title="Tell the athletes"
       />
     );
@@ -785,8 +789,9 @@ export function CancelProgram({
             description:
               "Every future practice is cancelled with this reason. Past practices and their records stay.",
             scope: `${program.title} and its future practices`,
-            consequence:
-              "This can't be undone. Athletes are not notified automatically yet.",
+            consequence: notify
+              ? "This can't be undone. A message draft is prepared for you to review and send in Inbox; nothing is sent automatically."
+              : "This can't be undone. Nobody is told unless you send a message yourself.",
             verb: "Cancel the program",
             cancelLabel: "Keep the program",
             agentConfirm: `Cancels the program ${program.title}`,
@@ -795,6 +800,7 @@ export function CancelProgram({
                 await cancelProgramAction({
                   programId: program.id,
                   reason: reason.trim(),
+                  notifyAthletes: notify,
                 }),
               ),
             success: `${program.title} cancelled`,
@@ -802,6 +808,10 @@ export function CancelProgram({
           })
           .then((outcome) => {
             if (outcome.status === "done") {
+              const result = outcome.result as {
+                conciergeDraft?: { conversationId: string };
+              };
+              setDraft(result.conciergeDraft);
               setDone(true);
               router.refresh();
             }
@@ -818,10 +828,12 @@ export function CancelProgram({
           value={reason}
         />
       </Field>
-      <p className="tr-quiet">
-        Athletes are not notified automatically yet. After cancelling you get a
-        message draft to review and send yourself.
-      </p>
+      <Checkbox
+        checked={notify}
+        description="Nothing is sent automatically: you review and send it in Inbox."
+        label="Draft a message to the athletes"
+        onCheckedChange={(checked) => setNotify(checked === true)}
+      />
       <Button disabled={!reason.trim()} type="submit" variant="danger">
         Cancel the program
       </Button>

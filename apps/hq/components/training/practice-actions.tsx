@@ -472,11 +472,14 @@ export function CancelPractice({ session }: { readonly session: Session }) {
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [notify, setNotify] = useState(true);
   const [done, setDone] = useState(false);
+  const [draft, setDraft] = useState<{ conversationId: string }>();
   if (done) {
     return (
       <MessageDraft
         body={`${session.title} on ${sessionWhen(session)} is cancelled: ${reason.trim()}. See you at the next one.`}
+        conciergeDraft={draft}
         title="Tell the athletes"
       />
     );
@@ -502,7 +505,9 @@ export function CancelPractice({ session }: { readonly session: Session }) {
             title: `Cancel ${session.title} on ${sessionWhen(session)}?`,
             description:
               "The practice stays on the calendar as cancelled, with your reason.",
-            affected: `${session.athleteCount} athletes are on it. Athletes are not notified automatically yet: you get a message draft to send yourself.`,
+            affected: notify
+              ? `${session.athleteCount} athletes are on it. A message draft is prepared for you to review and send in Inbox; nothing is sent automatically.`
+              : `${session.athleteCount} athletes are on it. Nobody is told unless you send a message yourself.`,
             verb: "Cancel the practice",
             cancelLabel: "Keep the practice",
             agentConfirm: `Cancels ${session.title} on ${sessionWhen(session)}`,
@@ -511,6 +516,7 @@ export function CancelPractice({ session }: { readonly session: Session }) {
                 await cancelSessionAction({
                   sessionId: session.id,
                   reason: reason.trim(),
+                  notifyAthletes: notify,
                 }),
               ),
             success: "Practice cancelled",
@@ -518,6 +524,10 @@ export function CancelPractice({ session }: { readonly session: Session }) {
           })
           .then((outcome) => {
             if (outcome.status === "done") {
+              const result = outcome.result as {
+                conciergeDraft?: { conversationId: string };
+              };
+              setDraft(result.conciergeDraft);
               setDone(true);
               router.refresh();
             }
@@ -532,10 +542,12 @@ export function CancelPractice({ session }: { readonly session: Session }) {
           value={reason}
         />
       </Field>
-      <p className="tr-quiet">
-        Who is told: athletes are not notified automatically yet. After
-        cancelling you get a message draft to review and send in Inbox.
-      </p>
+      <Checkbox
+        checked={notify}
+        description="Nothing is sent automatically: you review and send it in Inbox."
+        label="Draft a message to the athletes"
+        onCheckedChange={(checked) => setNotify(checked === true)}
+      />
       <div className="tr-actions">
         <Button disabled={!reason.trim()} type="submit" variant="danger">
           Cancel the practice

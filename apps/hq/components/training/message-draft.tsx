@@ -21,11 +21,32 @@ import { useState } from "react";
 export function MessageDraft({
   title,
   body,
+  conciergeDraft,
 }: {
   readonly title: string;
   readonly body: string;
+  /** Concierge prepared a draft thread: the person reviews and sends it in Inbox. */
+  readonly conciergeDraft?: { readonly conversationId: string };
 }) {
   const [text, setText] = useState(body);
+  if (conciergeDraft) {
+    return (
+      <section aria-label={title} className="tr-card tr-draft">
+        <Notice title="A message draft is ready in Inbox" tone="info">
+          Nothing is sent from here. Review it, choose who gets it and send it
+          in Inbox.
+        </Notice>
+        <div className="tr-actions">
+          <Link
+            className={buttonClassName({ variant: "secondary", size: "sm" })}
+            href={`/inbox?thread=${encodeURIComponent(conciergeDraft.conversationId)}`}
+          >
+            Review in Inbox
+          </Link>
+        </div>
+      </section>
+    );
+  }
   return (
     <section aria-label={title} className="tr-card tr-draft">
       <Notice title="Athletes are not notified automatically yet" tone="info">
