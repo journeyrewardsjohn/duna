@@ -2,8 +2,10 @@ import { expect, hq, test } from "./support/fixtures";
 import {
   expectNoLayoutShift,
   expectPageReady,
+  expectToast,
   fillForm,
   openHqArea,
+  pressAndConfirm,
 } from "./support/moves";
 
 /**
@@ -64,18 +66,53 @@ test.describe("CO-2 Set up the club from its website", () => {
 test.describe("CO-3 Connect payments (Duna Pay)", () => {
   test("CO-3.1 Money leads to Duna Pay setup", async ({ page }) => {
     await page.goto(hq("/money/setup"));
-    await expectPageReady(page, "Configure money once.");
+    await expect(page).toHaveURL(/\/money\/duna-pay$/);
+    await expectPageReady(page, "Duna Pay");
     await expect(
-      page.getByRole("button", { name: "Prepare secure Stripe link" }),
+      page.getByRole("navigation", { name: "Duna Pay setup" }),
     ).toBeVisible();
   });
-  test.fixme("CO-3.2 Complete verification in the embedded onboarding and see the account status [B2, H10]", async () => {
-    // Expected: one of the six derived statuses; "not configured yet" without
-    // provider keys; a "Test mode" label with test keys.
+  test("CO-3.2 See the account status and what verification needs (not configured without keys) [B2, H10]", async ({
+    page,
+  }) => {
+    // Demo has no payment keys: one of the six statuses, what is wrong, and
+    // the honest "can't connect here yet" instead of a link that can't open.
+    await page.goto(hq("/money/duna-pay"));
+    await expectPageReady(page, "Duna Pay");
+    const card = page.getByRole("region", { name: "Where you stand" });
+    await expect(card).toContainText("Action needed");
+    await expect(card).toContainText("Bank account was declined");
+    await expect(
+      page.getByText("Duna Pay can't connect in this environment yet"),
+    ).toBeVisible();
+    await page.goto(hq("/money/duna-pay/verify"));
+    await expectPageReady(page, "Verify your identity");
+    await expect(
+      page.getByText("Identity verification isn't set up yet"),
+    ).toBeVisible();
   });
-  test.fixme("CO-3.3 Choose the payout schedule and the refund policy [H10]", async () => {
-    // Expected: SectionNav under Money; saved inline with a toast; policy text
-    // uses [club policy] placeholders until the club writes its own.
+  test("CO-3.3 Choose the payout schedule and the refund policy [H10]", async ({
+    page,
+  }) => {
+    await page.goto(hq("/money/payouts"));
+    await expectPageReady(page, "Payouts");
+    const schedule = page.getByRole("form", { name: "Payout schedule" });
+    await schedule.getByLabel("How often").click();
+    await page.getByRole("option", { name: "once a week" }).click();
+    await pressAndConfirm(
+      page,
+      schedule.getByRole("button", { name: "Save payout schedule" }),
+      "strong",
+      {
+        confirmButton: "Change payout schedule",
+        restates: [/once a week|Every/i, /Takes effect from the next payout/],
+      },
+    );
+    await expectToast(page, /Payout schedule saved/);
+    await page.goto(hq("/money/refund-policies"));
+    await expectPageReady(page, "Refunds");
+    await page.getByRole("button", { name: "Add a refund policy" }).click();
+    await expect(page.getByLabel("Terms")).toHaveValue("[club policy]");
   });
 });
 
@@ -193,9 +230,7 @@ test.describe("CO-9 Refund a booking", () => {
       page.getByRole("searchbox", { name: "Search transactions" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("table", {
-        name: "Sortable, filterable organization transactions",
-      }),
+      page.getByRole("table", { name: "Sales and payments" }),
     ).toBeVisible();
   });
   test("CO-9.2 Open the transaction", async ({ page }) => {
@@ -207,9 +242,25 @@ test.describe("CO-9 Refund a booking", () => {
     await expect(page).toHaveURL(/\/money\/transactions\/[^/]+$/);
     await expectPageReady(page);
   });
-  test.fixme("CO-9.3 Refund it with a strong confirm that restates amount, person and consequence [H10, B2]", async () => {
-    // Expected: tier 2 dialog "Refund $48.00 to <name>. <name> is emailed.";
-    // idempotency key on the refund; toast and refunded state.
+  test("CO-9.3 Refund it with a strong confirm that restates amount, person and consequence [H10, B2]", async ({
+    page,
+  }) => {
+    await page.goto(hq("/money/transactions"));
+    await page
+      .getByRole("link", { name: /^Open Junior program .* transaction$/ })
+      .click();
+    await expectPageReady(page, "Junior program · 8 weeks");
+    await page.getByRole("button", { name: "Refund this sale" }).click();
+    await page.getByLabel("Reason").fill("Coach was ill for two sessions");
+    await page.getByRole("button", { name: "Review refund" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText("$240.00 (USD)");
+    await expect(dialog).toContainText("Theo Park, to the card they paid with");
+    await expect(dialog).toContainText("A refund cannot be undone.");
+    await expect(
+      dialog.getByRole("button", { name: "Refund $240.00" }),
+    ).toHaveAttribute("data-agent-confirm", /Refunds \$240\.00 to Theo Park/);
+    // The refund itself needs the connected database (B2); demo has none.
   });
   test.fixme("CO-9.4 The person is told, and the refund shows in their wallet [B7, P6]", async () => {});
 });
@@ -220,13 +271,28 @@ test.describe("CO-10 See a payout", () => {
   }) => {
     await openHqArea(page, "Money");
     await expect(
-      page.getByRole("heading", { name: "Keep the rhythm you prefer." }),
-    ).toBeVisible();
+      page.getByRole("group", { name: "Ready to pay out" }),
+    ).toContainText("Every business day");
     await expect(
       page.getByRole("button", { name: "Request a payout" }),
     ).toBeVisible();
   });
-  test.fixme("CO-10.2 Open a payout and see its arrival date and the payments in it [H10, B2]", async () => {});
+  test("CO-10.2 Open a payout and see its arrival date and the payments in it [H10, B2]", async ({
+    page,
+  }) => {
+    await page.goto(hq("/money/payouts"));
+    await page
+      .getByRole("list", { name: "Payouts" })
+      .getByRole("link")
+      .first()
+      .click();
+    await expect(page).toHaveURL(/\/money\/payouts\/[^/]+$/);
+    await expectPageReady(page, /^Payout to /);
+    await expect(page.getByText("Expected", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Sales in this payout" }),
+    ).toBeVisible();
+  });
 });
 
 test.describe("CO-11 Ask Duna to do it", () => {

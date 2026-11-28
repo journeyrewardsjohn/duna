@@ -14,9 +14,9 @@ function rgbOf(hex: string): string {
  * site in Pro today marks something live (a live court dot, the live
  * schedule line and state, the Watch pulse, the live pill, the live now-card
  * edge), so `flare` is the `live` role (Solar). Controls that used flare take
- * `flareAction`, the `action` role (Night Court on light, Dune on dark); the
- * Pro shell package (M-R0) moves its two flare-filled controls
- * (`venueMatchActionLive`, the profile `dot`) onto it.
+ * `flareAction`, the `action` role (Night Court on light, Dune on dark): the
+ * two flare-filled controls (`venueMatchActionLive`, the profile `dot`) use
+ * it since the Pro shell (M-R0).
  */
 function legacyPalette(role: NativeColors, dark: boolean) {
   const flare = role.live;

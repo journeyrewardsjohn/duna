@@ -193,7 +193,7 @@ export function createStyles(palette: Palette) {
       minHeight: 50,
       paddingHorizontal: 14,
     },
-    venueMatchActionLive: { backgroundColor: colors.flare },
+    venueMatchActionLive: { backgroundColor: colors.flareAction },
     venueMatchActionText: {
       color: colors.onAccent,
       fontSize: 12,
@@ -1714,7 +1714,7 @@ export function createStyles(palette: Palette) {
     },
     profileText: { color: colors.bone, fontSize: 12, fontWeight: "900" },
     dot: {
-      backgroundColor: colors.flare,
+      backgroundColor: colors.flareAction,
       borderColor: colors.ink,
       borderRadius: 5,
       borderWidth: 2,
@@ -2417,13 +2417,14 @@ export function createStyles(palette: Palette) {
       fontFamily: "Archivo-Score",
       fontSize: 124,
       fontWeight: "900",
-      letterSpacing: -10,
+      // Negative tracking clipped the last digit (RN trims it from the box).
+      letterSpacing: 0,
       lineHeight: 130,
       marginVertical: 4,
     },
     bigScoreExpanded: {
       fontSize: 184,
-      letterSpacing: -14,
+      letterSpacing: 0,
       lineHeight: 192,
       marginVertical: 12,
     },

@@ -1,47 +1,34 @@
-import { useProRuntime } from "../../runtime";
-import { useColorScheme, Animated, Linking, Easing, View } from "react-native";
-import { useState, useRef, useEffect } from "react";
-import { useTheme } from "@duna/ui/native/theme";
-import { listenForMessagingNotificationResponses } from "../../messaging-notifications";
-import { SessionNotesScreen } from "../../session-notes";
-import { DunaAiScreen } from "../../duna-ai-screen";
-import { OperatorCreateScreen } from "../../operator-create";
-import { GetPaidScreen } from "../../get-paid";
-import { MoneyScreen } from "../../money-screen";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
-import { ProMessagingScreen } from "../../messaging-screen";
-import { TicketScannerScreen } from "../../ticket-scanner";
-import { TournamentControl } from "../../tournament-control";
-import { CoachVideoScreen } from "../../coach-video";
-import {
-  setActivePalette,
-  darkColors,
-  lightColors,
-  colors,
-  rgba,
-  type ThemeName,
-  type ThemePreference,
-} from "../shared/palette";
-import { useReducedMotion } from "../shared/use-reduced-motion";
-import { type Tab, type NavDestination } from "./navigation";
-import { type ProCalendarEntry } from "../features/calendar";
-import {
-  setActiveStyles,
-  darkStyles,
-  lightStyles,
-  styles,
-} from "../legacy/styles";
-import { OpenDunaAiContext, ThemeContext } from "../shared/theme-context";
-import { ScorerScreen } from "../features/courtside";
-import { PreviewBanner } from "./PreviewBanner";
-import { TodayScreen } from "../features/today";
-import { CalendarScreen } from "../features/calendar";
-import { PeopleScreen } from "../features/people";
-import { MoreScreen } from "../features/more";
-import { TabBar } from "./TabBar";
+/**
+ * The Duna Pro shell (M-R0): the system tab bar through `NavigationChrome`
+ * with the coach tabs (Today · Schedule · Students · Threads · Earnings; an
+ * owner sees People · Inbox · Money), one `TabRoot` per tab, the Create
+ * sheet and the conditions sheet, and whole-window routes (Courtside,
+ * check-in, Messages, Ask Duna, Create, Get paid, film, notes, the event
+ * desk). Navigation state lives in `shell-state.ts`; routes in `router.ts`;
+ * renderers in `screens.tsx`; links in `deep-links.ts`.
+ */
+import { AppState, Linking, StyleSheet, View } from "react-native";
 import { DevicePostureProvider } from "@duna/expo-device-posture";
-import { ProLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
+import {
+  LiveZone,
+  NavigationChrome,
+  ThemeOverride,
+  useHaptics,
+  useTheme,
+} from "@duna/ui/native";
+import { StatusBar } from "expo-status-bar";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { DunaAiScreen } from "../../duna-ai-screen";
+import { listenForMessagingNotificationResponses } from "../../messaging-notifications";
+import { useProRuntime } from "../../runtime";
 import { devLaunchUrl } from "../features/dev/dev-launch";
 import {
   ProFoundations,
@@ -49,91 +36,106 @@ import {
   parseFoundationsUrl,
   type FoundationsOptions,
 } from "../features/dev/Foundations";
+import { ProLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
+import { ConditionsSheet, DayProvider, useDay } from "../features/today";
+import { darkStyles, lightStyles, setActiveStyles } from "../legacy/styles";
+import { darkColors, lightColors, setActivePalette } from "../shared/palette";
+import {
+  deepLinkNavigation,
+  organizationSlug,
+  parseDevShellUrl,
+  parseProDeepLink,
+} from "./deep-links";
+import { NewSheet } from "./NewSheet";
+import { ROUTES, TABS, audienceForRole, tabTitle, type TabKey } from "./router";
+import { askDunaPalette, SCREENS } from "./screens";
+import { ShellContext, type ShellNavigation } from "./ShellContext";
+import { initialShellState, shellReducer } from "./shell-state";
+import { TabRoot } from "./TabRoot";
+
+/** The conditions sheet for the day the shell asked about. */
+function ShellConditions({
+  dateKey,
+  onClose,
+}: {
+  readonly dateKey: string | null | undefined;
+  readonly onClose: () => void;
+}) {
+  const day = useDay();
+  const model = dateKey === undefined ? null : day.build(dateKey ?? undefined);
+  return (
+    <ConditionsSheet
+      conditions={model?.conditions ?? null}
+      onClose={onClose}
+      visible={dateKey !== undefined}
+    />
+  );
+}
 
 export function ProApp() {
+  const runtime = useProRuntime();
   const {
     activeAuthOrganizationId,
     authOrganizations,
+    client,
     messagingDelivery,
     mode,
     refresh,
     switchOrganization,
-  } = useProRuntime();
-  const deviceTheme: ThemeName = useColorScheme() === "dark" ? "dark" : "light";
-  const reduceMotion = useReducedMotion();
-  const [tab, setTab] = useState<Tab>("today");
-  const [surface, setSurface] = useState<
-    | "ai"
-    | "create"
-    | "get-paid"
-    | "money"
-    | "messages"
-    | "scan"
-    | "score"
-    | "tournament"
-    | "video"
-  >();
-  const [messagesConversationId, setMessagesConversationId] =
-    useState<string>();
-  const [messagesPersonId, setMessagesPersonId] = useState<string>();
-  const [messagesAudienceKey, setMessagesAudienceKey] = useState<string>();
-  const [sessionNotesId, setSessionNotesId] = useState<string>();
-  const [sessionNotePersonId, setSessionNotePersonId] = useState<string>();
-  const [scoreMatchId, setScoreMatchId] = useState<string>();
-  const [calendarEntryId, setCalendarEntryId] = useState<string>();
-  // The saved choice ("duna-theme": light, dark or system) lives in the
-  // design system's ThemeProvider at the app root; it persists it too.
-  const { preference: themePreference, setPreference: setThemePreference } =
-    useTheme();
-  const theme = themePreference === "system" ? deviceTheme : themePreference;
-  // v3 ground inversion: operational browsing follows the chosen appearance,
-  // while courtside scoring is always the rare, high-focus live ground.
-  const surfaceTheme: ThemeName =
-    surface === "score" || surface === "scan" ? "dark" : theme;
-  const screenTransition = useRef(new Animated.Value(1)).current;
-  // Development-only Layout lab: preview builds only, never production navigation.
+  } = runtime;
+  const haptics = useHaptics();
+  const { colors: themeColors, scheme, statusBar, setPreference } = useTheme();
+  const setPreferenceRef = useRef(setPreference);
+  setPreferenceRef.current = setPreference;
+  const [state, dispatch] = useReducer(shellReducer, undefined, () =>
+    initialShellState(),
+  );
+  const [tabletop, setTabletop] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [scheduleDate, setScheduleDate] = useState<string | null>(null);
+  // undefined: closed; null: today; a key: that day.
+  const [conditionsDate, setConditionsDate] = useState<
+    string | null | undefined
+  >(undefined);
   const [layoutLabOpen, setLayoutLabOpen] = useState(
     Boolean(layoutLabAutostart),
   );
-  // Development-only Foundations gallery (preview builds only).
   const [foundations, setFoundations] = useState<FoundationsOptions | null>(
     foundationsAutostart,
   );
+  const mountedAt = useRef(Date.now());
   const previewRef = useRef(mode === "preview");
   previewRef.current = mode === "preview";
-
-  const openCalendar = (entryId?: string) => {
-    setCalendarEntryId(entryId);
-    setTab("calendar");
+  const organizationsRef = useRef({
+    authOrganizations,
+    activeAuthOrganizationId,
+    switchOrganization,
+    refresh,
+  });
+  organizationsRef.current = {
+    authOrganizations,
+    activeAuthOrganizationId,
+    switchOrganization,
+    refresh,
   };
 
-  const openScore = (matchId?: string) => {
-    setScoreMatchId(matchId);
-    setSurface("score");
-  };
+  const windowRoute = state.window?.entry;
+  // Legacy screens read a module-level palette; it follows the appearance,
+  // except Courtside and check-in, which are always the Live zone.
+  const legacyDark =
+    windowRoute && ROUTES[windowRoute.key].live ? true : scheme === "dark";
+  setActivePalette(legacyDark ? darkColors : lightColors);
+  setActiveStyles(legacyDark ? darkStyles : lightStyles);
 
-  const openGroupMessaging = (entry: ProCalendarEntry) => {
-    setMessagesConversationId(undefined);
-    setMessagesPersonId(undefined);
-    setMessagesAudienceKey(
-      entry.sourceType === "booking"
-        ? `rental:${entry.id}`
-        : `event:${entry.id}`,
-    );
-    setSurface("messages");
-  };
+  const audience = audienceForRole(
+    authOrganizations?.find(
+      (organization) => organization.id === activeAuthOrganizationId,
+    )?.role,
+  );
 
-  const changeTab = (nextTab: NavDestination) => {
-    if (nextTab === "ai" || nextTab === "create") {
-      setSurface(nextTab);
-      return;
-    }
-    if (nextTab === "calendar") setCalendarEntryId(undefined);
-    setTab(nextTab);
-  };
-
+  // Every Pro link resolves to a place in the shell (deep-links.test.ts).
   useEffect(() => {
-    const openActivity = (url: string | null) => {
+    const openLink = (url: string | null) => {
       const foundationsLink = parseFoundationsUrl(url);
       if (foundationsLink) {
         if (previewRef.current) setFoundations(foundationsLink);
@@ -143,68 +145,38 @@ export function ProApp() {
         if (previewRef.current) setLayoutLabOpen(true);
         return;
       }
-      if (url?.startsWith("duna-pro://messages")) {
-        const conversationId = url.match(
-          /^duna-pro:\/\/messages\/([^/?#]+)/,
-        )?.[1];
-        setMessagesConversationId(
-          conversationId ? decodeURIComponent(conversationId) : undefined,
-        );
-        setSurface("messages");
+      const devShell = parseDevShellUrl(url);
+      if (devShell) {
+        if (!previewRef.current) return;
+        if (devShell.theme) setPreferenceRef.current(devShell.theme);
+        for (const action of devShell.actions) dispatch(action);
+        if (devShell.conditions) setConditionsDate(null);
         return;
       }
-      const matchScore = url?.match(/^duna-pro:\/\/match\/([^/?#]+)/);
-      if (matchScore?.[1]) {
-        setScoreMatchId(decodeURIComponent(matchScore[1]));
-        setSurface("score");
-        return;
-      }
-      const sessionMatch = url?.match(/^duna-pro:\/\/session\/([^/?#]+)/);
-      if (sessionMatch?.[1]) {
-        setSurface(undefined);
-        setCalendarEntryId(decodeURIComponent(sessionMatch[1]));
-        setTab("calendar");
-        return;
-      }
-      const organizationMatch = url?.match(
-        /^duna-pro:\/\/organization\/([^/?#]+)/,
+      const link = parseProDeepLink(url);
+      if (!link) return;
+      dispatch(deepLinkNavigation(link));
+      if (link.kind !== "organization") return;
+      const current = organizationsRef.current;
+      const target = current.authOrganizations?.find(
+        (organization) => organizationSlug(organization.name) === link.slug,
       );
-      if (!organizationMatch?.[1]) return;
-      const slug = decodeURIComponent(organizationMatch[1]);
-      const normalized = (value: string) =>
-        value
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-      const target = authOrganizations?.find(
-        (organization) => normalized(organization.name) === slug,
-      );
-      setSurface(undefined);
-      setCalendarEntryId(undefined);
-      setTab("today");
       if (
         target &&
-        target.id !== activeAuthOrganizationId &&
-        switchOrganization
+        target.id !== current.activeAuthOrganizationId &&
+        current.switchOrganization
       ) {
-        void switchOrganization(target.id);
+        void current.switchOrganization(target.id);
       } else {
-        void refresh();
+        void current.refresh();
       }
     };
-    void Linking.getInitialURL().then((url) =>
-      openActivity(url ?? devLaunchUrl()),
-    );
+    void Linking.getInitialURL().then((url) => openLink(url ?? devLaunchUrl()));
     const subscription = Linking.addEventListener("url", ({ url }) =>
-      openActivity(url),
+      openLink(url),
     );
     return () => subscription.remove();
-  }, [
-    activeAuthOrganizationId,
-    authOrganizations,
-    refresh,
-    switchOrganization,
-  ]);
+  }, []);
 
   useEffect(
     () =>
@@ -214,292 +186,159 @@ export function ProApp() {
     [messagingDelivery],
   );
 
+  // Unread conversations badge the inbox tab (live builds).
   useEffect(() => {
-    if (reduceMotion) {
-      screenTransition.setValue(1);
-      return;
-    }
-    screenTransition.setValue(0);
-    Animated.timing(screenTransition, {
-      toValue: 1,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [reduceMotion, screenTransition, tab]);
+    if (mode !== "live" || !client) return;
+    const refreshUnread = () =>
+      client.messaging.inbox
+        .query({ asPrincipal: "organization" })
+        .then((inbox) => setUnreadMessages(inbox.totalUnread))
+        .catch(() => undefined);
+    void refreshUnread();
+    const appState = AppState.addEventListener("change", (next) => {
+      if (next === "active") void refreshUnread();
+    });
+    const interval = setInterval(() => void refreshUnread(), 30_000);
+    return () => {
+      appState.remove();
+      clearInterval(interval);
+    };
+  }, [client, mode]);
 
-  setActivePalette(surfaceTheme === "dark" ? darkColors : lightColors);
-  setActiveStyles(surfaceTheme === "dark" ? darkStyles : lightStyles);
+  const openCreate = useCallback(() => {
+    haptics.confirmed(1);
+    dispatch({ type: "open-sheet" });
+  }, [haptics]);
 
-  const shell = (
-    <OpenDunaAiContext.Provider value={() => setSurface("ai")}>
-      <ThemeContext.Provider
-        value={{
-          theme,
-          preference: themePreference,
-          toggle: () => {
-            const next: ThemePreference =
-              themePreference === "system"
-                ? "light"
-                : themePreference === "light"
-                  ? "dark"
-                  : "system";
-            setThemePreference(next);
-          },
-        }}
-      >
-        {sessionNotesId ? (
-          <SessionNotesScreen
-            initialPersonId={sessionNotePersonId}
-            onClose={() => {
-              setSessionNotesId(undefined);
-              setSessionNotePersonId(undefined);
-            }}
-            onSaved={refresh}
-            sessionId={sessionNotesId}
-          />
-        ) : surface === "ai" ? (
-          <DunaAiScreen
-            onClose={() => setSurface(undefined)}
-            palette={{
-              canvas: colors.canvas,
-              surface: colors.depth,
-              surfaceAlt: colors.navyLift,
-              ink: colors.bone,
-              muted: colors.muted,
-              accent: colors.aqua,
-              onAccent: colors.onAccent,
-              warning: colors.warning,
-              positive: colors.positive,
-              danger: colors.danger,
-              border: rgba(colors.overlayRgb, 0.12),
-            }}
-            pathname={`/${tab}`}
-          />
-        ) : surface === "create" ? (
-          <OperatorCreateScreen
-            onClose={() => setSurface(undefined)}
-            onCreated={refresh}
-            onGetPaid={() => setSurface("get-paid")}
-          />
-        ) : surface === "get-paid" ? (
-          <GetPaidScreen
-            onClose={() => setSurface(undefined)}
-            onCreate={() => setSurface("create")}
-          />
-        ) : surface === "money" ? (
-          <MoneyScreen
-            onClose={() => setSurface(undefined)}
-            onCollect={() => setSurface("get-paid")}
-            palette={{
-              canvas: colors.canvas,
-              surface: colors.depth,
-              surfaceAlt: colors.navyLift,
-              border: rgba(colors.overlayRgb, 0.12),
-              text: colors.bone,
-              muted: colors.muted,
-              accent: colors.aqua,
-              onAccent: colors.onAccent,
-              positive: colors.positive,
-              warning: colors.warning,
-              danger: colors.danger,
-              navy: colors.navy,
-            }}
-          />
-        ) : surface === "messages" ? (
-          <SafeAreaView
-            edges={["top", "left", "right", "bottom"]}
-            style={styles.safe}
-          >
-            <StatusBar style={theme === "dark" ? "light" : "dark"} />
-            <ProMessagingScreen
-              initialAudienceKey={messagesAudienceKey}
-              initialConversationId={messagesConversationId}
-              initialPersonId={messagesPersonId}
-              onClose={() => {
-                setMessagesConversationId(undefined);
-                setMessagesPersonId(undefined);
-                setMessagesAudienceKey(undefined);
-                setSurface(undefined);
-              }}
-              palette={{
-                canvas: colors.canvas,
-                surface: colors.depth,
-                surfaceAlt: colors.navyLift,
-                border: rgba(colors.overlayRgb, 0.12),
-                text: colors.bone,
-                muted: colors.muted,
-                accent: colors.aqua,
-                onAccent: colors.onAccent,
-                positive: colors.positive,
-                warning: colors.warning,
-                danger: colors.danger,
-              }}
-            />
-          </SafeAreaView>
-        ) : surface === "scan" ? (
-          <SafeAreaView
-            edges={["top", "left", "right", "bottom"]}
-            style={styles.safe}
-          >
-            <StatusBar style="light" />
-            <TicketScannerScreen
-              onClose={() => setSurface(undefined)}
-              palette={{
-                canvas: colors.canvas,
-                surface: colors.depth,
-                surfaceAlt: colors.navyLift,
-                border: rgba(colors.overlayRgb, 0.12),
-                text: colors.bone,
-                muted: colors.muted,
-                accent: colors.aqua,
-                onAccent: colors.onAccent,
-                positive: colors.positive,
-                warning: colors.warning,
-                danger: colors.danger,
-                overlay: rgba(colors.inkRgb, 0.35),
-              }}
-            />
-          </SafeAreaView>
-        ) : surface === "score" ? (
-          <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
-            <StatusBar style="light" />
-            <View style={styles.app}>
-              <ScorerScreen
-                initialMatchId={scoreMatchId}
-                onExit={() => {
-                  setScoreMatchId(undefined);
-                  setSurface(undefined);
-                }}
-              />
-            </View>
-          </SafeAreaView>
-        ) : surface === "tournament" ? (
-          <TournamentControl
-            onClose={() => setSurface(undefined)}
-            onScore={openScore}
-            palette={{
-              canvas: colors.canvas,
-              surface: colors.depth,
-              surfaceAlt: colors.navyLift,
-              ink: colors.bone,
-              muted: colors.muted,
-              accent: colors.aqua,
-              onAccent: colors.onAccent,
-              positive: colors.positive,
-              warning: colors.warning,
-              danger: colors.danger,
-              border: rgba(colors.overlayRgb, 0.12),
-            }}
-          />
-        ) : surface === "video" ? (
-          <CoachVideoScreen
-            onClose={() => setSurface(undefined)}
-            palette={{
-              canvas: colors.canvas,
-              surface: colors.depth,
-              surfaceAlt: colors.navyLift,
-              ink: colors.bone,
-              muted: colors.muted,
-              accent: colors.aqua,
-              onAccent: colors.onAccent,
-              positive: colors.positive,
-              warning: colors.warning,
-              danger: colors.danger,
-              border: rgba(colors.overlayRgb, 0.12),
-            }}
-          />
-        ) : (
-          <SafeAreaView edges={["top", "left", "right"]} style={styles.safe}>
-            <StatusBar style={theme === "dark" ? "light" : "dark"} />
-            <View style={styles.app}>
-              <PreviewBanner onOpenLayoutLab={() => setLayoutLabOpen(true)} />
-              <Animated.View
-                style={[
-                  styles.animatedScreen,
-                  {
-                    opacity: screenTransition,
-                    transform: [
-                      {
-                        translateY: screenTransition.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [8, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                {tab === "today" && (
-                  <TodayScreen
-                    onCalendar={openCalendar}
-                    onCreate={() => setSurface("create")}
-                    onGetPaid={() => setSurface("get-paid")}
-                    onMessageGroup={openGroupMessaging}
-                    onPeople={() => setTab("people")}
-                    onRecordNotes={(sessionId) => {
-                      setSessionNotePersonId(undefined);
-                      setSessionNotesId(sessionId);
-                    }}
-                    onScore={openScore}
-                  />
-                )}
-                {tab === "calendar" && (
-                  <CalendarScreen
-                    focusEntryId={calendarEntryId}
-                    onCreate={() => setSurface("create")}
-                    onMessageGroup={openGroupMessaging}
-                    onRecordNotes={(sessionId) => {
-                      setSessionNotePersonId(undefined);
-                      setSessionNotesId(sessionId);
-                    }}
-                    onScan={() => setSurface("scan")}
-                    onScore={openScore}
-                  />
-                )}
-                {tab === "people" && (
-                  <PeopleScreen
-                    onMessage={(personId) => {
-                      setMessagesPersonId(personId);
-                      setMessagesAudienceKey(undefined);
-                      setMessagesConversationId(undefined);
-                      setSurface("messages");
-                    }}
-                    onRecordNotes={(sessionId, personId) => {
-                      setSessionNotePersonId(personId);
-                      setSessionNotesId(sessionId);
-                    }}
-                  />
-                )}
-                {tab === "more" && (
-                  <MoreScreen
-                    onCalendar={() => openCalendar()}
-                    onCreate={() => setSurface("create")}
-                    onGetPaid={() => setSurface("get-paid")}
-                    onMoney={() => setSurface("money")}
-                    onMessages={() => {
-                      setMessagesConversationId(undefined);
-                      setMessagesPersonId(undefined);
-                      setMessagesAudienceKey(undefined);
-                      setSurface("messages");
-                    }}
-                    onPeople={() => setTab("people")}
-                    onTournament={() => setSurface("tournament")}
-                    onVideo={() => setSurface("video")}
-                  />
-                )}
-              </Animated.View>
-              <TabBar active={tab} onChange={changeTab} />
-            </View>
-          </SafeAreaView>
-        )}
-      </ThemeContext.Provider>
-    </OpenDunaAiContext.Provider>
+  const shell = useMemo<ShellNavigation>(
+    () => ({
+      dispatch,
+      open: (route, params) => dispatch({ type: "open", route, ...params }),
+      back: (tab: TabKey) => dispatch({ type: "back", tab }),
+      closeWindow: () => dispatch({ type: "close-window" }),
+      openCreate,
+      openConditions: (dateKey) => setConditionsDate(dateKey ?? null),
+      scheduleDate,
+      setScheduleDate,
+      audience,
+      unreadMessages,
+      openLayoutLab: () => {
+        if (previewRef.current) setLayoutLabOpen(true);
+      },
+    }),
+    [audience, openCreate, scheduleDate, unreadMessages],
   );
+
+  const windowTab = state.window?.from ?? state.tab;
+  const dayTab = state.tab === "today" || state.tab === "schedule";
+  const windowContent =
+    windowRoute && windowRoute.key !== "ai"
+      ? SCREENS[windowRoute.key](windowRoute, {
+          shell,
+          refresh,
+          tab: windowTab,
+        })
+      : null;
 
   return (
     <DevicePostureProvider>
-      {shell}
+      <ShellContext.Provider value={shell}>
+        <DayProvider>
+          <StatusBar
+            style={
+              windowRoute && ROUTES[windowRoute.key].live
+                ? "light"
+                : statusBar === "light"
+                  ? "light"
+                  : "dark"
+            }
+          />
+          <View style={styles.fill}>
+            <NavigationChrome
+              hidden={
+                (tabletop && dayTab && !state.stacks[state.tab]) ||
+                Boolean(windowRoute)
+              }
+              onSelect={(key) => {
+                // iPad's sidebar-adaptable tab bar reports its first tab once
+                // while it mounts; that echo is not a person's choice.
+                if (Date.now() - mountedAt.current < 1_500) return;
+                haptics.selection();
+                dispatch({ type: "select-tab", tab: key as TabKey });
+              }}
+              selected={state.tab}
+              tabs={TABS.map((tab) => ({
+                key: tab.key,
+                title: tabTitle(tab.key, audience),
+                systemImage: tab.systemImage,
+                ...(tab.key === "inbox" && unreadMessages > 0
+                  ? {
+                      badge:
+                        unreadMessages > 99 ? "99+" : String(unreadMessages),
+                    }
+                  : {}),
+                content: (
+                  <TabRoot
+                    onTabletopChange={setTabletop}
+                    state={state}
+                    tab={tab.key}
+                  />
+                ),
+              }))}
+            />
+            {windowContent ? (
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  styles.window,
+                  { backgroundColor: themeColors.ground },
+                ]}
+                testID={`window-${windowRoute?.key}`}
+              >
+                {windowRoute && ROUTES[windowRoute.key].live ? (
+                  <LiveZone>
+                    <SafeAreaProvider style={styles.fill}>
+                      {windowContent}
+                    </SafeAreaProvider>
+                  </LiveZone>
+                ) : (
+                  <SafeAreaProvider style={styles.fill}>
+                    {windowContent}
+                  </SafeAreaProvider>
+                )}
+              </View>
+            ) : null}
+            {/* Ask Duna stays mounted so its conversation survives closing it. */}
+            <View
+              pointerEvents={windowRoute?.key === "ai" ? "auto" : "none"}
+              style={[
+                StyleSheet.absoluteFill,
+                windowRoute?.key === "ai"
+                  ? [styles.window, { backgroundColor: themeColors.ground }]
+                  : styles.hidden,
+              ]}
+              testID="window-ai"
+            >
+              <ThemeOverride theme={legacyDark ? "dark" : "light"}>
+                <DunaAiScreen
+                  onClose={() => dispatch({ type: "close-window" })}
+                  palette={askDunaPalette()}
+                  pathname={`/${windowTab}`}
+                />
+              </ThemeOverride>
+            </View>
+            <NewSheet
+              onClose={() => dispatch({ type: "close-sheet" })}
+              onOpen={(route) => dispatch({ type: "open", route })}
+              visible={state.sheet === "new"}
+            />
+            <ShellConditions
+              dateKey={conditionsDate}
+              onClose={() => setConditionsDate(undefined)}
+            />
+          </View>
+        </DayProvider>
+      </ShellContext.Provider>
       {layoutLabOpen && mode === "preview" ? (
         <ProLayoutLab onClose={() => setLayoutLabOpen(false)} />
       ) : null}
@@ -512,3 +351,9 @@ export function ProApp() {
     </DevicePostureProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  window: { zIndex: 10 },
+  hidden: { opacity: 0 },
+});
