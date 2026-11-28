@@ -2213,7 +2213,7 @@ body {
 }
 
 .campaign-hero h1 em {
-  color: #a43e12;
+  color: var(--td-energy-ink);
   font-style: italic;
   font-weight: 600;
 }
@@ -3211,12 +3211,13 @@ body {
   background: var(--btn-primary-bg);
 }
 
-/* Operator story — four chapters and one formal HQ accent. */
+/* Operator story — four chapters and one formal HQ accent.
+   F2b: the lime HQ accent is retired; Dune signal and the Night Court action. */
 .club-marketing-page {
-  --hq-tint: #e8f2d4;
-  --hq-core: #a9c463;
-  --hq-ink: #3f5417;
-  --hq-deep: #1e2a0e;
+  --hq-tint: var(--td-energy-wash);
+  --hq-core: var(--td-energy);
+  --hq-ink: var(--td-energy-ink);
+  --hq-deep: var(--td-action);
 }
 
 .club-marketing-hero {
@@ -3293,7 +3294,7 @@ body {
 
 .club-marketing-primary {
   background: var(--hq-deep);
-  color: #f2f0ea;
+  color: var(--td-on-action);
 }
 
 .club-marketing-secondary {
@@ -3327,7 +3328,7 @@ body {
 
 .club-marketing-product-grid aside,
 .club-marketing-risk-card {
-  color: #f2f0ea;
+  color: var(--td-on-action);
   background: var(--hq-deep);
 }
 
@@ -3455,11 +3456,11 @@ body {
 
 .club-marketing-payment-state {
   background: var(--hq-deep);
-  color: #f2f0ea;
+  color: var(--td-on-action);
 }
 
 .club-marketing-theme-preview article button {
-  color: #f2f0ea;
+  color: var(--td-on-action);
   background: var(--hq-deep);
 }
 

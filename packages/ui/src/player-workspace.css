@@ -1,11 +1,15 @@
-/* Player presentation roles. Live zones keep their own semantic palette. */
+/*
+ * Player presentation roles. Live zones keep their own semantic palette.
+ * Legacy aliases (F2b): the player ground is Salt and cards stay white; the
+ * roles resolve per theme on <html>. See docs/design/legacy-aliases.md.
+ */
 .player-shell[data-zone="athletic"] {
-  --player-ground: #fff;
-  --player-surface: #fff;
-  --player-soft: #f7f7f7;
-  --player-text: #202020;
-  --player-muted: #646464;
-  --player-line: #e5e5e5;
+  --player-ground: var(--td-ground);
+  --player-surface: var(--td-surface);
+  --player-soft: var(--td-surface-sunken);
+  --player-text: var(--td-text);
+  --player-muted: var(--td-text-2);
+  --player-line: var(--td-line);
   --ground: var(--player-ground);
   --surface-1: var(--player-surface);
   --surface-2: var(--player-soft);
@@ -16,27 +20,20 @@
   --text-2: var(--player-muted);
   --text-3: var(--player-muted);
   --hairline: var(--player-line);
-  --hairline-strong: var(--player-line);
+  --hairline-strong: var(--td-line-strong);
   --color-canvas: var(--player-ground);
   --color-canvas-soft: var(--player-soft);
   --color-surface: var(--player-surface);
   --color-surface-raised: var(--player-surface);
   --color-depth: var(--player-surface);
   --color-line: var(--player-line);
-  --color-line-strong: var(--player-line);
+  --color-line-strong: var(--td-line-strong);
   --color-ink: var(--player-text);
   --color-bone: var(--player-text);
   --color-bone-muted: var(--player-muted);
-  --signal-text: var(--player-muted);
-  --btn-primary-bg: var(--player-text);
-  --btn-primary-fg: var(--player-ground);
+  --signal-text: var(--td-energy-ink);
+  --btn-primary-bg: var(--td-action);
+  --btn-primary-fg: var(--td-on-action);
+  --btn-primary-hover: var(--td-action-hover);
   --shadow-small: none;
-}
-html[data-theme="dark"] .player-shell[data-zone="athletic"] {
-  --player-ground: #191919;
-  --player-surface: #222;
-  --player-soft: #2b2b2b;
-  --player-text: #f5f5f5;
-  --player-muted: #b8b8b8;
-  --player-line: #3b3b3b;
 }
