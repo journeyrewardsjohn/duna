@@ -31,7 +31,7 @@ package: [`canvases.md`](../design/tideline-4.1.1/canvases.md).
 | Wave | Web / HQ / backend                                                                                                    | Native                                                                                                                |
 | ---- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | 0    | R1 (PR queue), **R2 (this contract and the verifier)**, R3 (seams, flag registry, HQ route map), R4 (CI)              | M-G0 (merge the Player split after a simulator smoke test), M-G1 (done by R2)                                         |
-| 1    | F1, F2a, F2b, F3, F4, F5a, F6a; then F5b–e and F6b–d deletions                                                        | M-F0 tokens, M-F1 foundation, M-F2 layout, M-F3 posture module, M-F4 shared logic, M-F5 Pro split, M-N1 native config |
+| 1    | F1, F2a, F2b, F3, F4 (F5a, F6a, F5b–e, F6b–d cancelled: see below)                                                    | M-F0 tokens, M-F1 foundation, M-F2 layout, M-F3 posture module, M-F4 shared logic, M-F5 Pro split, M-N1 native config |
 | 2    | **S2 merges alone (HQ freeze)**, then S1, S3, S4, C1–C7, P1, P2                                                       | M-C1 … M-C7 component families                                                                                        |
 | 3    | W3-0: the schema steward lands every W3 table in one migration plus contracts and demo stubs; then B1–B11 in parallel | M-P0 shell first, then M-P1 … M-P7 Player screens                                                                     |
 | 4    | H1–H14 and P3–P9 against frozen contracts, area by area                                                               | M-R0 Pro shell, then M-R1 … M-R6 (alongside wave 3 once M-F5 lands)                                                   |
@@ -41,6 +41,48 @@ Tokens: web/HQ consume `packages/ui/src/tideline/tokens*` (F2a); native
 consumes the generated `tokens.native.ts` (M-F0). Both read the one
 `tokens.json` built from [`docs/design/tideline-4.1.1/tokens.json`](../design/tideline-4.1.1/tokens.json);
 agree names before F2a merges (rename `salt-*` / `night-*`, never re-value).
+
+## Legacy styles: replace, do not preserve (28 November 2026)
+
+The owner decided that old screens and their style rules are replaced outright
+by new screens on the Duna Design System. Nothing guards, measures, pins or
+layers the old styles any more. The full decision is
+[`legacy-styles.md`](legacy-styles.md). In short:
+
+- **Two root layouts per app.** `app/(next)/` has a root layout that imports
+  only the design system (`@duna/ui/tideline/styles.css`, the app's fonts and
+  its token-based CSS). `app/(legacy)/` keeps today's root layout and legacy
+  sheets, untouched, for pages not yet rebuilt. They are separate documents,
+  so they load separate CSS. Moving between them is a full page load.
+- **A screen package moves its route** from `(legacy)` to `(next)` and deletes
+  the old page's components, styles and tests in the same pull request. Never
+  add to a legacy sheet; nothing in `(next)` imports one; nobody spends time
+  keeping an old screen pixel-identical.
+- **When `(legacy)` is empty**, its layout and every legacy sheet are deleted.
+  `packages/ui/src/tideline/legacy-bridge.css` goes when the design-system
+  gallery (`/tideline`) moves to the `(next)` root layout; until then the
+  gallery renders inside the legacy HQ root layout and relies on it.
+- **Cancelled:** F5a, F6a, F5b–e and F6b–d (the cascade layering and the
+  one-sheet-per-PR dead-CSS deletions). No `@layer legacy`, no `host.css`, no
+  zero-diff runs.
+- **Removed:** the HQ visual regression workflow and suite, the CSS usage and
+  coverage reports, the HQ CSS line ratchet, `hq-ui-contracts.spec.ts`, the unit
+  tests that read legacy style sheets, and the `legacy` styling pins in
+  `scripts/design-contracts/`.
+
+Checks that remain, because they earn their cost:
+
+- The CI release gate: type-check, lint, unit tests, builds and end-to-end.
+- The persona journeys.
+- A Vercel-equivalent build step (arriving with the HQ production fix).
+- A rehearsal on a throwaway database branch for each migration.
+- Checking both production deploys after every merge.
+- Looking at screenshots of what you built.
+- `pnpm verify:design-system`, `verify:readable-type` and
+  `verify:single-react-types`, which enforce the new system on new code.
+
+Not kept: repeat-run flake hunts on legacy specs, separate "verify" agents for
+low-risk changes, and local runs of suites CI already runs.
 
 ### Owner requirements added on 27 November 2026
 

@@ -2,12 +2,11 @@
  * Data model for the design-system verifier (`scripts/verify-design-system.ts`).
  *
  * Every surface keeps its contracts in its own file in this folder. A check
- * marked `legacy` pins a pre-Tideline literal (an old string, class, colour or
- * font): it protects today's shipped behaviour until that surface migrates to
- * the Duna Design System (Tideline 4.1.1). The surface's own work package
- * deletes its legacy checks in the same pull request that replaces the code,
- * and re-expresses any behaviour that must survive (for example "Next up comes
- * from future bookings") as a unit or e2e test.
+ * marked `legacy` pins behaviour of an old screen (for example "Next up comes
+ * from future bookings") until that screen is rebuilt on the Duna Design System
+ * (Tideline 4.1.1); the rebuild deletes it and re-expresses the behaviour as a
+ * unit or e2e test. Checks that pinned old styling were removed on 28 November
+ * 2026: nothing guards or preserves a legacy style (docs/plan/legacy-styles.md).
  *
  * Contract: docs/design/tideline-4.1.1/README.md. Rules: docs/plan/README.md.
  */
