@@ -303,7 +303,6 @@ export function AskDunaWorkspace({
     <section
       className={`ask-duna ${history ? "ask-duna--history" : "ask-duna--new"}`}
       data-zone="editorial"
-      role="main"
     >
       <header className="ask-duna-header">
         <span>

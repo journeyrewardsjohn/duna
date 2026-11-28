@@ -23,14 +23,18 @@ export default async function AskDunaPage({
   const workspace = await caller.operator.workspace();
   return (
     <OperatorShell active="ask" organization={workspace.organization}>
-      <AskDunaWorkspace
-        key={`${actor.personId}:${actor.organizationId}:${parts[0] ?? "new"}`}
-        history={parts[0] === "history"}
-        conversationId={parts[0] === "history" ? undefined : parts[0]}
-        operatorName={actor.displayName}
-        organizationName={workspace.organization.name}
-        scopeKey={`${actor.personId}:${actor.organizationId}`}
-      />
+      {/* One main landmark in every state (loading, history, a thread);
+          display: contents keeps the legacy layout unchanged. */}
+      <main style={{ display: "contents" }}>
+        <AskDunaWorkspace
+          key={`${actor.personId}:${actor.organizationId}:${parts[0] ?? "new"}`}
+          history={parts[0] === "history"}
+          conversationId={parts[0] === "history" ? undefined : parts[0]}
+          operatorName={actor.displayName}
+          organizationName={workspace.organization.name}
+          scopeKey={`${actor.personId}:${actor.organizationId}`}
+        />
+      </main>
     </OperatorShell>
   );
 }

@@ -7,122 +7,6 @@ import {
 import { knownIssues } from "./personas/support/known-issues";
 import { formatIssues, QualityMonitor } from "./personas/support/quality";
 
-// Fixed demo-adapter record ids (not secrets; absent from connected data).
-const venue = "10000000-0000-4000-8000-000000000101";
-const court = "10000000-0000-4000-8000-000000000103";
-const clinic = "10000000-0000-4000-8000-000000000301";
-const tournament = "10000000-0000-4000-8000-000000000303";
-const member = "10000000-0000-4000-8000-000000000201";
-const audience = "00000000-0000-4000-8000-000000000091";
-const transaction = "00000000-0000-4000-8000-000000000093";
-const practicePlan = "33000000-0000-4000-8000-000000000300";
-const practice = "33000000-0000-4000-8000-000000000600";
-const program = "33000000-0000-4000-8000-000000000400";
-
-/** Concrete demo paths per page template (formerly the visual matrix's). */
-const demoRoutes: readonly { path: string; page: string }[] = [
-  { path: "/", page: "/" },
-  { path: "/setup", page: "/setup" },
-  { path: "/schedule", page: "/[module]" },
-  { path: "/activities", page: "/activities" },
-  { path: "/ask", page: "/ask/[[...conversation]]" },
-  { path: "/ask/history", page: "/ask/[[...conversation]]" },
-  { path: "/setup/places", page: "/setup/places" },
-  { path: "/setup/places/create", page: "/setup/places/create" },
-  { path: `/setup/places/${venue}`, page: "/setup/places/[venueId]" },
-  {
-    path: `/setup/places/${venue}/layout`,
-    page: "/setup/places/[venueId]/layout",
-  },
-  {
-    path: `/setup/places/${venue}/courts/create`,
-    page: "/setup/places/[venueId]/courts/create",
-  },
-  {
-    path: `/setup/places/${venue}/courts/${court}`,
-    page: "/setup/places/[venueId]/courts/[courtId]",
-  },
-  { path: "/people", page: "/[module]" },
-  { path: `/people/${member}`, page: "/people/[personId]" },
-  { path: "/people/invite", page: "/people/invite" },
-  { path: "/team", page: "/[module]" },
-  { path: "/team/invite", page: "/team/invite" },
-  { path: "/training", page: "/training" },
-  { path: "/training/drills/create", page: "/training/drills/create" },
-  {
-    path: "/training/drills/create/advanced",
-    page: "/training/drills/create/advanced",
-  },
-  {
-    path: "/training/practice-plans/create",
-    page: "/training/practice-plans/create",
-  },
-  {
-    path: `/training/practice-plans/${practicePlan}`,
-    page: "/training/practice-plans/[planId]",
-  },
-  {
-    path: `/training/practice-plans/${practicePlan}/print`,
-    page: "/training/practice-plans/[planId]/print",
-  },
-  {
-    path: `/training/practices/${practice}`,
-    page: "/training/practices/[eventId]",
-  },
-  { path: "/training/programs/create", page: "/training/programs/create" },
-  {
-    path: `/training/programs/${program}`,
-    page: "/training/programs/[programId]",
-  },
-  { path: "/programs", page: "/programs" },
-  { path: "/offerings", page: "/[module]" },
-  { path: "/offerings/create", page: "/offerings/create" },
-  { path: "/offerings/types/services", page: "/offerings/types/[productType]" },
-  { path: "/offerings/types/plans", page: "/offerings/types/[productType]" },
-  { path: "/offerings/types/goods", page: "/offerings/types/[productType]" },
-  { path: "/events", page: "/[module]" },
-  { path: "/events/create", page: "/events/create" },
-  { path: "/events/types/tournaments", page: "/events/types/[eventType]" },
-  { path: "/events/types/clinics", page: "/events/types/[eventType]" },
-  { path: "/events/types/open-play", page: "/events/types/[eventType]" },
-  { path: "/events/types/pickup", page: "/events/types/[eventType]" },
-  { path: `/events/${clinic}`, page: "/events/[sessionId]" },
-  { path: `/events/${tournament}`, page: "/events/[sessionId]" },
-  { path: "/events?type=league", page: "/[module]" },
-  { path: "/inbox", page: "/inbox" },
-  { path: "/inbox/create", page: "/inbox/create" },
-  { path: "/marketing/audiences", page: "/marketing/audiences" },
-  { path: "/marketing/audiences/create", page: "/marketing/audiences/create" },
-  {
-    path: `/marketing/audiences/${audience}`,
-    page: "/marketing/audiences/[audienceId]",
-  },
-  { path: "/website", page: "/website" },
-  { path: "/money", page: "/money" },
-  { path: "/money/setup", page: "/money/setup" },
-  { path: "/money/transactions", page: "/money/transactions" },
-  {
-    path: `/money/transactions/${transaction}`,
-    page: "/money/transactions/[transactionId]",
-  },
-  { path: "/money/disputes", page: "/money/disputes" },
-  { path: "/money/payouts", page: "/money/payouts" },
-  { path: "/money/refund-policies", page: "/money/refund-policies" },
-  { path: "/marketing", page: "/[module]" },
-  { path: "/marketing/create", page: "/marketing/create" },
-  { path: "/reports", page: "/[module]" },
-  { path: "/settings", page: "/settings" },
-  { path: "/setup/identity", page: "/setup/identity" },
-  { path: "/account", page: "/account" },
-  { path: "/setup/start", page: "/setup/start" },
-  { path: "/setup/start/complete", page: "/setup/start/complete" },
-  { path: "/overview", page: "/[module]" },
-  { path: "/admin", page: "/admin" },
-  { path: "/admin/organizations", page: "/admin/[module]" },
-  { path: "/admin/ask-duna", page: "/admin/ask-duna" },
-  { path: "/admin/video", page: "/admin/video" },
-];
-
 /**
  * Walks HQ in demo mode (work package S2): every sidebar item, and every page
  * template in `@duna/core/hq-routes`, must answer with HTTP success, render
@@ -155,73 +39,114 @@ const sidebar = [
   ["Reports", "/reports"],
 ] as const;
 
-/** Demo-adapter ids for templates the visual matrix cannot open. */
-const extraPaths: Readonly<Record<string, string>> = {
-  [hqRoutes.offering]: "/offerings/10000000-0000-4000-8000-000000000401",
-  [hqRoutes.offeringBuilder]:
-    "/offerings/10000000-0000-4000-8000-000000000401/builder",
-  [hqRoutes.offeringDraftReady]:
-    "/offerings/10000000-0000-4000-8000-000000000401/draft-ready",
-  [hqRoutes.teamMember]: "/team/10000000-0000-4000-8000-000000000201",
-  [hqRoutes.eventDivision]:
-    "/events/10000000-0000-4000-8000-000000000303/divisions/00000000-0000-4000-8000-000000000001",
-  [hqRoutes.eventCourtBooking]:
-    "/events/court-bookings/00000000-0000-4000-8000-000000000001",
-  [hqRoutes.eventMatch]: "/events/matches/00000000-0000-4000-8000-000000000001",
-  [hqRoutes.memberHealth]:
-    "/people/10000000-0000-4000-8000-000000000201/health",
-  [hqRoutes.marketingPromoCodes]: "/marketing/promo-codes",
-  [hqRoutes.stripeReturn]: "/stripe/return?result=return",
-  [hqRoutes.adminMessagingSafety]: "/admin/messaging-safety",
-  [hqRoutes.adminSupport]: "/admin/support",
-  [hqRoutes.adminOrganization]:
-    "/admin/organizations/00000000-0000-4000-8000-000000000001",
+// Fixed demo-adapter identifiers (not secrets; they exist in no connected
+// environment).
+const venue = "10000000-0000-4000-8000-000000000101";
+const court = "10000000-0000-4000-8000-000000000103";
+const clinic = "10000000-0000-4000-8000-000000000301";
+const tournament = "10000000-0000-4000-8000-000000000303";
+const member = "10000000-0000-4000-8000-000000000201";
+const audience = "00000000-0000-4000-8000-000000000091";
+const transaction = "00000000-0000-4000-8000-000000000093";
+const practicePlan = "33000000-0000-4000-8000-000000000300";
+const practice = "33000000-0000-4000-8000-000000000600";
+const program = "33000000-0000-4000-8000-000000000400";
+const missing = "00000000-0000-4000-8000-000000000001";
+
+/** Concrete paths for every dynamic template (static ones walk as written). */
+const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
+  [hqRoutes.ask]: ["/ask", "/ask/history"],
+  [hqRoutes.module]: [
+    "/schedule",
+    "/people",
+    "/team",
+    "/events",
+    "/offerings",
+    "/marketing",
+    "/reports",
+  ],
+  [hqRoutes.member]: [`/people/${member}`],
+  [hqRoutes.memberHealth]: [`/people/${member}/health`],
+  [hqRoutes.teamMember]: [`/team/${member}`],
+  [hqRoutes.trainingPracticePlan]: [`/training/practice-plans/${practicePlan}`],
+  [hqRoutes.trainingPracticePlanPrint]: [
+    `/training/practice-plans/${practicePlan}/print`,
+  ],
+  [hqRoutes.trainingPractice]: [`/training/practices/${practice}`],
+  [hqRoutes.trainingProgram]: [`/training/programs/${program}`],
+  [hqRoutes.event]: [`/events/${clinic}`, `/events/${tournament}`],
+  [hqRoutes.eventDivision]: [`/events/${tournament}/divisions/${missing}`],
+  [hqRoutes.eventCourtBooking]: [`/events/court-bookings/${missing}`],
+  [hqRoutes.eventMatch]: [`/events/matches/${missing}`],
+  [hqRoutes.eventType]: [
+    "/events/types/tournaments",
+    "/events/types/clinics",
+    "/events/types/open-play",
+    "/events/types/pickup",
+  ],
+  [hqRoutes.offering]: [`/offerings/${missing}`],
+  [hqRoutes.offeringBuilder]: [`/offerings/${missing}/builder`],
+  [hqRoutes.offeringDraftReady]: [`/offerings/${missing}/draft-ready`],
+  [hqRoutes.offeringType]: [
+    "/offerings/types/services",
+    "/offerings/types/plans",
+    "/offerings/types/goods",
+  ],
+  [hqRoutes.moneyTransaction]: [`/money/transactions/${transaction}`],
+  [hqRoutes.place]: [`/setup/places/${venue}`],
+  [hqRoutes.placeLayout]: [`/setup/places/${venue}/layout`],
+  [hqRoutes.placeCourtCreate]: [`/setup/places/${venue}/courts/create`],
+  [hqRoutes.placeCourt]: [`/setup/places/${venue}/courts/${court}`],
+  [hqRoutes.marketingAudience]: [`/marketing/audiences/${audience}`],
+  [hqRoutes.adminOrganization]: [`/admin/organizations/${missing}`],
+  [hqRoutes.adminModule]: ["/admin/organizations"],
 };
+
+const extraPaths = {
+  offering: `/offerings/${missing}`,
+  offeringBuilder: `/offerings/${missing}/builder`,
+  offeringDraftReady: `/offerings/${missing}/draft-ready`,
+  teamMember: `/team/${member}`,
+  eventDivision: `/events/${tournament}/divisions/${missing}`,
+  eventCourtBooking: `/events/court-bookings/${missing}`,
+  eventMatch: `/events/matches/${missing}`,
+  memberHealth: `/people/${member}/health`,
+  stripeReturn: hqRoutes.stripeReturn,
+  adminMessagingSafety: hqRoutes.adminMessagingSafety,
+  adminSupport: hqRoutes.adminSupport,
+  adminOrganization: `/admin/organizations/${missing}`,
+} as const;
 
 /**
  * Pages that fail one of the checks in demo mode on `main` before S2, each
  * with the package that fixes it. Keyed by the concrete path walked.
  */
 const knownFailures: Readonly<Record<string, string>> = {
-  "/ask": "S1: /ask renders without a main landmark (persona known issue).",
-  "/account":
-    "S1: /account renders without a main landmark (persona known issue).",
-  "/marketing/promo-codes":
-    "Q1: promo codes throw in demo mode (persona-journeys.md, H13).",
-  [extraPaths[hqRoutes.offering]!]:
+  [extraPaths.offering]:
     "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths[hqRoutes.offeringBuilder]!]:
+  [extraPaths.offeringBuilder]:
     "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths[hqRoutes.offeringDraftReady]!]:
+  [extraPaths.offeringDraftReady]:
     "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths[hqRoutes.teamMember]!]:
-    "H5: the demo workspace has no staff records (404).",
-  [extraPaths[hqRoutes.eventDivision]!]:
-    "H9: no demo event has an entry division (404).",
-  [extraPaths[hqRoutes.eventCourtBooking]!]:
+  [extraPaths.teamMember]: "H5: the demo workspace has no staff records (404).",
+  [extraPaths.eventDivision]: "H9: no demo event has an entry division (404).",
+  [extraPaths.eventCourtBooking]:
     "H9: operator.activityDetail needs the connected database in demo mode.",
-  [extraPaths[hqRoutes.eventMatch]!]:
+  [extraPaths.eventMatch]:
     "H9: operator.activityDetail needs the connected database in demo mode.",
-  [extraPaths[hqRoutes.memberHealth]!]:
+  [extraPaths.memberHealth]:
     "H4: operator.memberHealthProfile needs the connected database in demo mode.",
-  [extraPaths[hqRoutes.adminOrganization]!]:
-    "Unassigned (Super Admin; no package yet): needs a platform role and a connected organization record.",
 };
 
-/** One concrete path per page template, plus the league filter of Events. */
+/** One or more concrete paths per page template, plus the league filter. */
 function walkPaths(): string[] {
   const templates = [...new Set(Object.values(hqRoutes) as string[])].filter(
     (template) => !isHqDevOnlyRoute(template),
   );
   const paths = templates.flatMap((template) => {
-    const covered = demoRoutes
-      .filter((route) => route.page === template)
-      .map((route) => route.path)
-      .filter((path) => path !== "/overview");
-    if (covered.length > 0) return covered;
-    const extra = extraPaths[template];
-    if (!extra) throw new Error(`No walk path for ${template}`);
-    return [extra];
+    if (template in dynamicPaths) return [...dynamicPaths[template]!];
+    if (template.includes("[")) throw new Error(`No walk path for ${template}`);
+    return [template];
   });
   return [...new Set([...paths, hqLeaguesPath])];
 }
@@ -235,6 +160,12 @@ async function expectHealthyPage(page: Page, path: string) {
   expect(response, `${path}: no response`).not.toBeNull();
   expect(response!.status(), `${path}: HTTP status`).toBeLessThan(400);
   await page.waitForLoadState("load");
+  // Streamed sections (and their error or not-found states) arrive after the
+  // load event; the negative checks below are only meaningful once they have.
+  // Live-update streams keep a connection open, so idle is best effort.
+  await page
+    .waitForLoadState("networkidle", { timeout: 15_000 })
+    .catch(() => undefined);
   await expect(
     page.getByText(
       /This page didn.t load|This page couldn.t load|Application error/,
@@ -253,7 +184,7 @@ test.describe("HQ route walk (demo mode)", () => {
   test.beforeEach(({}, testInfo) => {
     test.skip(
       testInfo.project.name !== "desktop",
-      "Route health does not depend on the viewport; the sidebar is checked at every width by hq-shell.spec.ts.",
+      "Route health does not depend on the viewport; one width is enough here.",
     );
   });
 

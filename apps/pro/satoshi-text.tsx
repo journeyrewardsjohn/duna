@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-import { useFonts } from "expo-font";
+import { fontFace } from "@duna/ui/native/type";
 import {
   StyleSheet,
   Text as NativeText,
@@ -9,13 +8,13 @@ import {
   type TextStyle,
 } from "react-native";
 
-const satoshiFonts = {
-  "Satoshi-Light": require("./assets/fonts/Satoshi-Light.ttf"),
-  Satoshi: require("./assets/fonts/Satoshi-Regular.ttf"),
-  "Satoshi-Medium": require("./assets/fonts/Satoshi-Medium.ttf"),
-  "Satoshi-Bold": require("./assets/fonts/Satoshi-Bold.ttf"),
-  "Satoshi-Black": require("./assets/fonts/Satoshi-Black.ttf"),
-} as const;
+/**
+ * The legacy text layer (M-F0/M-F1): the names stay so unmigrated screens
+ * keep working, but every face is now Geist, embedded in the app by the
+ * `expo-font` config plugin (app.json). Weights resolve to a shipped face,
+ * never a synthesized one. New screens use `@duna/ui/native` (`Text`,
+ * `Title`, `Numerals`).
+ */
 
 export type DunaNumericTier =
   "score" | "monument" | "hero" | "block" | "table" | "chip";
@@ -38,26 +37,13 @@ const numericWeight: Record<DunaNumericTier, TextStyle["fontWeight"]> = {
   chip: "700",
 };
 
-function satoshiFamily(style: TextProps["style"] | TextInputProps["style"]) {
-  const weight = StyleSheet.flatten(style as TextStyle)?.fontWeight;
-  const numericWeight =
-    weight === "bold"
-      ? 700
-      : typeof weight === "number"
-        ? weight
-        : Number.parseInt(weight ?? "400", 10);
-
-  if (numericWeight >= 800) return "Satoshi-Black";
-  // Satoshi has no shipped semibold face. Map 600 to Bold instead of
-  // synthesizing an in-between weight that renders differently by platform.
-  if (numericWeight >= 600) return "Satoshi-Bold";
-  if (numericWeight >= 500) return "Satoshi-Medium";
-  if (numericWeight <= 350) return "Satoshi-Light";
-  return "Satoshi";
+function weightOf(style: TextProps["style"] | TextInputProps["style"]) {
+  return StyleSheet.flatten(style as TextStyle)?.fontWeight;
 }
 
-export function useSatoshiFonts() {
-  return useFonts(satoshiFonts);
+/** Was Satoshi: now the Geist face for the style's weight. */
+function satoshiFamily(style: TextProps["style"] | TextInputProps["style"]) {
+  return fontFace("ui", weightOf(style));
 }
 
 export function SatoshiText({ style, ...props }: TextProps) {

@@ -22,6 +22,7 @@
     "@duna/league-engine": "workspace:*",
     "@duna/messaging-client": "workspace:*",
     "@duna/mobile-auth": "workspace:*",
+    "@duna/observability": "workspace:*",
     "@duna/scheduling": "workspace:*",
     "@duna/ui": "workspace:*",
     "@expo/dom-webview": "~58.0.2",

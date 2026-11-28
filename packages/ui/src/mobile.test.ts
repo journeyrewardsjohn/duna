@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { nativeTokens } from "./native/tokens/tokens.native";
 import {
   dunaAppColors,
   dunaAppShape,
@@ -22,13 +23,28 @@ describe("Duna mobile design tokens", () => {
     expect(dunaLaunchFilmMinimumMs).toBeGreaterThanOrEqual(10_042);
   });
 
-  it("keeps product surfaces neutral and Duna accents role-based", () => {
-    expect(dunaAppColors.page).toBe("#FCFCFF");
-    expect(dunaAppColors.ink).toBe("#18181B");
-    expect(dunaAppColors.navy).toBe("#142335");
-    expect(dunaAppColors.blush).toBe("#FECFC0");
+  it("maps the legacy colour names onto Tideline 4.1.1 roles", () => {
+    const light = nativeTokens.color.light;
+    expect(dunaAppColors.page).toBe(light.ground);
+    expect(dunaAppColors.page).toBe("#f4f2ec");
+    expect(dunaAppColors.ink).toBe("#0e1a22");
+    expect(dunaAppColors.navy).toBe(light.action);
     expect(dunaAppShape.cardRadius).toBe(20);
     expect(dunaAppShape.sectionRadius).toBe(28);
+  });
+
+  it("carries no retired orange", () => {
+    const values = [
+      ...Object.values(dunaAppColors),
+      ...(["light", "dark"] as const).flatMap((theme) =>
+        (["editorial", "athletic", "live"] as const).flatMap((zone) =>
+          Object.values(resolveDunaMobileTokens(theme, zone)),
+        ),
+      ),
+    ].map((value) => String(value).toLowerCase());
+    for (const retired of ["#e8683a", "#b84a20", "#f28a64", "#f4794c"]) {
+      expect(values).not.toContain(retired);
+    }
   });
 
   it("translates theme and zone semantics for native surfaces", () => {
@@ -36,7 +52,10 @@ describe("Duna mobile design tokens", () => {
     const recording = resolveDunaMobileTokens("dark", "live");
 
     expect(setup.ground).not.toBe(recording.ground);
-    expect(setup.buttonPrimaryBackground).toBe("#1B1B19");
-    expect(recording.buttonPrimaryBackground).toBe("#EDF1F2");
+    expect(setup.buttonPrimaryBackground).toBe("#0e1a22");
+    expect(recording.buttonPrimaryBackground).toBe("#d9c3a0");
+    // Solar only in the live zone.
+    expect(recording.flare).toBe("#f2542d");
+    expect(setup.flare).not.toBe("#f2542d");
   });
 });
