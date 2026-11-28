@@ -698,7 +698,9 @@ function EventManagementControls({
             </span>
             <span>
               <strong>
-                {formatMoney(preview.cashRefundMinor, preview.currency)}
+                {preview.cashRefundMinor !== undefined
+                  ? formatMoney(preview.cashRefundMinor, preview.currency)
+                  : "Refunds"}
               </strong>
               <small>
                 {canRetryRefunds
@@ -768,14 +770,16 @@ function RefundPaymentControl({
   readonly registrationId: string;
   readonly payerName: string;
   readonly preview?: OperatorSessionDetail["cancellationPreview"]["orders"][number];
-  readonly currency: OperatorSessionDetail["finance"]["currency"];
+  readonly currency: OperatorSessionDetail["session"]["currency"];
   readonly compact?: boolean;
 }) {
   const [state, action, pending] = useActionState(
     refundEventRegistrationAction,
     initialState,
   );
-  if (!preview) return null;
+  // No amounts (PRIV-2) means the role cannot refund either.
+  if (!preview || preview.cashRefundMinor === undefined) return null;
+  const cashRefundMinor = preview.cashRefundMinor;
   return (
     <details
       className={`event-roster-refund${compact ? " event-roster-refund--compact" : ""}`}
@@ -788,8 +792,8 @@ function RefundPaymentControl({
         <input name="orderId" type="hidden" value={preview.orderId} />
         <strong>Refund {payerName}</strong>
         <small>
-          {preview.cashRefundMinor > 0
-            ? `${formatMoney(preview.cashRefundMinor, currency)} to the original payment`
+          {cashRefundMinor > 0
+            ? `${formatMoney(cashRefundMinor, currency)} to the original payment`
             : `${preview.creditsToRestore} organization credits to their wallet`}
         </small>
         <textarea
@@ -1111,7 +1115,9 @@ export function EventOperationsWorkspace({
         teams,
         readyTeams: teams.filter((team) => !team.needsAttention).length,
         paidTeams: teams.filter(
-          (team) => team.paidPlayers >= team.expectedTeamSize,
+          (team) =>
+            team.paidPlayers !== undefined &&
+            team.paidPlayers >= team.expectedTeamSize,
         ).length,
         confirmedTeams: teams.filter(
           (team) => team.selectionStatus === "confirmed",
@@ -1277,23 +1283,7 @@ export function EventOperationsWorkspace({
             {noShows} no-shows · {cancelled} cancelled
           </span>
         </article>
-        <article>
-          <small>Gross collected</small>
-          <strong>
-            {formatMoney(detail.finance.grossMinor, detail.finance.currency)}
-          </strong>
-          <span>{detail.finance.paidOrders} paid orders</span>
-        </article>
-        <article>
-          <small>Net after refunds</small>
-          <strong>
-            {formatMoney(detail.finance.netMinor, detail.finance.currency)}
-          </strong>
-          <span>
-            {formatMoney(detail.finance.refundedMinor, detail.finance.currency)}{" "}
-            returned
-          </span>
-        </article>
+        {detail.finance ? <FinanceMetrics finance={detail.finance} /> : null}
       </section>
 
       <section
@@ -1395,13 +1385,11 @@ export function EventOperationsWorkspace({
             </small>
             {detail.operations.refundSummary && (
               <small>
-                {formatMoney(
-                  detail.operations.refundSummary.cashRefundMinor,
-                  detail.finance.currency,
-                )}{" "}
-                submitted · {detail.operations.refundSummary.creditsRestored}{" "}
-                credits restored · refund status{" "}
-                {detail.operations.refundStatus}
+                {detail.operations.refundSummary.cashRefundMinor !== undefined
+                  ? `${formatMoney(detail.operations.refundSummary.cashRefundMinor, detail.session.currency)} submitted · `
+                  : ""}
+                {detail.operations.refundSummary.creditsRestored} credits
+                restored · refund status {detail.operations.refundStatus}
               </small>
             )}
           </span>
@@ -1573,9 +1561,11 @@ export function EventOperationsWorkspace({
                             <div>
                               <dt>Payment</dt>
                               <dd>
-                                {team.paidPlayers >= team.expectedTeamSize
-                                  ? "Fully paid"
-                                  : `${team.paidPlayers}/${team.expectedTeamSize} paid`}
+                                {team.paidPlayers === undefined
+                                  ? "Not shown for your role"
+                                  : team.paidPlayers >= team.expectedTeamSize
+                                    ? "Fully paid"
+                                    : `${team.paidPlayers}/${team.expectedTeamSize} paid`}
                               </dd>
                             </div>
                             <div>
@@ -1607,7 +1597,7 @@ export function EventOperationsWorkspace({
                                   {member.orderId && (
                                     <RefundPaymentControl
                                       compact
-                                      currency={detail.finance.currency}
+                                      currency={detail.session.currency}
                                       payerName={member.displayName}
                                       preview={paymentPreview}
                                       registrationId={team.registrationId}
@@ -1699,21 +1689,23 @@ export function EventOperationsWorkspace({
                           ? "Guest claimed"
                           : "Duna player"}
                     </Badge>
-                    <Badge
-                      tone={
-                        attendee.paymentStatus === "payment-due"
-                          ? "warning"
-                          : "positive"
-                      }
-                    >
-                      {attendee.paymentStatus === "complimentary"
-                        ? "Comped"
-                        : attendee.paymentStatus === "payment-due"
-                          ? "Payment due"
-                          : attendee.paymentStatus === "free"
-                            ? "Free entry"
-                            : "Paid"}
-                    </Badge>
+                    {attendee.paymentStatus ? (
+                      <Badge
+                        tone={
+                          attendee.paymentStatus === "payment-due"
+                            ? "warning"
+                            : "positive"
+                        }
+                      >
+                        {attendee.paymentStatus === "complimentary"
+                          ? "Comped"
+                          : attendee.paymentStatus === "payment-due"
+                            ? "Payment due"
+                            : attendee.paymentStatus === "free"
+                              ? "Free entry"
+                              : "Paid"}
+                      </Badge>
+                    ) : null}
                   </span>
                   <span className="event-roster-list__money">
                     <strong>
@@ -1721,20 +1713,22 @@ export function EventOperationsWorkspace({
                         ? "Comped"
                         : attendee.paymentStatus === "payment-due"
                           ? "Due"
-                          : formatMoney(
-                              attendee.paidMinor,
-                              detail.finance.currency,
-                            )}
+                          : attendee.paidMinor !== undefined
+                            ? formatMoney(
+                                attendee.paidMinor,
+                                detail.session.currency,
+                              )
+                            : null}
                     </strong>
                     <small>
                       {attendee.refundedMinor
-                        ? `${formatMoney(attendee.refundedMinor, detail.finance.currency)} refunded`
+                        ? `${formatMoney(attendee.refundedMinor, detail.session.currency)} refunded`
                         : attendee.status.replaceAll("-", " ")}
                     </small>
                   </span>
                   <AttendanceControl attendee={attendee} />
                   <RefundPaymentControl
-                    currency={detail.finance.currency}
+                    currency={detail.session.currency}
                     payerName={attendee.displayName}
                     preview={detail.cancellationPreview.orders.find(
                       (order) => order.orderId === attendee.orderId,
@@ -2082,50 +2076,52 @@ export function EventOperationsWorkspace({
             )}
           </section>
 
-          <section className="hq-card event-finance-card">
-            <header>
-              <Coins aria-hidden size={20} />
-              <span>
-                <small>Clear money trail</small>
-                <h2>Session ledger</h2>
-              </span>
-            </header>
-            <dl>
-              <div>
-                <dt>Gross</dt>
-                <dd>
-                  {formatMoney(
-                    detail.finance.grossMinor,
-                    detail.finance.currency,
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>Refunds</dt>
-                <dd>
-                  −{" "}
-                  {formatMoney(
-                    detail.finance.refundedMinor,
-                    detail.finance.currency,
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>Net</dt>
-                <dd>
-                  {formatMoney(
-                    detail.finance.netMinor,
-                    detail.finance.currency,
-                  )}
-                </dd>
-              </div>
-            </dl>
-            <p>
-              <ReceiptText aria-hidden size={16} />
-              Refunds are initiated from the player profile and remain linked to
-              the original order and reversal journal.
-            </p>
-          </section>
+          {detail.finance ? (
+            <section className="hq-card event-finance-card">
+              <header>
+                <Coins aria-hidden size={20} />
+                <span>
+                  <small>Clear money trail</small>
+                  <h2>Session ledger</h2>
+                </span>
+              </header>
+              <dl>
+                <div>
+                  <dt>Gross</dt>
+                  <dd>
+                    {formatMoney(
+                      detail.finance.grossMinor,
+                      detail.finance.currency,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Refunds</dt>
+                  <dd>
+                    −{" "}
+                    {formatMoney(
+                      detail.finance.refundedMinor,
+                      detail.finance.currency,
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Net</dt>
+                  <dd>
+                    {formatMoney(
+                      detail.finance.netMinor,
+                      detail.finance.currency,
+                    )}
+                  </dd>
+                </div>
+              </dl>
+              <p>
+                <ReceiptText aria-hidden size={16} />
+                Refunds are initiated from the player profile and remain linked
+                to the original order and reversal journal.
+              </p>
+            </section>
+          ) : null}
 
           <section className="hq-card event-video-card">
             <header>
@@ -2172,5 +2168,28 @@ export function EventOperationsWorkspace({
         </aside>
       </section>
     </main>
+  );
+}
+
+function FinanceMetrics({
+  finance,
+}: {
+  readonly finance: NonNullable<OperatorSessionDetail["finance"]>;
+}) {
+  return (
+    <>
+      <article>
+        <small>Gross collected</small>
+        <strong>{formatMoney(finance.grossMinor, finance.currency)}</strong>
+        <span>{finance.paidOrders} paid orders</span>
+      </article>
+      <article>
+        <small>Net after refunds</small>
+        <strong>{formatMoney(finance.netMinor, finance.currency)}</strong>
+        <span>
+          {formatMoney(finance.refundedMinor, finance.currency)} returned
+        </span>
+      </article>
+    </>
   );
 }

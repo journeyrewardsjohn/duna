@@ -44,10 +44,23 @@ export default async function PersonPaymentsPage({
       </PersonScreen>
     );
   }
+  // canSeePayments is payments:read, so the server sent the amounts (PRIV-2);
+  // a purchase without one is skipped rather than shown as $0.
+  const purchases = profile.purchases.flatMap((purchase) =>
+    purchase.amountMinor === undefined
+      ? []
+      : [
+          {
+            ...purchase,
+            amountMinor: purchase.amountMinor,
+            refundedMinor: purchase.refundedMinor ?? 0,
+          },
+        ],
+  );
   const now = new Date(context.now);
   const currency = record.people.currency;
   const spent = row.spendMinor ?? 0;
-  const refunded = profile.purchases.reduce(
+  const refunded = purchases.reduce(
     (sum, purchase) => sum + purchase.refundedMinor,
     0,
   );
@@ -67,7 +80,7 @@ export default async function PersonPaymentsPage({
         </div>
         <div className="people-figure">
           <dt>Payments</dt>
-          <dd className="people-num">{profile.purchases.length}</dd>
+          <dd className="people-num">{purchases.length}</dd>
         </div>
         <div className="people-figure">
           <dt>Refunded</dt>
@@ -84,11 +97,11 @@ export default async function PersonPaymentsPage({
         id="payments"
         title="Payments"
       >
-        {profile.purchases.length === 0 ? (
+        {purchases.length === 0 ? (
           <p className="people-quiet people-pad">{`${first} hasn't paid the club yet.`}</p>
         ) : (
           <ul className="people-payments">
-            {profile.purchases.map((purchase) => (
+            {purchases.map((purchase) => (
               <li key={purchase.orderId}>
                 <span className="people-payments__what">
                   <Link

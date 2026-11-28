@@ -23,24 +23,36 @@ export interface CancelPreview {
   readonly refundChoice: boolean;
 }
 
-/** `operator.sessionDetail` → `cancellationPreview` (calendar sessions). */
+/**
+ * `operator.sessionDetail` → `cancellationPreview` (calendar sessions). The
+ * amounts are absent for roles without club money (PRIV-2): the sheet then
+ * says who is refunded, not how much.
+ */
 export interface SessionCancellationPreviewInput {
   readonly registrationCount: number;
-  readonly cashRefundMinor: number;
+  readonly cashRefundMinor?: number;
   readonly creditsToRestore: number;
   readonly currency: string;
   readonly orders: readonly {
     readonly orderId: string;
     readonly buyerName: string;
-    readonly totalMinor: number;
-    readonly cashRefundMinor: number;
+    readonly totalMinor?: number;
+    readonly cashRefundMinor?: number;
     readonly creditsToRestore: number;
   }[];
 }
 
-function totalLine(cashMinor: number, credits: number, currency: string) {
+function totalLine(
+  cashMinor: number | undefined,
+  credits: number,
+  currency: string,
+) {
   const parts = [
-    cashMinor > 0 ? `${formatMoney(cashMinor, currency)} back to cards` : null,
+    cashMinor === undefined
+      ? "Card payments refunded the way they were paid"
+      : cashMinor > 0
+        ? `${formatMoney(cashMinor, currency)} back to cards`
+        : null,
     credits > 0 ? `${formatCredits(credits)} restored` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "No money to return";
@@ -55,9 +67,11 @@ export function previewFromSession(
       name: order.buyerName,
       outcome:
         [
-          order.cashRefundMinor > 0
-            ? `Card refund ${formatMoney(order.cashRefundMinor, input.currency)}`
-            : null,
+          order.cashRefundMinor === undefined
+            ? "Refunded the way they paid"
+            : order.cashRefundMinor > 0
+              ? `Card refund ${formatMoney(order.cashRefundMinor, input.currency)}`
+              : null,
           order.creditsToRestore > 0
             ? `${formatCredits(order.creditsToRestore)} back`
             : null,

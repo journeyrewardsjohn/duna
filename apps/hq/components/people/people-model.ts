@@ -40,7 +40,8 @@ export interface WorkspacePerson {
   readonly membershipStatus?: string;
   readonly membershipName?: string;
   readonly creditBalance: number;
-  readonly lifetimeSpendMinor: number;
+  /** Absent for roles without payments:read (PRIV-2). */
+  readonly lifetimeSpendMinor?: number;
   readonly upcomingCount: number;
   readonly churnRisk: {
     readonly level: ChurnLevel;
@@ -1352,7 +1353,11 @@ export function redactProfile(
     phoneE164: isJunior ? undefined : profile.relationship.phoneE164,
     ...(permissions.canSeePayments
       ? {}
-      : { lifetimeSpendMinor: 0, purchaseCount: 0, recentPurchases: [] }),
+      : {
+          lifetimeSpendMinor: undefined,
+          purchaseCount: 0,
+          recentPurchases: [],
+        }),
   };
   return {
     ...profile,
@@ -1369,8 +1374,8 @@ export function redactProfile(
       ? profile.creditGrants
       : profile.creditGrants.map((grant) => ({
           ...grant,
-          initialValueMinor: 0,
-          remainingValueMinor: 0,
+          initialValueMinor: undefined,
+          remainingValueMinor: undefined,
         })),
     sessions: permissions.canSeePayments
       ? profile.sessions

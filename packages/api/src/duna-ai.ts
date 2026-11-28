@@ -6,6 +6,7 @@ import {
   tool,
   user,
 } from "@openai/agents";
+import { redactMoney, redactMoneyMetrics } from "./money-visibility";
 import { z } from "zod";
 import type {
   DiscoveryMapItem,
@@ -1060,9 +1061,13 @@ async function searchDunaKnowledge(input: {
   const canReadMembers = hasScope(input.actor, "members:read");
   const canReadPayments = hasScope(input.actor, "payments:read");
   const workspace = canReadSessions
-    ? input.actor.isDemo && !process.env.DATABASE_URL
-      ? loadDemoOperatorWorkspace(organizationId, input.now)
-      : await loadOperatorWorkspace(organizationId, input.actor.personId)
+    ? redactMoney(
+        "workspace",
+        input.actor.isDemo && !process.env.DATABASE_URL
+          ? loadDemoOperatorWorkspace(organizationId, input.now)
+          : await loadOperatorWorkspace(organizationId, input.actor.personId),
+        input.actor,
+      )
     : undefined;
 
   if (workspace && canReadMembers) {
@@ -1279,7 +1284,7 @@ async function buildContextSnapshot(input: {
     };
   }
   const canReadOperatingContext = hasScope(input.actor, "sessions:read");
-  const [dashboard, workspace] = await Promise.all([
+  const [unredactedDashboard, unredactedWorkspace] = await Promise.all([
     getRepository().operator.dashboard(input.actor.organizationId),
     canReadOperatingContext
       ? input.actor.isDemo && !process.env.DATABASE_URL
@@ -1292,6 +1297,11 @@ async function buildContextSnapshot(input: {
           )
       : Promise.resolve(undefined),
   ]);
+  // PRIV-2: the model and the metric cards only see money the actor may see.
+  const dashboard = redactMoneyMetrics(unredactedDashboard, input.actor);
+  const workspace = unredactedWorkspace
+    ? redactMoney("workspace", unredactedWorkspace, input.actor)
+    : undefined;
   const events = dashboard.events
     .filter((item) => Date.parse(item.endsAt) >= input.now.getTime())
     .slice(0, 30);

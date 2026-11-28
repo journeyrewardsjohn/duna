@@ -4187,6 +4187,7 @@ export const databaseRepository = {
             label: "Gross sales",
             value: formatUsd(grossSalesMinor),
             change: "Paid connected orders",
+            money: true,
           },
           { label: "Members", value: String(organization.memberCount) },
           {

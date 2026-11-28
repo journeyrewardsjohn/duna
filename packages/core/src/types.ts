@@ -596,6 +596,8 @@ export interface Metric {
   readonly change?: string;
   readonly trend?: "up" | "down" | "flat";
   readonly tone?: "default" | "positive" | "warning" | "danger";
+  /** The figure is club money (PRIV-2): hidden from roles without payments:read. */
+  readonly money?: boolean;
 }
 
 export interface NavItem {

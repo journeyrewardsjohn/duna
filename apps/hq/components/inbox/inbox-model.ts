@@ -519,7 +519,7 @@ export function personContextFrom(
     "USD";
   const remainingMinor = profile.creditGrants
     .filter((grant) => grant.status === "active")
-    .reduce((sum, grant) => sum + grant.remainingValueMinor, 0);
+    .reduce((sum, grant) => sum + (grant.remainingValueMinor ?? 0), 0);
   const upcoming = profile.sessions
     .filter(
       (session) =>
@@ -554,11 +554,13 @@ export function personContextFrom(
         }
       : {}),
     credits: row.credits,
-    ...(viewer.canSeePayments
+    // The server omits the amounts for roles without payments:read (PRIV-2).
+    ...(viewer.canSeePayments &&
+    profile.relationship.lifetimeSpendMinor !== undefined
       ? {
           balance: { minor: remainingMinor, currency },
           lifetimeSpend: {
-            minor: profile.relationship.lifetimeSpendMinor ?? 0,
+            minor: profile.relationship.lifetimeSpendMinor,
             currency,
           },
         }

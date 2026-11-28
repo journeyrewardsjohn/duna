@@ -127,6 +127,7 @@ export default async function PersonMembershipsPage({
                       ? `expires ${shortDate(grant.expiresAt, context.timeZone, now)}`
                       : "no expiry",
                     context.canSeePayments &&
+                    grant.remainingValueMinor !== undefined &&
                     grant.remainingValueMinor > 0 &&
                     grant.currency
                       ? `${formatMoney(grant.remainingValueMinor, grant.currency)} value left`

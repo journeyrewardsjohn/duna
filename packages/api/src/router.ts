@@ -1,4 +1,5 @@
 import { participationDemo } from "@duna/core/demo/participation";
+import { redactMoney, redactMoneyMetrics } from "./money-visibility";
 import { TRPCError } from "@trpc/server";
 import { demoOrganizationStorefront } from "@duna/core/demo/storefront";
 import { demoTournamentCompetition } from "@duna/core/demo/tournament";
@@ -8859,18 +8860,25 @@ const operatorRouter = router({
     ),
   dashboard: organizationProcedure("reports:read")
     .output(operatorDashboardSchema)
-    .query(({ ctx }) =>
-      getRepository().operator.dashboard(ctx.actor!.organizationId!),
+    .query(async ({ ctx }) =>
+      redactMoneyMetrics(
+        await getRepository().operator.dashboard(ctx.actor!.organizationId!),
+        ctx.actor!,
+      ),
     ),
   workspace: organizationProcedure("sessions:read")
     .output(operatorWorkspaceSchema)
-    .query(({ ctx }) =>
-      ctx.actor!.isDemo && !process.env.DATABASE_URL
-        ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
-        : loadOperatorWorkspace(
-            ctx.actor!.organizationId!,
-            ctx.actor!.personId,
-          ),
+    .query(async ({ ctx }) =>
+      redactMoney(
+        "workspace",
+        ctx.actor!.isDemo && !process.env.DATABASE_URL
+          ? loadDemoOperatorWorkspace(ctx.actor!.organizationId!)
+          : await loadOperatorWorkspace(
+              ctx.actor!.organizationId!,
+              ctx.actor!.personId,
+            ),
+        ctx.actor!,
+      ),
     ),
   promoCodeWorkspace: organizationProcedure("payments:read").query(
     async ({ ctx }) =>
@@ -10031,21 +10039,25 @@ const operatorRouter = router({
   memberProfile: organizationProcedure("members:read")
     .input(z.object({ personId: z.string().uuid() }))
     .output(operatorMemberProfileSchema)
-    .query(({ input, ctx }) =>
-      ctx.actor!.isDemo && !process.env.DATABASE_URL
-        ? loadDemoOperatorMemberProfile(
-            ctx.actor!.organizationId!,
-            input.personId,
-            ctx.actor!,
-          )
-        : loadOperatorMemberProfile({
-            actor: ctx.actor!,
-            organizationId: ctx.actor!.organizationId!,
-            personId: input.personId,
-            now: ctx.now,
-            requestId: ctx.requestId,
-            ipAddress: ctx.ipAddress,
-          }),
+    .query(async ({ input, ctx }) =>
+      redactMoney(
+        "memberProfile",
+        ctx.actor!.isDemo && !process.env.DATABASE_URL
+          ? await loadDemoOperatorMemberProfile(
+              ctx.actor!.organizationId!,
+              input.personId,
+              ctx.actor!,
+            )
+          : await loadOperatorMemberProfile({
+              actor: ctx.actor!,
+              organizationId: ctx.actor!.organizationId!,
+              personId: input.personId,
+              now: ctx.now,
+              requestId: ctx.requestId,
+              ipAddress: ctx.ipAddress,
+            }),
+        ctx.actor!,
+      ),
     ),
   memberHealthProfile: organizationProcedure("members:read")
     .input(z.object({ personId: z.string().uuid() }))
@@ -10197,18 +10209,22 @@ const operatorRouter = router({
   sessionDetail: organizationProcedure("sessions:read")
     .input(z.object({ sessionId: z.string().uuid() }))
     .output(operatorSessionDetailSchema)
-    .query(({ input, ctx }) =>
-      ctx.actor!.isDemo && !process.env.DATABASE_URL
-        ? loadDemoOperatorSessionDetail(
-            ctx.actor!.organizationId!,
-            input.sessionId,
-            ctx.now,
-          )
-        : loadOperatorSessionDetail(
-            ctx.actor!.organizationId!,
-            input.sessionId,
-            ctx.now,
-          ),
+    .query(async ({ input, ctx }) =>
+      redactMoney(
+        "sessionDetail",
+        ctx.actor!.isDemo && !process.env.DATABASE_URL
+          ? await loadDemoOperatorSessionDetail(
+              ctx.actor!.organizationId!,
+              input.sessionId,
+              ctx.now,
+            )
+          : await loadOperatorSessionDetail(
+              ctx.actor!.organizationId!,
+              input.sessionId,
+              ctx.now,
+            ),
+        ctx.actor!,
+      ),
     ),
   activityDetail: organizationProcedure("sessions:read")
     .input(
@@ -10220,11 +10236,15 @@ const operatorRouter = router({
     .output(operatorActivityDetailSchema)
     .query(async ({ input, ctx }) => {
       try {
-        return await loadOperatorActivityDetail({
-          actor: ctx.actor!,
-          activityType: input.activityType,
-          activityId: input.activityId,
-        });
+        return redactMoney(
+          "activityDetail",
+          await loadOperatorActivityDetail({
+            actor: ctx.actor!,
+            activityType: input.activityType,
+            activityId: input.activityId,
+          }),
+          ctx.actor!,
+        );
       } catch (error) {
         return throwDomainError(error);
       }
@@ -10232,11 +10252,15 @@ const operatorRouter = router({
   divisionDetail: organizationProcedure("sessions:read")
     .input(z.object({ divisionId: z.string().uuid() }))
     .output(operatorDivisionDetailSchema)
-    .query(({ input, ctx }) =>
-      loadOperatorDivisionDetail({
-        organizationId: ctx.actor!.organizationId!,
-        divisionId: input.divisionId,
-      }),
+    .query(async ({ input, ctx }) =>
+      redactMoney(
+        "divisionDetail",
+        await loadOperatorDivisionDetail({
+          organizationId: ctx.actor!.organizationId!,
+          divisionId: input.divisionId,
+        }),
+        ctx.actor!,
+      ),
     ),
   tournamentCompetition: organizationProcedure("sessions:read")
     .input(z.object({ sessionId: z.string().uuid() }))

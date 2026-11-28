@@ -651,10 +651,21 @@ export const playerMetrics: readonly Metric[] = [
 ];
 
 export const operatorMetrics: readonly Metric[] = [
-  { label: "Today’s revenue", value: "$8,420", change: "+18%", trend: "up" },
+  {
+    label: "Today’s revenue",
+    value: "$8,420",
+    change: "+18%",
+    trend: "up",
+    money: true,
+  },
   { label: "Check-ins", value: "146 / 168", change: "87%" },
   { label: "Court utilization", value: "82%", change: "+6%", trend: "up" },
-  { label: "Pending payouts", value: "$2,740", change: "6 recipients" },
+  {
+    label: "Pending payouts",
+    value: "$2,740",
+    change: "6 recipients",
+    money: true,
+  },
 ];
 
 export const adminMetrics: readonly Metric[] = [

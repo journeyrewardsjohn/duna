@@ -52,6 +52,10 @@ import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
+import {
+  loadOrganizationParts,
+  organizationLoadComplete,
+} from "./src/app/organization-load";
 import { WelcomeScreen } from "./src/features/welcome";
 import { ProLockup } from "./src/shared/ProLockup";
 import {
@@ -81,6 +85,24 @@ export type OperatorMatchScoringState = Awaited<
   ReturnType<DunaApiClient["operator"]["matchScoringState"]["query"]>
 >;
 
+interface OrganizationParts {
+  readonly dashboard: OperatorDashboard;
+  readonly workspace: OperatorWorkspace;
+  readonly money: OperatorMoney;
+  readonly members: OperatorMembers;
+  readonly events: OperatorEvents;
+  readonly matches: OperatorMatches;
+}
+export type OrganizationPart = keyof OrganizationParts;
+const ORGANIZATION_PARTS: readonly OrganizationPart[] = [
+  "dashboard",
+  "workspace",
+  "money",
+  "members",
+  "events",
+  "matches",
+];
+
 export interface ProRuntime {
   readonly mode: "preview" | "live";
   readonly client?: DunaApiClient;
@@ -91,6 +113,11 @@ export interface ProRuntime {
   readonly members?: OperatorMembers;
   readonly events?: OperatorEvents;
   readonly matches?: OperatorMatches;
+  /**
+   * Parts of the organization the person's role may not read (PRIV-2), e.g.
+   * "money" for a coach. Absent in preview.
+   */
+  readonly refused?: ReadonlySet<OrganizationPart>;
   readonly authOrganizations?: readonly WorkOSMobileOrganization[];
   readonly activeAuthOrganizationId?: string;
   readonly refresh: () => Promise<void>;
@@ -460,6 +487,10 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   const [members, setMembers] = useState<OperatorMembers>();
   const [events, setEvents] = useState<OperatorEvents>();
   const [matches, setMatches] = useState<OperatorMatches>();
+  const [refused, setRefused] = useState<ReadonlySet<OrganizationPart>>(
+    () => new Set(),
+  );
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const refresh = useCallback(async () => {
@@ -467,27 +498,25 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     setLoading(true);
     setError(undefined);
     try {
-      const [
-        nextDashboard,
-        nextWorkspace,
-        nextMoney,
-        nextMembers,
-        nextEvents,
-        nextMatches,
-      ] = await Promise.all([
-        client.operator.dashboard.query(),
-        client.operator.workspace.query(),
-        client.operator.moneyWorkspace.query(),
-        client.operator.members.query(),
-        client.operator.events.query(),
-        client.operator.scorableMatches.query(),
-      ]);
-      setDashboard(nextDashboard);
-      setWorkspace(nextWorkspace);
-      setMoney(nextMoney);
-      setMembers(nextMembers);
-      setEvents(nextEvents);
-      setMatches(nextMatches);
+      // Each part loads on its own: a part the role may not read (Money for
+      // a coach) is refused and the rest still loads (PRIV-2).
+      const load = await loadOrganizationParts<OrganizationParts>({
+        dashboard: () => client.operator.dashboard.query(),
+        workspace: () => client.operator.workspace.query(),
+        money: () => client.operator.moneyWorkspace.query(),
+        members: () => client.operator.members.query(),
+        events: () => client.operator.events.query(),
+        matches: () => client.operator.scorableMatches.query(),
+      });
+      if (load.failure !== undefined) throw load.failure;
+      setDashboard(load.values.dashboard);
+      setWorkspace(load.values.workspace);
+      setMoney(load.values.money);
+      setMembers(load.values.members);
+      setEvents(load.values.events);
+      setMatches(load.values.matches);
+      setRefused(load.refused);
+      setLoaded(organizationLoadComplete(load, ORGANIZATION_PARTS));
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -518,9 +547,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
     if (!isSignedIn) setContinueRequested(false);
   }, [isSignedIn]);
 
-  const hasWorkspace = Boolean(
-    dashboard && workspace && money && members && events && matches,
-  );
+  const hasWorkspace = loaded && Boolean(workspace);
 
   if (!isLoaded) {
     return <RuntimeLoadingState />;
@@ -528,7 +555,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
   if (!isSignedIn) {
     return <WelcomeScreen error={authError} signIn={signIn} signUp={signUp} />;
   }
-  const preparingAccount = Boolean(organizationId && loading && !dashboard);
+  const preparingAccount = Boolean(organizationId && loading && !loaded);
   if (!continueRequested || preparingAccount) {
     return (
       <ReturningAccountState
@@ -552,18 +579,10 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
       />
     );
   }
-  if (loading && !dashboard) {
+  if (loading && !loaded) {
     return <RuntimeLoadingState />;
   }
-  if (
-    error ||
-    !dashboard ||
-    !workspace ||
-    !money ||
-    !members ||
-    !events ||
-    !matches
-  ) {
+  if (error || !hasWorkspace || !workspace) {
     return (
       <CenteredState
         action="Try again"
@@ -588,6 +607,7 @@ function ConnectedRuntime({ children }: { readonly children: ReactNode }) {
         members,
         events,
         matches,
+        refused,
         refresh,
         switchOrganization,
         createSessionNoteRoom: (sessionId) =>

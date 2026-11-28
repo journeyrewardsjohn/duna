@@ -92,6 +92,7 @@ import type {
   StripeOnboardingResult,
 } from "./contracts";
 import type { ApiActor } from "./context";
+import { directorExtraScopes, scopesForRoles } from "./role-scopes";
 import { requireActiveMembershipOffer } from "./organization-membership-policy";
 import { resolveOrganizationCommissionPolicy } from "./organization-billing";
 import {
@@ -525,76 +526,17 @@ export function membershipRoleForOrganizationStaffRole(
   return role === "director" ? "manager" : role;
 }
 
+/**
+ * The scopes stored on a staff membership, derived from the one role table in
+ * ./role-scopes (PRIV-2). A Director is the manager role plus
+ * `directorExtraScopes`.
+ */
 export function scopesForOrganizationStaffRole(
   role: OrganizationStaffRole,
 ): string[] {
-  switch (role) {
-    case "director":
-      return [
-        "members:read",
-        "members:write",
-        "sessions:read",
-        "sessions:write",
-        "training:read",
-        "training:write",
-        "matches:read",
-        "matches:write",
-        "matches:score",
-        "payments:read",
-        "payments:write",
-        "payments:collect",
-        "tickets:scan",
-        "messages:read",
-        "messages:write",
-        "messages:propose",
-        "reports:read",
-      ];
-    case "manager":
-      return [
-        "members:read",
-        "members:write",
-        "sessions:read",
-        "sessions:write",
-        "training:read",
-        "training:write",
-        "matches:read",
-        "matches:write",
-        "matches:score",
-        "tickets:scan",
-        "messages:read",
-        "messages:write",
-        "messages:propose",
-        "reports:read",
-      ];
-    case "front-desk":
-      return [
-        "members:read",
-        "sessions:read",
-        "sessions:write",
-        "training:read",
-        "bookings:write",
-        "payments:collect",
-        "tickets:scan",
-        "messages:read",
-        "messages:write",
-      ];
-    case "accountant":
-      return ["sessions:read", "payments:read", "reports:read"];
-    case "coach":
-      return [
-        "members:read",
-        "sessions:read",
-        "training:read",
-        "training:write",
-        "matches:read",
-        "matches:write",
-        "matches:score",
-        "payments:collect",
-        "messages:read",
-        "messages:write",
-        "messages:propose",
-      ];
-  }
+  return role === "director"
+    ? [...new Set([...scopesForRoles(["manager"]), ...directorExtraScopes])]
+    : [...scopesForRoles([role])];
 }
 
 async function organizationRow(organizationId: string) {

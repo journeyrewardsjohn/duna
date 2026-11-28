@@ -13,6 +13,7 @@
  *   `payments:collect`.
  * Another club's ids answer NOT_FOUND, never FORBIDDEN.
  */
+import { moneyVisibilityFor } from "../../money-visibility";
 import type { ApiActor } from "../../context";
 
 export type ScheduleErrorCode =
@@ -47,11 +48,10 @@ export function hasScope(actor: ApiActor, scope: string): boolean {
 
 /** Totals, paid amounts and refunds are shown only with a money permission. */
 export function canSeeMoney(actor: ApiActor): boolean {
-  return (
-    hasScope(actor, "payments:read") ||
-    hasScope(actor, "payments:write") ||
-    hasScope(actor, "payments:collect")
-  );
+  // Deliberate exception (docs/product/money-visibility.md): the schedule
+  // shows a booking's total and paid state to `payments:collect` roles too,
+  // so the person taking the payment knows what is owed.
+  return moneyVisibilityFor(actor).paidState;
 }
 
 export function requireScope(actor: ApiActor, scope: string): void {
