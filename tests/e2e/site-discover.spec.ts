@@ -30,6 +30,15 @@ async function wide(page: Page) {
 }
 
 test.describe("find a game", () => {
+  // Each test is its own visitor: the public API's per-address budget is
+  // shared by the whole desktop project otherwise.
+  test.beforeEach(async ({ page }) => {
+    const octet = () => Math.floor(Math.random() * 250) + 1;
+    await page.setExtraHTTPHeaders({
+      "x-forwarded-for": `10.${octet()}.${octet()}.${octet()}`,
+    });
+  });
+
   test("home search → results → venue → how to book", async ({ page }) => {
     await wide(page);
     await page.route("**/api/places/autocomplete**", (route) =>
