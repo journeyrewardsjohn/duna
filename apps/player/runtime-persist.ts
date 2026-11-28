@@ -7,9 +7,9 @@
 export function persistableSnapshot<
   T extends { readonly memberCard?: unknown },
 >(snapshot: T): Omit<T, "memberCard"> {
-  const rest: Partial<T> = { ...snapshot };
-  delete rest.memberCard;
-  return rest as Omit<T, "memberCard">;
+  return Object.fromEntries(
+    Object.entries(snapshot).filter(([key]) => key !== "memberCard"),
+  ) as Omit<T, "memberCard">;
 }
 
 /** A stored snapshot from before this rule still holds the credential. */
