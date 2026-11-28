@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { appendMatchEventsAction } from "@/app/app/score/actions";
+import { appendMatchEventsAction } from "@/app/(legacy)/app/score/actions";
 import { MatchRecorder } from "@/components/match-recorder";
 
 const now = () => new Date().toISOString();

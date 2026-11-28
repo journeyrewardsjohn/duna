@@ -4,7 +4,7 @@ import type { CommunityCommentSummary, MatchScoringState } from "@duna/api";
 import { Badge, DunaLogo, Numeric } from "@duna/ui";
 import { Radio, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { refreshLiveMatchAction } from "@/app/live/[matchId]/actions";
+import { refreshLiveMatchAction } from "@/app/(legacy)/live/[matchId]/actions";
 import { CommunityThread } from "@/components/community-thread";
 
 export function PublicLiveScore({

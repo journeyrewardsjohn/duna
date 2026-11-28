@@ -3,7 +3,7 @@
 import { Bell, BellRing, Check, LoaderCircle, Star } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { updatePlayerFollowAction } from "@/app/players/actions";
+import { updatePlayerFollowAction } from "@/app/(legacy)/players/actions";
 
 type FollowState = {
   readonly following: boolean;

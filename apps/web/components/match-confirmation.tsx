@@ -4,7 +4,7 @@ import { Badge } from "@duna/ui";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { confirmMatchAction } from "@/app/app/score/actions";
+import { confirmMatchAction } from "@/app/(legacy)/app/score/actions";
 
 export function MatchConfirmation({
   confirmationRequired,

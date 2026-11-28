@@ -3,7 +3,7 @@
 import { Lock, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { createPlayerEventNoteAction } from "@/app/events/[slug]/actions";
+import { createPlayerEventNoteAction } from "@/app/(legacy)/events/[slug]/actions";
 
 export function PlayerEventNotes({
   activityId,

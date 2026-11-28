@@ -16,12 +16,6 @@ import type {
   PublicWorldRankings,
   VenueSummary,
 } from "@duna/api";
-import {
-  clubHighlights,
-  playerHighlights,
-  clubFaqs,
-  playerFaqs,
-} from "./audience-pages";
 import { clubFeatures } from "./club-features";
 import { absolutePublicUrl } from "./pro-seo";
 
@@ -37,31 +31,17 @@ export const publicMarkdownHeaders = {
 export const staticPublicPages = [
   {
     path: "/",
-    title: "Duna for Clubs — Your club. All together.",
+    title: "Duna · Beach and indoor volleyball near you",
     description:
-      "Bookings, programs, payments, and people. Everything you need to run your volleyball club, in one place.",
+      "Meet you at the net. Find a game tonight, keep score on your phone, and watch your Sand Rating grow. Clubs and coaches run their whole week on Duna.",
     sections: [
-      ...clubHighlights.map(
-        (item) =>
-          `${item.title}: ${item.description} Learn more: /run-your-club/features/${item.key}`,
-      ),
-      "Built for indoor, beach, and combined volleyball clubs, independent coaches, facilities, leagues, and event organizers.",
-      ...clubFaqs.map((item) => `${item.question} ${item.answer}`),
-      "Explore all features at /run-your-club/features and current pricing at /run-your-club#plans. Players start at /players.",
-    ],
-  },
-  {
-    path: "/players",
-    title: "Duna for Players — More play. More possibility.",
-    description:
-      "Find your next game, build your skills, and stay close to the sport. Your volleyball life, all in Duna.",
-    sections: [
-      ...playerHighlights.map(
-        (item) => `${item.title}: ${item.description} Explore: ${item.href}`,
-      ),
-      "Create an event at /create, explore Duna for Apple Watch at /apps/apple-watch, and manage private health and training load at /app/health.",
-      ...playerFaqs.map((item) => `${item.question} ${item.answer}`),
-      "Club operators start at /. Booking, registration, and account actions require sign-in.",
+      "Find a game: search by where, when and what at /discover (open games, clinics and training, leagues, tournaments, court time, coaches; beach or indoor).",
+      "Keep score with one hand: the scorekeeper in the Duna app tracks the server and every rally, on your phone and your watch.",
+      "Get your Sand Rating: when both sides confirm a result, the rating moves. The method is at /methodology.",
+      "Watch it back with your heart rate: film a match and see your effort laid over the video, point by point.",
+      "Played somewhere Duna doesn't know yet? Add the court and your score at /app/score.",
+      "For clubs and coaches: bookings, memberships, programs and drills, payments and Ask Duna in one place, and you approve every change. See /run-your-club and the plans at /run-your-club#plans (prices are drafts until confirmed).",
+      "Two apps: Duna for players and parents, Duna Pro for coaches and club staff.",
     ],
   },
   {
