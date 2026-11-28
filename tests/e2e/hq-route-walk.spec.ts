@@ -249,9 +249,9 @@ test.describe("HQ route walk (demo mode)", () => {
       .locator("a[data-nav-id]");
     await expect(links).toHaveCount(sidebar.length);
     for (const [index, [label, path]] of sidebar.entries()) {
-      // A count badge (unread threads, drafts) may follow the label.
+      // A count badge (Inbox's unread threads) names itself: "Inbox, 3 new".
       await expect(links.nth(index)).toHaveAccessibleName(
-        new RegExp(`^${label}(?: \\d+)?$`),
+        new RegExp(`^${label}(?:, \\d+ new)?$`),
       );
       await expect(links.nth(index)).toHaveAttribute("href", path);
     }

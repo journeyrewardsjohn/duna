@@ -30,6 +30,8 @@ export const hq: SurfaceContract = {
     "apps/hq/components/training/",
     "apps/hq/app/(next)/(hq)/events/",
     "apps/hq/components/events/",
+    "apps/hq/app/(next)/(hq)/inbox/",
+    "apps/hq/components/inbox/",
   ],
   checks: [
     { kind: "noFontPackages", app: "hq" },

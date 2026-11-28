@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { getHqSession, hasScope } from "./hq-session";
 import { PageHeader } from "./page-header";
 import { parseSidebarMode, SIDEBAR_STORAGE_KEY } from "./nav-state";
+import { inboxUnreadCount } from "../inbox/inbox-data";
 import { peopleCapabilitiesNow } from "../people/people-data";
 import { ShellFrame } from "./shell-frame";
 import type { ShellSession } from "./session-types";
@@ -90,8 +91,11 @@ export async function HqShell({ children }: { readonly children: ReactNode }) {
   const switched = peopleCapabilitiesNow();
   const canChangePeople =
     session.access === "operator" && hasScope(session, "members:write");
+  // Inbox's unread count beside its nav item (the club's shared read state).
+  const unread = await inboxUnreadCount();
   return (
     <ShellFrame
+      counts={unread ? { inbox: unread } : undefined}
       peopleCommands={{
         import: canChangePeople && switched.import,
         merge: canChangePeople && switched.merge,
