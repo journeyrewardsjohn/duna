@@ -106,11 +106,13 @@ before, neither wider nor narrower.
 
 ### Clients
 
-- **HQ legacy event page:** the session money cards, the ledger card, refund
-  controls and attendee amounts render only when the server sent them. The
-  paid badge appears only with paid state, and the Payment row reads "Not
-  shown for your role" instead of "0/2 paid".
-- **HQ activity and division pages:** both cope with the absent fields.
+- **HQ Events** (`components/events/events-model.ts`, rebuilt in PR 387): the
+  Money tab already needed `payments:read`. It now also needs `finance` in the
+  answer. Team payment words and attendee "Payment due" appear only with paid
+  state, never as a default.
+- **HQ activity (`/events/matches/[id]`) and division
+  (`/events/[id]/divisions/[id]`) pages:** booked value and paid words render
+  only when sent.
 - **HQ people and inbox:** use absence, never `0`.
 - **Pro startup load** (`src/app/organization-load.ts`): each part loads on
   its own. A FORBIDDEN part is "refused" and the rest loads.
