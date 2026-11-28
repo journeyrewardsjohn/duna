@@ -1,4 +1,4 @@
-import { DunaMark } from "@duna/ui";
+import { DunaLogo } from "@duna/ui";
 import {
   ArrowRight,
   CalendarDays,
@@ -124,7 +124,7 @@ export function BrandedAuthEntry({
 
       <div className="auth-entry__shell">
         <Link aria-label="Duna home" className="auth-entry__brand" href="/">
-          <DunaMark />
+          <DunaLogo decorative size={28} />
         </Link>
 
         <section className="auth-entry__story">

@@ -76,18 +76,36 @@ export const publicWeb: SurfaceContract = {
         "--duna-web-sky: #d3e3f0",
         "--duna-web-blush: #fecfc0",
         "--duna-web-radius-band: 48px",
-        '--duna-web-font-mono: "DM Mono"',
+        "--duna-web-font-mono: var(",
       ],
       legacy,
     },
     {
       kind: "includes",
       file: "apps/web/app/layout.tsx",
-      values: ["api.fontshare.com/v2/css?f[]=satoshi@", "family=DM+Mono"],
+      values: [
+        'import { dunaFontClassName } from "./fonts"',
+        "dunaFontClassName",
+      ],
       message:
-        "apps/web/app/layout.tsx must load Satoshi from Fontshare and DM Mono",
-      legacy:
-        "legacy: delete when Web loads Jost/Geist through the F3 font module (F6a)",
+        "apps/web/app/layout.tsx must load Jost, Geist and Geist Mono through the brand font module (app/fonts.ts)",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/app/fonts.ts",
+      values: [
+        "next/font/google",
+        "Jost({",
+        "Geist({",
+        "Geist_Mono({",
+        '"--td-font-brand"',
+        '"--td-font-ui"',
+        '"--td-font-mono"',
+        'weight: "500"',
+        'display: "swap"',
+      ],
+      message:
+        "apps/web/app/fonts.ts must expose Jost 500, Geist and Geist Mono as the Tideline font variables",
     },
     {
       kind: "includes",
