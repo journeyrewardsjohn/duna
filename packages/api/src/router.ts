@@ -73,6 +73,13 @@ import {
   conditionsOperatorRouter,
   conditionsPublicRouter,
 } from "./routers/conditions";
+import { feesOperatorRouter, feesPlayerRouter } from "./routers/fees";
+import { householdsPlayerRouter } from "./routers/households";
+import {
+  legalOperatorRouter,
+  legalPlayerRouter,
+  legalPublicRouter,
+} from "./routers/legal";
 import {
   accountDeletionReadinessSchema,
   adminOrganizationDetailSchema,
@@ -2770,6 +2777,8 @@ const publicRouter = router({
   facility: facilityPublicRouter,
   search: searchPublicRouter,
   conditions: conditionsPublicRouter,
+  // W3-0 seams (schema steward): legal document versions.
+  legal: legalPublicRouter,
 });
 
 const playerRouter = router({
@@ -8526,6 +8535,10 @@ const playerRouter = router({
   search: searchPlayerRouter,
   // H1: Duna Health eligibility, teen opt-in and guardian approval.
   health: healthPlayerRouter,
+  // W3-0 seams (schema steward): fees and Premium, households, terms.
+  fees: feesPlayerRouter,
+  households: householdsPlayerRouter,
+  legal: legalPlayerRouter,
 });
 
 const operatorRouter = router({
@@ -14048,6 +14061,9 @@ const operatorRouter = router({
   websiteTemplates: websiteTemplatesOperatorRouter,
   facility: facilityOperatorRouter,
   conditions: conditionsOperatorRouter,
+  // W3-0 seams (schema steward): platform fees, organisation terms.
+  fees: feesOperatorRouter,
+  legal: legalOperatorRouter,
 });
 
 const agentConfirmationSchema = z.object({

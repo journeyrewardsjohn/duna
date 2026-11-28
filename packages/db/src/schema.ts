@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { MatchWeatherSnapshot } from "@duna/core";
+import { legalDocumentVersions } from "./schema/legal";
 import {
   type AnyPgColumn,
   bigint,
@@ -118,6 +119,8 @@ export const matchStatusEnum = pgEnum("match_status", [
   "scheduled",
   "warmup",
   "live",
+  // W3-0: a match stopped part-way (weather, injury, light) with a partial score.
+  "not-finished",
   "pending-verification",
   "verified",
   "disputed",
@@ -2179,10 +2182,17 @@ export const courts = pgTable(
       .$type<Record<string, unknown>>()
       .default({}),
     qrToken: varchar("qr_token", { length: 96 }).notNull().unique(),
+    // W3-0 (B11): compass bearing of the court's long axis, 0-179 (a court
+    // is symmetric). Null until set on the layout screen.
+    orientationDeg: integer("orientation_deg"),
     ...{ createdAt, updatedAt },
   },
   (table) => [
     uniqueIndex("court_venue_name_unique").on(table.venueId, table.name),
+    check(
+      "court_orientation_valid",
+      sql`${table.orientationDeg} IS NULL OR ${table.orientationDeg} BETWEEN 0 AND 179`,
+    ),
     check(
       "court_duration_valid",
       sql`${table.minimumDurationMinutes} > 0 AND ${table.maximumDurationMinutes} >= ${table.minimumDurationMinutes}`,
@@ -10313,6 +10323,25 @@ export const legalAcceptances = pgTable(
     })
       .notNull()
       .defaultNow(),
+    // W3-0 (L3): any document key and version, who accepted on whose behalf
+    // (a minor through `on_behalf_of_person_id`, an organisation through
+    // `organization_id`), where, and the exact text accepted.
+    acceptedAs: varchar("accepted_as", { length: 24 })
+      .notNull()
+      .default("self"),
+    onBehalfOfPersonId: uuid("on_behalf_of_person_id").references(
+      () => people.id,
+      { onDelete: "restrict" },
+    ),
+    surface: varchar("surface", { length: 16 }),
+    locale: varchar("locale", { length: 16 }),
+    documentVersionId: uuid("document_version_id").references(
+      () => legalDocumentVersions.id,
+      { onDelete: "restrict" },
+    ),
+    documentHash: varchar("document_hash", { length: 64 }),
+    appVersion: varchar("app_version", { length: 32 }),
+    requestId: varchar("request_id", { length: 64 }),
     createdAt,
   },
   (table) => [
@@ -10326,10 +10355,31 @@ export const legalAcceptances = pgTable(
       table.documentKey,
       table.acceptedAt,
     ),
+    // W3-0 (L3): widened from four fixed keys to any well-formed key (a
+    // strict superset, so every row and every writer stays valid).
     check(
-      "legal_acceptance_document_valid",
-      sql`${table.documentKey} IN ('consumer-terms', 'privacy-policy', 'mobile-eula', 'hq-terms')`,
+      "legal_acceptance_document_key_format",
+      sql`${table.documentKey} ~ '^[a-z0-9][a-z0-9-]{1,47}$'`,
     ),
+    check(
+      "legal_acceptance_accepted_as_valid",
+      sql`${table.acceptedAs} IN ('self', 'guardian', 'organization-authority')`,
+    ),
+    check(
+      "legal_acceptance_surface_valid",
+      sql`${table.surface} IS NULL OR ${table.surface} IN ('web-sign-up', 'web-checkout', 'web-settings', 'player-app', 'pro-app', 'hq-onboarding', 'hq-settings', 'guardian-flow', 'admin-import')`,
+    ),
+    check(
+      "legal_acceptance_on_behalf_shape",
+      sql`(${table.acceptedAs} = 'guardian') = (${table.onBehalfOfPersonId} IS NOT NULL) AND (${table.acceptedAs} <> 'organization-authority' OR ${table.organizationId} IS NOT NULL) AND (${table.onBehalfOfPersonId} IS NULL OR ${table.onBehalfOfPersonId} <> ${table.personId})`,
+    ),
+    check(
+      "legal_acceptance_document_hash_valid",
+      sql`${table.documentHash} IS NULL OR ${table.documentHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    index("legal_acceptance_on_behalf_idx")
+      .on(table.onBehalfOfPersonId, table.documentKey, table.acceptedAt)
+      .where(sql`${table.onBehalfOfPersonId} IS NOT NULL`),
     check(
       "legal_acceptance_method_valid",
       sql`${table.acceptanceMethod} IN ('clickwrap', 'signed-order-form', 'admin-import')`,
@@ -11143,6 +11193,16 @@ export const trainingDrills = pgTable(
     sourceLicense: text("source_license"),
     sourceAttribution: text("source_attribution"),
     currentVersionId: uuid("current_version_id"),
+    // W3-0 (B5): scope (personal = "My drills", club = "Our club", duna =
+    // the Duna library; "Purchased" comes from training_drill_purchases) and
+    // the review state a public listing needs.
+    scope: varchar("scope", { length: 10 }).notNull().default("club"),
+    ownerPersonId: uuid("owner_person_id").references(() => people.id, {
+      onDelete: "restrict",
+    }),
+    reviewState: varchar("review_state", { length: 20 })
+      .notNull()
+      .default("not-submitted"),
     createdByPersonId: uuid("created_by_person_id").references(
       () => people.id,
       {
@@ -11205,6 +11265,18 @@ export const trainingDrills = pgTable(
     check(
       "training_drill_intensity_valid",
       sql`${table.intensity} BETWEEN 1 AND 10`,
+    ),
+    check(
+      "training_drill_scope_valid",
+      sql`${table.scope} IN ('personal', 'club', 'duna')`,
+    ),
+    check(
+      "training_drill_scope_owner_shape",
+      sql`(${table.scope} = 'personal') = (${table.ownerPersonId} IS NOT NULL) AND (${table.scope} <> 'duna' OR ${table.organizationId} IS NULL)`,
+    ),
+    check(
+      "training_drill_review_state_valid",
+      sql`${table.reviewState} IN ('not-submitted', 'checks-running', 'in-review', 'changes-requested', 'approved', 'rejected')`,
     ),
     check(
       "training_drill_estimate_valid",
@@ -11328,6 +11400,13 @@ export const trainingPracticePlans = pgTable(
       .default("organization"),
     durationMinutes: integer("duration_minutes").notNull().default(90),
     plannedLoad: integer("planned_load").notNull().default(50),
+    // W3-0: the visible assumptions the builder planned for (athletes,
+    // courts, balls per court, level, season week) and the target load.
+    assumptions: jsonb("assumptions")
+      .notNull()
+      .$type<Record<string, unknown>>()
+      .default({}),
+    targetLoad: integer("target_load"),
     currentVersionId: uuid("current_version_id"),
     createdByPersonId: uuid("created_by_person_id").references(
       () => people.id,
@@ -11363,6 +11442,10 @@ export const trainingPracticePlans = pgTable(
     check(
       "training_plan_load_valid",
       sql`${table.plannedLoad} BETWEEN 0 AND 100`,
+    ),
+    check(
+      "training_plan_target_load_valid",
+      sql`${table.targetLoad} IS NULL OR ${table.targetLoad} BETWEEN 0 AND 100`,
     ),
   ],
 );
@@ -11424,6 +11507,15 @@ export const trainingPracticePlanBlocks = pgTable(
       .notNull()
       .$type<Record<string, unknown>>()
       .default({}),
+    // W3-0: per-block estimates with their source (assumed by Duna, edited
+    // by the coach, or derived from the drill scene).
+    focus: text("focus"),
+    estimatedTouches: integer("estimated_touches"),
+    estimatedJumps: integer("estimated_jumps"),
+    estimatedMetres: integer("estimated_metres"),
+    estimateSource: varchar("estimate_source", { length: 20 })
+      .notNull()
+      .default("assumed"),
     locked: boolean("locked").notNull().default(false),
     createdAt,
   },
@@ -11444,6 +11536,14 @@ export const trainingPracticePlanBlocks = pgTable(
     check(
       "training_plan_block_load_valid",
       sql`${table.intensity} BETWEEN 1 AND 10 AND ${table.plannedLoad} BETWEEN 0 AND 100`,
+    ),
+    check(
+      "training_plan_block_estimate_source_valid",
+      sql`${table.estimateSource} IN ('assumed', 'coach-edited', 'derived-from-scene')`,
+    ),
+    check(
+      "training_plan_block_estimates_valid",
+      sql`coalesce(${table.estimatedTouches}, 0) >= 0 AND coalesce(${table.estimatedJumps}, 0) >= 0 AND coalesce(${table.estimatedMetres}, 0) >= 0`,
     ),
   ],
 );
@@ -11525,10 +11625,24 @@ export const trainingPrograms = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    // W3-0 (B4): a cancelled program keeps its row and reason. The contract
+    // state "cancelled" is `cancelled_at IS NOT NULL` (status is set to
+    // archived) until B4 adds the enum value with its training-service
+    // rewrite. "Create from a sentence" keeps the sentence it came from.
+    cancelledAt: timestamp("cancelled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    cancellationReason: text("cancellation_reason"),
+    sourceText: text("source_text"),
     createdAt,
     updatedAt,
   },
   (table) => [
+    check(
+      "training_program_cancelled_shape",
+      sql`${table.cancelledAt} IS NULL OR ${table.status} = 'archived'`,
+    ),
     uniqueIndex("training_program_org_slug_unique").on(
       table.organizationId,
       table.slug,
@@ -11676,6 +11790,23 @@ export const trainingEvents = pgTable(
       .default({}),
     notesMarkdown: text("notes_markdown"),
     source: varchar("source", { length: 24 }).notNull().default("program"),
+    // W3-0 (B4): a session carries a practice plan OR a focus plus an
+    // estimated load (plannedLoad), with where the estimate came from.
+    focusText: text("focus_text"),
+    loadEstimateSource: varchar("load_estimate_source", { length: 20 })
+      .notNull()
+      .default("assumed"),
+    estimatedTouches: integer("estimated_touches"),
+    estimatedJumps: integer("estimated_jumps"),
+    cancelledAt: timestamp("cancelled_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    cancelledByPersonId: uuid("cancelled_by_person_id").references(
+      () => people.id,
+      { onDelete: "set null" },
+    ),
+    cancellationReason: text("cancellation_reason"),
     createdByPersonId: uuid("created_by_person_id").references(
       () => people.id,
       {
@@ -11705,6 +11836,18 @@ export const trainingEvents = pgTable(
     check(
       "training_event_source_valid",
       sql`${table.source} IN ('program', 'manual', 'catalog', 'imported', 'ai-draft')`,
+    ),
+    check(
+      "training_event_load_source_valid",
+      sql`${table.loadEstimateSource} IN ('assumed', 'coach-edited', 'derived-from-scene')`,
+    ),
+    check(
+      "training_event_estimates_valid",
+      sql`coalesce(${table.estimatedTouches}, 0) >= 0 AND coalesce(${table.estimatedJumps}, 0) >= 0`,
+    ),
+    check(
+      "training_event_cancelled_shape",
+      sql`${table.cancelledAt} IS NULL OR ${table.status} = 'cancelled'`,
     ),
   ],
 );
@@ -13107,3 +13250,7 @@ export * from "./schema/facility";
 export * from "./schema/search";
 export * from "./schema/conditions";
 export * from "./schema/health";
+// W3-0 domains added by the wave-3 schema steward.
+export * from "./schema/premium";
+export * from "./schema/households";
+export * from "./schema/legal";

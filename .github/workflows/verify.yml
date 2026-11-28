@@ -71,6 +71,24 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Two copies of @types/react let Next's own type declarations bind to
+      # whichever one pnpm hoists; Vercel's incremental install hoisted the
+      # other one and HQ production failed while this workflow stayed green.
+      - name: Verify single React types
+        run: pnpm verify:single-react-types
+
+      # The same command, from the same folder, as each Vercel project
+      # (apps/hq/vercel.json buildCommand minus the production-only migration;
+      # duna-web uses Vercel's Turbo default). Vercel production deploys from
+      # main are not gated by this workflow, so a Vercel-only failure must fail here.
+      - name: Build HQ as Vercel does
+        working-directory: apps/hq
+        run: pnpm build
+
+      - name: Build web as Vercel does
+        working-directory: apps/web
+        run: pnpm exec turbo run build
+
   unit-tests:
     name: unit-tests
     runs-on: ubuntu-latest
