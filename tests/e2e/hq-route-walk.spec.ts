@@ -49,9 +49,11 @@ const member = "10000000-0000-4000-8000-000000000201";
 const junior = "10000000-0000-4000-8000-000000000203";
 const audience = "00000000-0000-4000-8000-000000000091";
 const transaction = "00000000-0000-4000-8000-000000000093";
-const practicePlan = "33000000-0000-4000-8000-000000000300";
-const practice = "33000000-0000-4000-8000-000000000600";
-const program = "33000000-0000-4000-8000-000000000400";
+// Training demo fixtures (@duna/core/demo/training-programs, training-drills).
+const practicePlan = "d0060000-0000-4000-8000-000000000300";
+const practice = "d0060000-0000-4000-8000-000000000101";
+const program = "d0060000-0000-4000-8000-000000000001";
+const drill = "d0070000-0000-4000-8000-000000000001";
 const missing = "00000000-0000-4000-8000-000000000001";
 // Duna Pay demo fixtures (@duna/core/demo/pay) and the demo payout.
 const sale = "d0020000-0000-4000-8000-000000000103";
@@ -95,6 +97,18 @@ const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
   ],
   [hqRoutes.trainingPractice]: [`/training/practices/${practice}`],
   [hqRoutes.trainingProgram]: [`/training/programs/${program}`],
+  [hqRoutes.trainingProgramCalendar]: [
+    `/training/programs/${program}/calendar`,
+  ],
+  [hqRoutes.trainingProgramAthletes]: [
+    `/training/programs/${program}/athletes`,
+  ],
+  [hqRoutes.trainingProgramPlans]: [`/training/programs/${program}/plans`],
+  [hqRoutes.trainingProgramSettings]: [
+    `/training/programs/${program}/settings`,
+  ],
+  [hqRoutes.trainingDrill]: [`/training/drills/${drill}`],
+  [hqRoutes.trainingDrillEdit]: [`/training/drills/${drill}/edit`],
   [hqRoutes.event]: [`/events/${clinic}`, `/events/${tournament}`],
   [hqRoutes.eventDivision]: [`/events/${tournament}/divisions/${missing}`],
   [hqRoutes.eventCourtBooking]: [`/events/court-bookings/${missing}`],
