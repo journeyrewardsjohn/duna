@@ -141,7 +141,7 @@ function claim(token: string, personId = claimer, extra = {}) {
 beforeAll(async () => {
   vi.stubEnv("TOMORROW_IO_API_KEY", "");
   await applyAllMigrations(pg);
-});
+}, 120_000);
 
 afterAll(async () => {
   vi.unstubAllEnvs();

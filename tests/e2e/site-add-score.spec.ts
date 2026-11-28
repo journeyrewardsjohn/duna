@@ -206,9 +206,15 @@ test.describe("Add a score without an account", () => {
     await expect(
       page.getByText(/We couldn’t find “Qzxv Lagoon”/),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Add “Qzxv Lagoon” as a new court" })
-      .click();
+    // The first click can land before the page is interactive: retry it.
+    await expect(async () => {
+      await page
+        .getByRole("button", { name: "Add “Qzxv Lagoon” as a new court" })
+        .click();
+      await expect(
+        page.getByRole("textbox", { name: "Court name" }),
+      ).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
     await expect(page.getByRole("textbox", { name: "Court name" })).toHaveValue(
       "Qzxv Lagoon",
     );

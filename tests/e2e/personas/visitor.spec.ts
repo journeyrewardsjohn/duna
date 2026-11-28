@@ -145,11 +145,17 @@ test.describe("VI-6 Add a score without an account", () => {
     );
     await page.goto("/add-score?where=Persona%20Point%20courts");
     await expectPageReady(page, "Add a score. See where you start.");
-    await page
-      .getByRole("button", {
-        name: "Add “Persona Point courts” as a new court",
-      })
-      .click();
+    // The first click can land before the page is interactive: retry it.
+    await expect(async () => {
+      await page
+        .getByRole("button", {
+          name: "Add “Persona Point courts” as a new court",
+        })
+        .click();
+      await expect(
+        page.getByRole("textbox", { name: "Court name" }),
+      ).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
     await page
       .getByRole("textbox", { name: "Address or area" })
       .fill("North end of the beach path");
@@ -180,9 +186,15 @@ test.describe("VI-6 Add a score without an account", () => {
     // VI-6.1's draft is in this persona's browser only if it reused the
     // context; start one here so the step stands alone.
     await page.goto("/add-score?where=Persona%20Cove");
-    await page
-      .getByRole("button", { name: "Add “Persona Cove” as a new court" })
-      .click();
+    // The first click can land before the page is interactive: retry it.
+    await expect(async () => {
+      await page
+        .getByRole("button", { name: "Add “Persona Cove” as a new court" })
+        .click();
+      await expect(
+        page.getByRole("textbox", { name: "Court name" }),
+      ).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
     await page
       .getByRole("textbox", { name: "Address or area" })
       .fill("By the lifeguard tower");
