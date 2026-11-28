@@ -29,6 +29,8 @@ import type { AppDependent } from "@/components/app-shell/session-types";
 import { AppLink } from "@/components/app-shell/navigation";
 import { unwrap } from "../action-result";
 import { icsFor, type Agenda, type PlanItem } from "../agenda-model";
+import { sessionInviteMessage } from "../invite/invite-links";
+import { InviteShare } from "../invite/invite-share";
 import { OfflineNotice } from "../states";
 import {
   cancelHostedPickupAction,
@@ -70,7 +72,6 @@ function InviteDialog({
   readonly title: string;
   readonly url: string | null;
 }) {
-  const [copied, setCopied] = useState(false);
   const absolute = url
     ? new URL(
         url,
@@ -79,8 +80,6 @@ function InviteDialog({
           : window.location.origin,
       ).toString()
     : "";
-  const canShare =
-    typeof navigator !== "undefined" && typeof navigator.share === "function";
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
@@ -92,37 +91,17 @@ function InviteDialog({
             Link to {title}
           </label>
           <Input id="pp-invite-link" readOnly value={absolute} />
-          <p aria-live="polite" className="td-meta">
-            {copied
-              ? "Link copied"
-              : "Anyone with the link sees the session and can book a place."}
+          <p className="td-meta">
+            Anyone with the link sees the session and can book a place.
           </p>
+          <InviteShare
+            message={sessionInviteMessage(title, absolute)}
+            title={title}
+            url={absolute}
+          />
         </div>
         <DialogActions>
           <DialogClose variant="secondary">Done</DialogClose>
-          {canShare ? (
-            <Button
-              onClick={() =>
-                void navigator
-                  .share({ title, url: absolute })
-                  .catch(() => undefined)
-              }
-              variant="secondary"
-            >
-              Share…
-            </Button>
-          ) : null}
-          <Button
-            onClick={() =>
-              void navigator.clipboard
-                ?.writeText(absolute)
-                .then(() => setCopied(true))
-                .catch(() => setCopied(false))
-            }
-            variant="primary"
-          >
-            Copy link
-          </Button>
         </DialogActions>
       </DialogContent>
     </Dialog>

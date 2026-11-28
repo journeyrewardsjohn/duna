@@ -235,7 +235,7 @@ export function PickupForm(props: PickupFormProps) {
             : "Only people with the link can find it and join.",
         ...(!editing && inviteNames.length > 0
           ? {
-              affected: `${inviteNames.join(", ")} ${inviteNames.length === 1 ? "is" : "are"} invited and told by Duna.`,
+              affected: `${inviteNames.join(", ")} ${inviteNames.length === 1 ? "gets" : "get"} an invitation in the Duna app.`,
             }
           : {}),
         verb: editing ? "Publish changes" : "Publish pickup",
