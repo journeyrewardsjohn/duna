@@ -1,13 +1,24 @@
-/* HQ semantic palette. Imported only by the operator application. */
+/*
+ * HQ semantic palette. Imported only by the operator application.
+ * Legacy aliases (F2b): every --hq-* colour points at a Duna Design System
+ * role. HQ sits on white / cool neutral (`<html data-zone="hq">`), never
+ * Salt, Dune or sand: the HQ zone repaints the ground white, and the neutral
+ * fills and hairlines that the light theme draws warm come from the cool
+ * haze ramp here. See docs/design/legacy-aliases.md. Wave 5 deletes these.
+ *
+ * This block also overrides the shared legacy names that
+ * apps/hq/app/design-v3.css sets for the operator zone, so HQ has one
+ * palette whichever sheet loads first.
+ */
 body[data-zone="operator"],
 html[data-theme] body[data-zone="operator"] {
-  --hq-ground: #fff;
-  --hq-surface: #fff;
-  --hq-soft: #f7f7f7;
-  --hq-rail: #f8f8f8;
-  --hq-edge: #dcdcdc;
-  --hq-shadow-color: #191919;
-  --hq-highlight: #fff;
+  --hq-ground: var(--td-ground);
+  --hq-surface: var(--td-surface);
+  --hq-soft: var(--td-haze-50);
+  --hq-rail: var(--hq-soft);
+  --hq-edge: var(--td-haze-300);
+  --hq-shadow-color: var(--td-brand-night-court);
+  --hq-highlight: var(--td-haze-0);
   --hq-shadow-control:
     0 1px 2px color-mix(in srgb, var(--hq-shadow-color) 9%, transparent),
     inset 0 1px 0 color-mix(in srgb, var(--hq-highlight) 65%, transparent);
@@ -19,20 +30,28 @@ html[data-theme] body[data-zone="operator"] {
   --hq-shadow-popover:
     0 4px 8px color-mix(in srgb, var(--hq-shadow-color) 7%, transparent),
     0 16px 32px color-mix(in srgb, var(--hq-shadow-color) 10%, transparent);
-  --hq-text: #191919;
-  --hq-muted: #646464;
-  --hq-line: #e6e6e6;
+  --hq-text: var(--td-text);
+  --hq-muted: var(--td-text-3);
+  --hq-line: var(--td-haze-200);
   --hq-border: var(--hq-line);
   --hq-tint: var(--hq-soft);
-  --hq-core: #d6d6d6;
+  --hq-core: var(--td-haze-300);
   --hq-ink: var(--hq-text);
-  --hq-deep: #191919;
-  --hq-text-on-deep: #fff;
-  --hq-action-on-deep: #fff;
-  --hq-text-on-deep-muted: #d6d6d6;
-  --hq-line-on-deep: #555;
-  --hq-surface-on-deep: #2b2b2b;
-  --hq-focus: #3d6bd6;
+  --hq-deep: var(--td-action);
+  --hq-text-on-deep: var(--td-on-action);
+  --hq-action-on-deep: var(--td-on-action);
+  --hq-text-on-deep-muted: color-mix(
+    in srgb,
+    var(--td-on-action) 76%,
+    transparent
+  );
+  --hq-line-on-deep: color-mix(in srgb, var(--td-on-action) 24%, transparent);
+  --hq-surface-on-deep: color-mix(
+    in srgb,
+    var(--td-on-action) 10%,
+    transparent
+  );
+  --hq-focus: var(--td-focus);
   --ground: var(--hq-ground);
   --ground-warm: var(--hq-ground);
   --ground-cool: var(--hq-soft);
@@ -40,10 +59,20 @@ html[data-theme] body[data-zone="operator"] {
   --surface-2: var(--hq-soft);
   --surface-3: var(--hq-surface);
   --text-1: var(--hq-text);
-  --text-2: var(--hq-muted);
+  --text-2: var(--td-text-2);
   --text-3: var(--hq-muted);
+  --text-on-accent: var(--td-on-action);
   --hairline: var(--hq-line);
   --hairline-strong: var(--hq-core);
+  --edge-light: transparent;
+  --scrim: var(--td-scrim);
+  --glass-fill: color-mix(in srgb, var(--hq-surface) 84%, transparent);
+  --glass-border: var(--hq-line);
+  --performance-ground: var(--td-mesh-night-court-base);
+  --flare: var(--td-energy);
+  --flare-text: var(--td-energy-ink);
+  --flare-fill: var(--td-energy-wash);
+  --gold: var(--td-energy);
   --color-canvas: var(--hq-ground);
   --color-canvas-soft: var(--hq-soft);
   --color-surface: var(--hq-surface);
@@ -51,37 +80,51 @@ html[data-theme] body[data-zone="operator"] {
   --color-line: var(--hq-line);
   --color-line-strong: var(--hq-core);
   --color-ink: var(--hq-text);
+  --color-bone: var(--hq-text);
+  --color-bone-muted: var(--td-text-2);
   --color-depth: var(--hq-surface);
   --color-navy: var(--hq-soft);
   --color-navy-lift: var(--hq-soft);
+  --color-sand: var(--td-energy);
   --color-sand-light: var(--hq-soft);
-  --color-aqua: var(--hq-text);
-  --color-aqua-deep: var(--hq-text);
-  --btn-primary-bg: var(--hq-text);
-  --btn-primary-fg: var(--hq-ground);
-  --btn-primary-hover: var(--hq-muted);
-  --btn-ghost-border: var(--hq-line);
+  --color-aqua: var(--hq-deep);
+  --color-aqua-deep: var(--td-action-hover);
+  --color-flare: var(--flare);
+  --btn-primary-bg: var(--td-action);
+  --btn-primary-fg: var(--td-on-action);
+  --btn-primary-hover: var(--td-action-hover);
+  --btn-ghost-border: var(--td-border-control);
   --focus-ring: var(--hq-focus);
   --dissolve: var(--hq-ground);
   --shadow-small: none;
   --shadow-large: 0 20px 60px
-    color-mix(in srgb, var(--hq-text) 10%, transparent);
+    color-mix(in srgb, var(--hq-shadow-color) 10%, transparent);
+  /* Channel triplets of the roles named (rgb() cannot read a variable). */
+  --overlay-rgb: 14 26 34; /* --td-text #0e1a22 */
+  --text-rgb: 14 26 34;
+  --muted-rgb: 63 75 82; /* --td-text-2 #3f4b52 */
+  --accent-rgb: 14 26 34; /* --td-action */
+  --ink-rgb: 14 26 34;
+  --depth-rgb: 255 255 255; /* --td-surface */
   background: var(--hq-ground);
   color: var(--hq-text);
 }
 html[data-theme="dark"] body[data-zone="operator"] {
-  --hq-ground: #191919;
-  --hq-surface: #222;
-  --hq-soft: #2b2b2b;
-  --hq-rail: #141414;
-  --hq-edge: #484848;
+  /* The dark roles are cool already; only the haze steps need dark values. */
+  --hq-soft: var(--td-surface-raised);
+  --hq-rail: var(--td-surface-sunken);
+  --hq-edge: var(--td-line-strong);
   --hq-shadow-color: #000;
-  --hq-highlight: #737373;
-  --hq-text: #f5f5f5;
-  --hq-muted: #b8b8b8;
-  --hq-line: #3b3b3b;
-  --hq-core: #737373;
-  --hq-deep: #191919;
+  --hq-highlight: var(--td-line-strong);
+  --hq-line: var(--td-line);
+  --hq-core: var(--td-line-strong);
+  --glass-fill: color-mix(in srgb, var(--hq-surface) 84%, transparent);
+  --overlay-rgb: 244 242 236; /* --td-text #f4f2ec */
+  --text-rgb: 244 242 236;
+  --muted-rgb: 201 211 216; /* --td-text-2 #c9d3d8 */
+  --accent-rgb: 217 195 160; /* --td-action #d9c3a0 */
+  --ink-rgb: 244 242 236;
+  --depth-rgb: 23 38 47; /* --td-surface #17262f */
 }
 .duna-particle-loader {
   display: grid;

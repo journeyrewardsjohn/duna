@@ -177,7 +177,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   await page
     .getByRole("button", { name: "Color theme: Light. Activate for Dark." })
     .click();
-  await expect(floating).toHaveCSS("background-color", "rgb(34, 34, 34)");
+  await expect(floating).toHaveCSS("background-color", "rgb(23, 38, 47)");
   await page.screenshot({
     path: testInfo.outputPath("floating-ask-duna-thread-dark.png"),
     style: "nextjs-portal { display: none; }",
