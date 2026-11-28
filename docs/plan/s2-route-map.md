@@ -168,6 +168,7 @@ that slug. Names are the keys in `hqRoutes`.
 | `reports`   | `reports`   |                                                          |
 | `locations` | —           | Now its own page at `/setup/places`.                     |
 | `leagues`   | —           | Now `/events?type=league`.                               |
+| `ai`        | —           | Was a hidden alias that redirected to `/ask`; removed.   |
 
 The internal navigation ids follow the new names too (`today`, `schedule`,
 `inbox`, `people`, `offerings`, `money`, `places`, `ask`); `overview`,
