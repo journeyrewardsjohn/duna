@@ -68,6 +68,45 @@ separate release gates.
 
 GitHub Actions repeats both gates on pushes and pull requests.
 
+## Production deploys
+
+Vercel deploys `main` to production for `duna-hq` (root `apps/hq`) and
+`duna-web` (root `apps/web`) on every merge. **These deploys are not gated by
+GitHub CI**: a merge with green checks can still fail on Vercel, and production
+then keeps serving the last good build without any visible alarm. HQ did this
+for a dozen merges after the Expo SDK 58 upgrade.
+
+After every merge to `main`, check both deploys for the merge commit:
+
+```bash
+gh api repos/journeyrewardsjohn/duna/commits/<sha>/status \
+  --jq '.statuses[] | "\(.context) \(.state) \(.target_url)"'
+```
+
+Both `Vercel – duna-hq` and `Vercel – duna-web` must be `success`. On
+`failure`, read the log from a folder outside the repository with
+`vercel inspect <deployment id> --logs --scope suttonx` (read-only).
+
+How Vercel builds differ from CI, and what covers each difference:
+
+- Vercel installs with plain `pnpm install` on top of a `node_modules` restored
+  from the last successful deploy; CI installs fresh with `--frozen-lockfile`.
+  Which copy of a package pnpm hoists can therefore differ. Type declarations
+  that import `react` without depending on `@types/react` (Next's own) take the
+  hoisted copy, so two `@types/react` versions in the workspace made HQ fail on
+  Vercel only. The workspace pins one version with an `overrides` entry in
+  `pnpm-workspace.yaml`, and `pnpm verify:single-react-types` (part of
+  `pnpm verify` and the `static-checks` job) fails when a second version
+  appears. Choose the version that matches the React the apps run: Next 16.2
+  runs its vendored React 19.3 for the app router, the iOS apps run React 19.3.
+- Vercel builds from the app folder: HQ runs `pnpm build` (just `next build`,
+  after the production-only migration), web runs `turbo run build`. The
+  `static-checks` job runs both the same way ("Build HQ as Vercel does",
+  "Build web as Vercel does"), without the migration.
+
+HQ preview deploys currently fail before the build with "Resource provisioning
+failed"; that is a project setting for the owner, not a code failure.
+
 The production previews must use `DUNA_DATA_SOURCE=database`. Do not mistake
 the local demo adapter for connected evidence. During the current QA period,
 the only permitted production-like Demo records are the clearly labelled,
