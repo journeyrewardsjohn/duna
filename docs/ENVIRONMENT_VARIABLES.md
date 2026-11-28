@@ -222,24 +222,26 @@ Secret-scope Mapbox tokens never belong in Expo.
 Certificate/private-key values belong only in the encrypted server store. Do
 not reuse APNs keys as Wallet signing keys.
 
-## Mux video
+## Cloudflare Stream live video
 
-Canonical names:
+Cloudflare Stream is Duna's only live video provider. Canonical names:
 
 ```text
-MUX_TOKEN_ID
-MUX_TOKEN_SECRET
-MUX_WEBHOOK_SECRET
-MUX_SIGNING_KEY_ID
-MUX_PRIVATE_KEY
-MUX_DATA_ENV_KEY
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_STREAM_API_TOKEN
+CLOUDFLARE_STREAM_WEBHOOK_SECRET
+CLOUDFLARE_STREAM_SRT_ENABLED
+CLOUDFLARE_STREAM_RECORDING_RETENTION_DAYS
+CLOUDFLARE_STREAM_ALLOWED_ORIGINS
 ```
 
-All are server-side. `MUX_SECRET_KEY`, `MUX_SIGNING_KEY`, and
-`MUX_SIGNING_SECRET` are accepted compatibility aliases in parts of the video
-adapter; prefer the canonical names above for new environments. Private key
-material may contain real newlines or the documented escaped representation and
-must never enter client code/logs.
+All are server-side. Live video is unavailable until `CLOUDFLARE_ACCOUNT_ID`
+and `CLOUDFLARE_STREAM_API_TOKEN` are both set; there is no provider-selection
+variable. The API token is a separately scoped Stream Read/Write token and is
+never substituted by an R2 or account-operations token. The webhook secret
+authenticates `/api/cloudflare/stream/webhook`. The last three are optional;
+see [`VIDEO_PLATFORM.md`](VIDEO_PLATFORM.md) before setting a recording
+retention period, because it deletes recordings.
 
 ## Health encryption
 

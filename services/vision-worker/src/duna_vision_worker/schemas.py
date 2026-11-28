@@ -35,7 +35,6 @@ class AnalysisCommand(BaseModel):
     runId: UUID
     videoId: UUID
     r2ObjectKey: str | None = Field(default=None, min_length=1, max_length=1024)
-    muxAssetId: str | None = Field(default=None, min_length=1, max_length=200)
     visionSessionId: UUID | None = None
     court: CourtMap
     visionSetup: VisionSetup | None = None
@@ -43,7 +42,7 @@ class AnalysisCommand(BaseModel):
 
     @model_validator(mode="after")
     def source_is_referenced(self) -> AnalysisCommand:
-        if not self.r2ObjectKey and not self.muxAssetId:
+        if not self.r2ObjectKey:
             raise ValueError("A private source reference is required")
         return self
 

@@ -4263,8 +4263,8 @@ export const videos = pgTable(
     musicRemovalStatus: varchar("music_removal_status", { length: 24 })
       .notNull()
       .default("not-requested"),
-    // Provider-neutral live fields let new broadcasts prefer Cloudflare while
-    // preserving every existing Mux stream and replay during migration.
+    // Cloudflare Stream is the only live provider. A stored 'mux' value marks
+    // a legacy row whose recording is gone; it has no playable source.
     liveProvider: varchar("live_provider", { length: 24 }),
     liveProviderInputId: varchar("live_provider_input_id", {
       length: 128,
@@ -4277,6 +4277,8 @@ export const videos = pgTable(
       length: 16,
     }),
     liveProviderPosterUrl: text("live_provider_poster_url"),
+    // Deprecated 2026-11-27: Mux was removed. No code reads or writes the
+    // mux_* columns; a follow-up migration drops them once this is live.
     muxLiveStreamId: varchar("mux_live_stream_id", {
       length: 128,
     }).unique(),

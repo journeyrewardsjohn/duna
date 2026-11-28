@@ -11202,7 +11202,6 @@ a.play-day__booking {
   box-shadow: 0 24px 60px rgb(0 0 0 / 35%);
 }
 
-.duna-video-gallery__stage mux-player,
 .duna-video-gallery__stage > iframe,
 .duna-video-gallery__stage > video {
   width: 100%;
