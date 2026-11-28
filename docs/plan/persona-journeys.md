@@ -245,7 +245,7 @@ cancels when plans change. Mostly in the Player app, sometimes on the web.
 | PA-3.3 | Chooses how to be reached per club (app, email, text)                                                                | Web         | P7             | Planned |
 | PA-3.n | The same in the app's Concierge                                                                                      | Player      | M-P5a          | Native  |
 | PA-4.1 | Approves or declines sharing the junior's health data with the coach (owner decision pending, `HEALTH_PRIVACY.md`)   | Web, Player | none           | **Gap** |
-| PA-5.1 | Cancels the junior's booking within the club's policy after a tier 1 confirm stating the refund                      | Web         | none           | **Gap** |
+| PA-5.1 | Cancels the junior's booking within the club's policy after a tier 1 confirm stating the refund                      | Web         | P-WEB-1        | Main    |
 | PA-5.2 | Sees the refund with its amount and where it went                                                                    | Web         | P6             | Planned |
 | PA-6.1 | Signs the club's waiver for the junior before the first session (`/waivers/complete` exists)                         | Web         | none           | **Gap** |
 | PA-7.1 | Opens Home → Next up first                                                                                           | Web         | P1             | Main    |
@@ -275,9 +275,9 @@ watches the rating move, watches film, manages membership and wallet.
 | PL-3.1 | Hosts a pickup and publishes it → "… is live."                                                     | Web           | P5              | Main    |
 | PL-3.2 | Joins an event through checkout → secure payment hand-off explained                                | Web           | P5              | Main    |
 | PL-4.1 | Starts recording a finished result (scores per set)                                                | Web           | P8              | Main    |
-| PL-4.2 | Records the match once everyone agreed → single-flight; per-set scores; green "Won" check          | Web           | P8              | Planned |
+| PL-4.2 | Records the match once everyone agreed → single-flight; per-set scores; green "Won" check          | Web           | P-WEB-1         | Main    |
 | PL-4.3 | Sees the rating change per match in history                                                        | Web           | P8              | Main    |
-| PL-4.4 | Sees the rating ring with the new rating and progress to the next half point                       | Web           | P8, C1          | Planned |
+| PL-4.4 | Sees the rating ring with the new rating and progress to the next half point                       | Web           | P-WEB-1, C1     | Main    |
 | PL-4.n | Scores live on the phone or the Watch; rating and results in the app                               | Player, Watch | M-P4a, M-P7     | Native  |
 | PL-5.1 | Opens the film library (today: "This page couldn't load")                                          | Web           | P9              | Planned |
 | PL-5.2 | Shares a clip with a coach after a confirm                                                         | Web           | P9              | Planned |
@@ -371,7 +371,7 @@ matching `test.fixme` titles in `tests/e2e/personas/` now end in these ids, and
 | PA-1.3 | Invite a second guardian                  | FAM (new)                | Same package                                                                                                                                                         |
 | PA-2.2 | Choose the junior at checkout             | P5 with FAM              | P5 rebuilds booking; FAM supplies the dependents                                                                                                                     |
 | PA-4.1 | Junior health-sharing consent             | H15 (new)                | Health consent screens. The server part shipped in H1: ages 13 and over, guardian approval, US only. (`H2` is already the Schedule package, so the new id is `H15`.) |
-| PA-5.1 | Player-side cancel with refund            | P5 with B2               | Refund rules in `payout-policy.md` and `apps/web/content/legal/booking-and-refunds.md`                                                                               |
+| PA-5.1 | Player-side cancel with refund            | P5 with B2               | P-WEB-1                                                                                                                                                              | Main |
 | PA-6.1 | Junior waivers                            | FAM with H11             | `/waivers/complete` exists                                                                                                                                           |
 | FO-4.1 | A player asks a facility for access (web) | B9 with a new page in P3 | B9 adds `player.facility`; the web page belongs to P3's area                                                                                                         |
 | FO-3.n | Stop play from the coach app              | M-R2                     | Native step, not counted in the coverage table                                                                                                                       |

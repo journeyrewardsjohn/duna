@@ -1,4 +1,4 @@
-import { expect, test } from "./support/fixtures";
+import { expect, test, webBaseUrl } from "./support/fixtures";
 import { expectPageReady, openPlayerArea } from "./support/moves";
 
 /**
@@ -14,10 +14,10 @@ test.describe("PA-1 Create a family and add a junior", () => {
   }) => {
     await openPlayerArea(page, "Settings");
     await expect(
-      page.getByRole("heading", { name: "Household + guardians" }),
+      page.getByRole("heading", { level: 2, name: "Family" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Add dependent" }),
+      page.getByRole("button", { name: "Add a junior" }),
     ).toBeVisible();
   });
   test.fixme("PA-1.2 Add a junior's private profile with consent recorded [FAM]", async () => {
@@ -80,10 +80,37 @@ test.describe("PA-4 Health sharing", () => {
 });
 
 test.describe("PA-5 Cancel and get a refund", () => {
-  test.fixme("PA-5.1 Cancel the junior's booking within the club's policy after a confirm [P5, B2]", async () => {
-    // Expected: tier 1 confirm stating the refund amount the policy gives.
+  test("PA-5.1 Cancel the junior's booking within the club's policy after a confirm [P5, B2]", async ({
+    page,
+    context,
+  }) => {
+    await context.addCookies([
+      { name: "duna-demo-plans", value: `pa5-${Date.now()}`, url: webBaseUrl },
+    ]);
+    await openPlayerArea(page, "Home");
+    await page
+      .getByRole("navigation", { name: "Duna Player" })
+      .getByRole("button", { name: /Account menu for/ })
+      .click();
+    await page.getByRole("button", { name: /Remy Lewis/ }).click();
+    await expect(page.getByText("You’re acting for Remy Lewis.")).toBeVisible();
+    await page.goto("/app/play");
+    await expectPageReady(page, "Remy’s plans");
+    const plan = page.getByRole("listitem").filter({
+      has: page.getByRole("heading", { level: 3, name: "Junior Sand Skills" }),
+    });
+    await expect(plan.getByText(/^Free cancellation until /)).toBeVisible();
+    await plan.getByRole("button", { name: "Cancel Remy’s place" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText("2 credits come back to the wallet");
+    await dialog.getByRole("button", { name: "Cancel Remy’s place" }).click();
+    // PA-5.2: the amount and where it went, from the backend's answer.
+    await expect(page.getByText(/2 credits back in your wallet/)).toBeVisible();
   });
-  test.fixme("PA-5.2 See the refund, with amount and where it went [P6]", async () => {});
+  test.fixme("PA-5.2 See the refund, with amount and where it went [P6]", async () => {
+    // The cancel answer says it (PA-5.1). Still needed: the refund line in the
+    // wallet's activity for a junior's catalog booking (Wallet package).
+  });
 });
 
 test.describe("PA-6 Waivers", () => {

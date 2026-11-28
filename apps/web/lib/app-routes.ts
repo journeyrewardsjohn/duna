@@ -113,6 +113,7 @@ export const APP_ROUTES = {
     "Plans",
     "schedule",
     "Your bookings, matches and calendar",
+    { rebuilt: true },
   ),
   score: route(
     "/app/score",
@@ -120,6 +121,7 @@ export const APP_ROUTES = {
     "Add a result",
     "trophy",
     "Your opponents confirm it",
+    { rebuilt: true },
   ),
   hostPickup: route(
     "/app/pickup/new",
@@ -127,7 +129,7 @@ export const APP_ROUTES = {
     "Host a pickup",
     "users",
     "Set the time and invite players",
-    { adultOnly: true },
+    { adultOnly: true, rebuilt: true },
   ),
   editPickup: route(
     "/app/pickup/[slug]/edit",
@@ -135,7 +137,15 @@ export const APP_ROUTES = {
     "Edit pickup",
     "users",
     "Change a pickup you host",
-    { listed: false, adultOnly: true },
+    { listed: false, adultOnly: true, rebuilt: true },
+  ),
+  liveScore: route(
+    "/app/score/live",
+    "play",
+    "Keep score live",
+    "score",
+    "Point by point, on court",
+    { listed: false },
   ),
   checkout: route(
     "/app/checkout/[slug]",
@@ -151,7 +161,7 @@ export const APP_ROUTES = {
     "Booking invite",
     "user-plus",
     "A court booking you were invited to",
-    { listed: false },
+    { listed: false, rebuilt: true },
   ),
 
   // Improve: rating and results, film, health and the player profile.
@@ -161,6 +171,7 @@ export const APP_ROUTES = {
     "Sand Rating and results",
     "rating",
     "Your rating, form and recent matches",
+    { rebuilt: true },
   ),
   match: route(
     "/app/matches/[id]",
@@ -168,7 +179,7 @@ export const APP_ROUTES = {
     "Match",
     "score",
     "One match, set by set",
-    { listed: false },
+    { listed: false, rebuilt: true },
   ),
   video: route(
     "/app/video",
@@ -198,6 +209,7 @@ export const APP_ROUTES = {
     "Profile",
     "player",
     "Your details, artwork and privacy",
+    { rebuilt: true },
   ),
 
   // Connect: messages, wallet and the account.
@@ -238,6 +250,7 @@ export const APP_ROUTES = {
     "Account",
     "you",
     "Profile, household, clubs, sign-in and appearance",
+    { rebuilt: true },
   ),
   onboarding: route(
     "/app/onboarding",
@@ -245,7 +258,7 @@ export const APP_ROUTES = {
     "Set up your profile",
     "player",
     "Who you are and how you play",
-    { listed: false },
+    { listed: false, rebuilt: true },
   ),
   teamClaim: route(
     "/app/team/claim/[token]",
@@ -253,7 +266,7 @@ export const APP_ROUTES = {
     "Join a team",
     "users",
     "A team entry you were invited to",
-    { listed: false },
+    { listed: false, rebuilt: true },
   ),
 } as const satisfies Record<string, AppRoute>;
 

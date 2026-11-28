@@ -143,3 +143,33 @@ labelled as one; `tests/e2e/player-wallet.spec.ts`).
 Specs: `tests/e2e/player-web-shell.spec.ts`; persona steps PL-1.1, PA-7.1,
 PA-7.2, VI-3.2, VI-4.2; unit tests `lib/app-routes.test.ts`,
 `components/app-shell/home/home-model.test.ts`.
+
+## Play, results, profile and settings (P-WEB-1)
+
+Pages in `app/(next)/(app)/app/` (`play`, `pickup/new`, `pickup/[slug]/edit`,
+`matches`, `matches/[id]`, `score`, `profile`, `settings`, `onboarding`,
+`booking-invite/[inviteToken]`, `team/claim/[token]`); components, models and
+the sheet (`player.css`, `pp-*`) in `components/player/`.
+
+- **Play**: `agenda-model.ts` builds the agenda from the dashboard's bookings
+  and the catalog session bookings: the day where it happens (with "(9:00 PM
+  your time)"), the group state in the shared participation words, the price
+  line, the free-cancellation line from `cancellable` / `refundIfCancelledNow`
+  / `refundableUntil` / `lateCancelCharge` (`cancellationDeadline` for
+  registrations), and the actions the procedures allow (`cancelCatalogSessionBooking`,
+  `cancelBooking`, `leavePickup`, `participation.joinWaitlist`,
+  `participation.createInvite`, `cancelPickup`). Acting for a junior shows the
+  junior's plans; the guardian acts.
+- **Results**: `result-copy.ts` holds the result words of the Player app and
+  `/add-score`; `result-copy.test.ts` imports both and fails on any drift
+  (Needs core: move them to a shared package). `/app/score` saves through
+  `recordCompletedMatch` with Duna players or people added by name and lands
+  on the result. Live point-by-point scoring stays on the old design at
+  `/app/score/live` (`?match=` redirects there) until it is rebuilt.
+- **Profile and settings**: privacy in sentences (`privacy-model.ts`) with the
+  public preview; the consent text shown is the text recorded.
+- **Demo switches** (demo mode, `DUNA_DEMO_PERSONAS=enabled`, never on
+  production; `components/player/demo.ts`): `duna-demo-plans=<scope>` (sample
+  plans dated from today), `duna-demo-side=opponent` (see a demo result as the
+  other side). Specs: `tests/e2e/player-plans-results.spec.ts`; persona steps
+  PL-3.1, PL-4.1 to PL-4.4, PA-1.1, PA-5.1.
