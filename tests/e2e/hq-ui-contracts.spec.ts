@@ -388,12 +388,13 @@ test.describe("HQ tournament launch workspace", () => {
     );
     // Poll: the stylesheet can still be applying right after mounting.
     await expect
-      .poll(async () =>
-        tracks(await style(fixture.locator("ol"), "grid-template-columns")),
-      )
-      .toSatisfy((columns: number) =>
-        width(page) <= 680 ? columns === 1 : columns > 1,
-      );
+      .poll(async () => {
+        const columns = tracks(
+          await style(fixture.locator("ol"), "grid-template-columns"),
+        );
+        return width(page) <= 680 ? columns === 1 : columns > 1;
+      })
+      .toBe(true);
   });
 });
 
