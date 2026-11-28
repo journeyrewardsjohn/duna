@@ -122,11 +122,6 @@ const extraPaths = {
  * with the package that fixes it. Keyed by the concrete path walked.
  */
 const knownFailures: Readonly<Record<string, string>> = {
-  "/ask": "S1: /ask renders without a main landmark (persona known issue).",
-  "/ask/history":
-    "S1: /ask/history renders without a main landmark, like /ask.",
-  "/account":
-    "S1: /account renders without a main landmark (persona known issue).",
   [extraPaths.offering]:
     "H9: the demo catalog is empty, so no offering record resolves (404).",
   [extraPaths.offeringBuilder]:
