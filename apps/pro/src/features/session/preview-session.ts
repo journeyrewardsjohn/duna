@@ -50,3 +50,31 @@ export function previewCalendarSession(
         : [],
   };
 }
+
+/** A player's court booking with a match (the owner's TestFlight case). */
+export const PREVIEW_BOOKING_ID = "preview-day-booking";
+
+export function previewBookingEntry(now: number): CalendarSessionInput {
+  const start = now - (now % 3_600_000) + 5 * 3_600_000;
+  return {
+    id: PREVIEW_BOOKING_ID,
+    sourceType: "booking",
+    title: "Saturday match at The Strand · court booking",
+    startsAt: new Date(start).toISOString(),
+    endsAt: new Date(start + 90 * 60_000).toISOString(),
+    status: "confirmed",
+    venueName: "The Strand",
+    courtName: "Court 1",
+    participantCount: 3,
+    capacity: 4,
+    attendees: [
+      { registrationId: "b-1", displayName: "Mara Lewis", status: "paid" },
+      { registrationId: "b-2", displayName: "Theo Park", status: "accepted" },
+      {
+        registrationId: "b-3",
+        displayName: "Noa Williams",
+        status: "accepted",
+      },
+    ],
+  };
+}

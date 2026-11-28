@@ -108,6 +108,16 @@ export function shellReducer(
       return { ...state, tab: action.tab, window: null, sheet: null };
     }
     case "open": {
+      // People without a person is the roster: the tab's root.
+      if (action.route === "people" && !action.personId) {
+        return {
+          ...state,
+          tab: "people",
+          sheet: null,
+          window: null,
+          stacks: { ...state.stacks, people: null },
+        };
+      }
       const definition = ROUTES[action.route];
       const entry: RouteEntry = {
         key: action.route,

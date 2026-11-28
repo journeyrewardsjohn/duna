@@ -114,11 +114,13 @@ export function parseDevShellUrl(url: string | null): DevShellLink | null {
   if (route && isRouteKey(route)) {
     const entryId = query.get("entry");
     const matchId = query.get("match");
+    const personId = query.get("person");
     actions.push({
       type: "open",
       route,
       ...(entryId ? { entryId } : {}),
       ...(matchId ? { matchId } : {}),
+      ...(personId ? { personId } : {}),
     });
   }
   const sheet = query.get("sheet");

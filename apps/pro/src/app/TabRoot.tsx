@@ -15,11 +15,10 @@ import {
   useTheme,
 } from "@duna/ui/native";
 import { useRegionLayout } from "@duna/ui/native/layout";
-import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState, type ReactNode } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { EarningsTabRoot } from "../features/earnings";
-import { dunaApiBaseUrl } from "../../mobile-api";
+import { PeopleTabRoot, usePersonName } from "../features/people";
 import { useProRuntime } from "../../runtime";
 import {
   SchedulePrimary,
@@ -45,28 +44,6 @@ import { RouteEntryContext, useShell } from "./ShellContext";
 import { PreviewNotice, TopBar } from "./TopBar";
 import { visibleRoute, type RouteEntry, type ShellState } from "./shell-state";
 import { Row, SideBySideContext, usePaneEdges } from "./ui";
-
-/**
- * What a hub shows besides its routes: on Students, the Duna Vision Player
- * Studio on the web (kept from the old Today). Earnings has its own root
- * (M-R5), which keeps the club's pulse.
- */
-function HubExtras({ tab }: { readonly tab: TabKey }) {
-  if (tab === "people") {
-    return (
-      <Row
-        icon="film"
-        onPress={() =>
-          void WebBrowser.openBrowserAsync(`${dunaApiBaseUrl}/app/video`)
-        }
-        summary="Watch cues and review clips beside the source video (opens the web)"
-        testID="hub-row-player-studio"
-        title="Duna Vision Player Studio"
-      />
-    );
-  }
-  return null;
-}
 
 /** The header over a route: Back (one pane at a time) and the route's title. */
 export function RouteHeader({
@@ -127,12 +104,15 @@ function RouteStack({
   const { refresh } = useProRuntime();
   const edges = usePaneEdges();
   const definition = ROUTES[entry.key];
+  const personName = usePersonName(
+    entry.key === "people" ? entry.personId : undefined,
+  );
   return (
     <View style={styles.fill} testID={`route-${entry.key}`}>
       <RouteHeader
         backLabel={tabTitle(tab, shell.audience)}
         onBack={showBack ? () => shell.back(tab) : undefined}
-        title={definition.title}
+        title={personName ?? definition.title}
       />
       {/* A nested provider: the legacy screen's own safe-area views measure
           from below the header, so nothing is padded twice. */}
@@ -197,7 +177,6 @@ function TabHub({
           title={ROUTES[key].title}
         />
       ))}
-      <HubExtras tab={tab} />
     </ScrollView>
   );
 }
@@ -263,6 +242,15 @@ export function TabRoot({
         emptyDetail={plan.sideBySide ? <ScheduleSecondary /> : null}
         layout={region.layout}
         primary={<SchedulePrimary withAside={plan.sideBySide} />}
+      />
+    );
+  } else if (tab === "people") {
+    content = (
+      <PeopleTabRoot
+        detail={detail}
+        layout={region.layout}
+        selectedPersonId={shown?.key === "people" ? shown.personId : undefined}
+        sideBySide={plan.sideBySide}
       />
     );
   } else if (tab === "money") {

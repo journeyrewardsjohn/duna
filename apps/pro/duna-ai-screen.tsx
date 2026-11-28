@@ -1,7 +1,6 @@
 import { demoOrganization } from "@duna/core/demo";
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,10 +15,8 @@ import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
 } from "./satoshi-text";
+import { DunaWordmark } from "@duna/ui/native";
 import { useProRuntime } from "./runtime";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaWordmark = require("./assets/duna-horizontal-blue.png");
 
 interface Palette {
   readonly canvas: string;
@@ -208,12 +205,7 @@ export function DunaAiScreen({
       >
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <Image
-              accessibilityLabel="Duna"
-              resizeMode="contain"
-              source={dunaWordmark}
-              style={styles.wordmark}
-            />
+            <DunaWordmark color={palette.ink} width={84} />
             <View style={styles.aiPill}>
               <Text style={styles.aiPillText}>AI</Text>
             </View>
@@ -374,7 +366,6 @@ function createStyles(palette: Palette) {
       paddingVertical: 12,
     },
     brandRow: { alignItems: "center", flexDirection: "row", gap: 6 },
-    wordmark: { height: 30, width: 96 },
     aiPill: {
       backgroundColor: palette.accent,
       borderRadius: 7,
