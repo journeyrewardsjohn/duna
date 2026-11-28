@@ -27,7 +27,7 @@ async function open(page: Page, theme: (typeof themes)[number]) {
     page.getByRole("heading", { level: 1, name: "Tideline gallery" }),
   ).toBeVisible();
   // Wait for hydration: the live demo's buttons respond once React is in.
-  await expect(page.locator("#identity .td-wallet").first()).toBeVisible();
+  await expect(page.locator("#identity .td-clubmark").first()).toBeVisible();
   await page.waitForLoadState("load");
   await page.emulateMedia({ reducedMotion: "reduce" });
 }

@@ -3,7 +3,8 @@
 Design specification for the Duna wallet: the membership card a club sells, the
 wallet that holds it on iPhone, iPhone Duo, iPad and the web, the pass on its
 back, the card designer in HQ and the moment a purchase lands. Status:
-**proposed, waiting for the owner's approval.** Nothing here is built yet.
+**WALLET-1 built** (web components, gallery, Player web `/app/wallet`; see
+"Built in WALLET-1" below). WALLET-2 to WALLET-7 are not built yet.
 
 - Prototype (private artifact, "Duna Wallet"):
   https://claude.ai/artifact/NnrLyBNsDz6Vys6J7E5XF2
@@ -29,6 +30,136 @@ back, the card designer in HQ and the moment a purchase lands. Status:
 | Components                 | `packages/ui/src/tideline/identity/` `ClubMark`, `MembershipCard`, `WalletStack`           | Card = club colour band + white face + code area; wallet = open card plus 64 px strips. No tilt, no shine, status as a chip (R13).                                                                                                                                           |
 | Screens                    | `apps/web/app/app/wallet/page.tsx`, `apps/player/src/features/wallet/WalletScreen.tsx`     | Money-first ledger pages; the Player screen shows one Duna member card with a QR and an Apple Wallet button.                                                                                                                                                                 |
 | Native libraries in Player | `apps/player/package.json`                                                                 | `expo-haptics`, `expo-video`, `react-native-svg` (via `react-native-qrcode-svg`). No Reanimated, no gesture-handler, no brightness, no sensors, no linear-gradient.                                                                                                          |
+
+## Built in WALLET-1 (28 November 2026)
+
+What exists on `main` after WALLET-1, and where it differs from this spec.
+
+### Public API (`@duna/ui/tideline`, family `identity/`)
+
+| Export                                          | What it is                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MembershipCard`                                | The face (mark + name, one chip, member, one live fact), art layer, measured scrim, keyline, glass edge, pointer sheen, Salt state chip, kinds `member` / `junior` (`heldBy`) / `family` / `staff` / `day` / `pack`, sizes `card` / `hero` / `strip`, `flipped` to the pass, `onFlip` makes the card itself a toggle. Props as in "Component API changes" plus `until` (formatted pause end or end date) and `label`. |
+| `MembershipPass`, `QrCode`                      | The back: club band, member, status in words with an icon, plan, number or reference, valid-to, guardian, and the code drawn from the exact server payload (`encodeQr` in `@duna/tideline-core`, no dependency).                                                                                                                                                                                                      |
+| `CardFlip`                                      | 620 ms Rise-curve turn with perspective; 200 ms cross-fade under reduced motion; the hidden face is `inert`.                                                                                                                                                                                                                                                                                                          |
+| `CardArt`, `CardArtProvider`, `CARD_ART_ASSETS` | The art registry and renderer (below).                                                                                                                                                                                                                                                                                                                                                                                |
+| `Wallet`                                        | Band + carousel or stack + caption + actions + sheet (split from 860 px of its own width, sticky band). `value` / `onChange`, `flipped` / `onFlip`, `presentation` (`auto` remembers the person's switch in `localStorage`), `title`, `toolbar`, `notice`, `actions`, `empty`, `layout`. Announces the flip in a polite live region.                                                                                  |
+| `WalletCarousel`                                | `tablist`: scroll-snap, neighbours at 94 % from the inner edge, dots, arrows / Home / End, Enter or Space flips, mouse drag, touch and trackpad swipe.                                                                                                                                                                                                                                                                |
+| `WalletStack`                                   | `listbox` with `aria-activedescendant`: 36 % strips, tap or drag up 30 px to draw, drag down 60 px / tap the pile / "Back to stack" / Escape to return. Replaces the old 64 px strip list (same name, same `cards` / `value` / `onChange` / `empty` props).                                                                                                                                                           |
+| `WalletActions`                                 | The four 48 px actions; links stay links; a disabled action keeps its place and says why.                                                                                                                                                                                                                                                                                                                             |
+| `CardArrival`                                   | The purchase moment (line 450 ms, card rises 700 ms, text Rallies); `playKey` replays it. CSS transitions, no keyframes; reduced motion is the last frame faded in.                                                                                                                                                                                                                                                   |
+| `CardArtPicker`                                 | The designer's art tab as a `radiogroup` (club colour + the set).                                                                                                                                                                                                                                                                                                                                                     |
+| Re-exported model                               | `assignWalletArt`, `clubSummaryCard`, `orderWalletCards`, `cardPassBack`, `formatCardDate`, `DUNA_ART_SET` and types, so apps need no second import path.                                                                                                                                                                                                                                                             |
+
+Pure logic in `@duna/tideline-core` (`wallet.ts`, `qr.ts`, tested) for native
+reuse in WALLET-3: art set data, `derivedArtPalette`, `tintPalette`,
+`defaultCardArt`, `assignWalletArt`, `measureCardContrast` /
+`estimateCardContrast` / `strongestContrast`, `cardStateChip`,
+`cardMetaLine`, `cardAccessibleName`, `cardPassBack`, `walletPresentation`,
+`orderWalletCards`, `walletKeyStep`, `carouselScale`, `stackLayout`,
+`clubSummaryCard`, `encodeQr` / `qrPath` (byte mode, versions 1–40, checked
+module for module against the `qrcode` package).
+
+### Changes from this spec
+
+- **Art set: eight pieces ship, not ten.** Noon Net and Ember Net (drawn grid
+  lines) were dropped as computer-looking; Under Lights lost its floating
+  light circles (now floodlight cones through drifting mist) and Marram Gold
+  lost its bokeh (grass, haze and a soft light field). Shipped: Golden Dune,
+  Coral Dusk, Under Lights, Ocean Teal, Sea Glass, Storm Swell, First Light,
+  Marram Gold, plus Club colour (derived). `RETIRED_CARD_ART` records the
+  dropped ones.
+- **Derived palette hue shifts are 18° and 29°** (the approved prototype's
+  0.05 / 0.08 of a turn); the "5° / 8°" above was a unit slip.
+- **No text under 12 px** (the library floor): chips, the mono member line
+  and the fact are 12 px, not 10.5–11.
+- **Paused cards keep their code** on the back (§4) even though the older
+  `membershipPassModel` says otherwise; that helper is unchanged for its
+  existing callers.
+- **Pending and ended cards show no live fact**; the state chip carries it.
+- **Brightness**: the web never claims "Brightness up"; the caption says "Tap
+  again for the card".
+- **Show pass on a pending or ended card** stays pressable and turns the card
+  to its honest back ("No pass yet", "This membership ended …"), which is the
+  explanation the spec asks for.
+- **Default art today**: no card design exists (Needs API), so a club with a
+  colour gets derived art and every other club a stable set piece by its id;
+  `assignWalletArt` keeps neighbours different.
+
+### Art registry: adding painted stills and loops
+
+Each Duna piece is a shader recipe (`packages/ui/src/tideline/identity/card-art.tsx`,
+one fragment shader, about 5 KB, one shared WebGL context, 30 fps for the one
+selected and most visible card, posters for the rest, a canvas-2D gradient
+without WebGL, and a CSS gradient as the server-rendered poster). To swap a
+piece for generated painterly art, add files and one line; nothing else
+changes and the shader stays the fallback:
+
+1. Poster: JPEG 1116 × 704 (≤ 140 KB) and the same as AVIF, named
+   `<key>.jpg` / `<key>.avif`. Loop (optional): 3–6 s, seamless (first frame
+   = last frame), muted, H.264 `.mp4` 1116 × 704 ≤ 900 KB as `<key>.mp4`,
+   optionally AV1 as `<key>-av1.mp4`. Keys are the `DUNA_ART_SET` keys
+   (`golden-dune`, …).
+2. Put them in `apps/web/public/media/wallet/art/` (and
+   `apps/hq/public/media/wallet/art/` for the gallery and the designer), and
+   log each in `apps/web/public/media/brand/imagery-log.json` (model, prompt,
+   provenance) per `AGENTS.md`.
+3. Add a line to `CARD_ART_ASSETS` in `card-art.tsx`:
+   `"golden-dune": { poster: "/media/wallet/art/golden-dune.jpg", posterAvif: "/media/wallet/art/golden-dune.avif", loop: { mp4: "/media/wallet/art/golden-dune.mp4", av1: "/media/wallet/art/golden-dune-av1.mp4" } },`
+   (or wrap a tree in `CardArtProvider assets={…}` to try them first).
+4. The card measures the scrim on the poster when it loads (same origin), so
+   the type stays at 5:1; the gallery's art-set check proves it in CI.
+
+Club uploads use `art={{ source: "upload", poster, loop }}` the same way.
+The loop plays only on the selected card, after it can play through, never
+under reduced motion, data saver, `prefers-reduced-data` or a battery under
+20 % that is not charging, and pauses off screen.
+
+### The web wallet page (`/app/wallet`)
+
+Moved from `(legacy)` to `apps/web/app/(next)/(app)/app/wallet/` (route table
+`rebuilt: true`). Band with the Jost title, the "find a club" button, a notice
+(pass not loaded with its reference, demo mode, or acting for a junior), the
+wallet and the four actions; the selected club's sheet (plan · price ·
+renews/ends, state banner, credits with expiry, up next here, member benefits,
+activity, End / Resume membership with a tier 1 confirmation, or tier 2 when
+an immediate cancel refunds money, and Club page); then "Your Duna balance"
+(available, pending and recent money; prediction credits linking to
+`/app/wallet/predictions`, adults only). `?card=<club id>` opens on that card
+(Home's club strips link there). Empty: an example card with the person's
+name, "Your club cards live here" and Find a club. Acting for a junior: the
+junior's club credits as junior cards held by the guardian.
+
+Data, all existing: `player.organizationWallets`, `player.memberCard` (the
+static Duna-wide credential, shown on every card's back as "Duna member
+credential · Duna ID …"), `player.catalogSessionBookings` (upcoming and past,
+filtered to the club and the person), `player.wallet`, `player.predictionWallet`,
+`player.familyWallets` (acting for a junior). Test-only:
+`duna-demo-wallet=0|1|5|12` in demo mode.
+
+**Needs API** (unchanged from the table below, plus): tier benefits in the
+wallet summary (the sheet links to the club page), member number and "since"
+per club, the club's theme colour and card design in the summary, a junior's
+memberships and pass readable by the guardian, total credits granted (for the
+meter), per-club activity (check-ins, credit ledger, renewals), pins and order,
+family seats, and the per-club rotating pass. Add to Apple / Google Wallet is a
+component that renders nothing (`AddToPhoneWallet` in `wallet-view.tsx`) until
+a per-club pass endpoint exists.
+
+### Budget
+
+Wallet-specific client code (core wallet model, QR, art renderer and shader,
+card, pass, flip, carousel, stack, wallet, arrival, page view): about 17 KB
+gzipped (esbuild estimate; the whole tree including shared shell parts is
+35 KB). Art downloads today: 0 KB (shader-painted). Stylesheet: 5.5 KB gzipped
+for the identity family.
+
+### Native plan
+
+WALLET-3 builds the native wallet on the same `@duna/tideline-core` model
+(`stackLayout`, `carouselScale`, `cardPassBack`, `measureCardContrast` for
+uploads, `encodeQr`), playing posters and loops from the asset pipeline
+(native does not run the shader), per §5.
 
 ## The ten decisions
 

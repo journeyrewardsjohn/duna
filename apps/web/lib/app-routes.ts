@@ -229,6 +229,7 @@ export const APP_ROUTES = {
     "Wallet",
     "wallet",
     "Passes, memberships and credits",
+    { rebuilt: true },
   ),
   predictions: route(
     "/app/wallet/predictions",
