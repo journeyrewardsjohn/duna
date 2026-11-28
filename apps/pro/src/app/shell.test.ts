@@ -75,7 +75,6 @@ describe("route table", () => {
   it("keeps every pre-shell Pro feature reachable (nothing dropped)", () => {
     const legacy: RouteKey[] = [
       "calendar",
-      "people",
       "messages",
       "ai",
       "courtside",
@@ -83,13 +82,14 @@ describe("route table", () => {
       "events",
       "film",
       "notes",
-      "money",
-      "getPaid",
       "create",
       "tools",
     ];
     for (const key of legacy) expect(ROUTES[key].legacy, key).toBe(true);
     expect(ROUTES.account.legacy).toBe(false);
+    // Rebuilt in M-R4: a person's page, club money and Get paid.
+    for (const key of ["people", "money", "getPaid"] as const)
+      expect(ROUTES[key].legacy, key).toBe(false);
     // Courtside and check-in are the Live zone, full window.
     expect(ROUTES.courtside).toMatchObject({
       presentation: "window",
@@ -100,7 +100,8 @@ describe("route table", () => {
       live: true,
     });
     // Hubs list their routes; Account and Club tools come from the top bar.
-    expect(routesForTab("people")).toEqual(["people", "film"]);
+    // People's root is the roster; a person opens from it (M-R4).
+    expect(routesForTab("people")).toEqual(["film"]);
     expect(routesForTab("inbox")).toEqual(["messages", "ai"]);
     expect(routesForTab("money")).toEqual(["money", "getPaid"]);
     expect(routesForTab("schedule")).toEqual([
@@ -273,11 +274,22 @@ describe("shell reducer", () => {
     );
   });
 
+  it("People without a person is the roster; with one, their page", () => {
+    const roster = run(
+      { type: "open", route: "people", personId: "p1", nonce: 1 },
+      { type: "open", route: "people", nonce: 2 },
+    );
+    expect(roster.tab).toBe("people");
+    expect(roster.stacks.people).toBeNull();
+    const person = run({ type: "open", route: "people", personId: "p2" });
+    expect(person.stacks.people?.personId).toBe("p2");
+  });
+
   it("back returns a tab to its root", () => {
     const state = run(
       { type: "open", route: "film", nonce: 1 },
       { type: "close-window" },
-      { type: "open", route: "people", nonce: 2 },
+      { type: "open", route: "people", personId: "p1", nonce: 2 },
       { type: "back", tab: "people" },
     );
     expect(state.stacks.people).toBeNull();
@@ -286,7 +298,8 @@ describe("shell reducer", () => {
   it("shows a tab's default route only when there is a second pane", () => {
     const state = initialShellState();
     expect(visibleRoute(state, "people", 1)).toBeNull();
-    expect(visibleRoute(state, "people", 2)?.key).toBe("people");
+    // People shows its first person itself (M-R4), not a default route.
+    expect(visibleRoute(state, "people", 2)).toBeNull();
     expect(visibleRoute(state, "money", 2)).toBeNull();
     expect(visibleRoute(state, "today", 2)).toBeNull();
     expect(visibleRoute(state, "inbox", 2)).toBeNull();

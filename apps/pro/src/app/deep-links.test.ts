@@ -144,6 +144,13 @@ describe("parseDevShellUrl (preview builds only)", () => {
       ],
       theme: "dark",
     });
+    expect(
+      parseDevShellUrl("duna-pro://dev/shell?tab=people&route=people&person=p1")
+        ?.actions,
+    ).toEqual([
+      { type: "select-tab", tab: "people" },
+      { type: "open", route: "people", personId: "p1" },
+    ]);
     expect(parseDevShellUrl("duna-pro://dev/shell?sheet=conditions")).toEqual({
       actions: [],
       conditions: true,

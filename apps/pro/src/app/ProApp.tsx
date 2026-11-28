@@ -37,6 +37,7 @@ import {
   type FoundationsOptions,
 } from "../features/dev/Foundations";
 import { ProLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
+import { WelcomeScreen } from "../features/welcome";
 import { AttendanceProvider } from "../features/session";
 import { ConditionsSheet, DayProvider, useDay } from "../features/today";
 import { darkStyles, lightStyles, setActiveStyles } from "../legacy/styles";
@@ -101,6 +102,8 @@ export function ProApp() {
   const [layoutLabOpen, setLayoutLabOpen] = useState(
     Boolean(layoutLabAutostart),
   );
+  // Preview builds: `duna-pro://dev/welcome` shows the signed-out welcome.
+  const [welcomePreview, setWelcomePreview] = useState(false);
   const [foundations, setFoundations] = useState<FoundationsOptions | null>(
     foundationsAutostart,
   );
@@ -140,6 +143,10 @@ export function ProApp() {
       const foundationsLink = parseFoundationsUrl(url);
       if (foundationsLink) {
         if (previewRef.current) setFoundations(foundationsLink);
+        return;
+      }
+      if (url?.startsWith("duna-pro://dev/welcome")) {
+        if (previewRef.current) setWelcomePreview(true);
         return;
       }
       if (url?.startsWith("duna-pro://dev/layout-lab")) {
@@ -344,6 +351,14 @@ export function ProApp() {
       </ShellContext.Provider>
       {layoutLabOpen && mode === "preview" ? (
         <ProLayoutLab onClose={() => setLayoutLabOpen(false)} />
+      ) : null}
+      {welcomePreview && mode === "preview" ? (
+        <View style={StyleSheet.absoluteFill}>
+          <WelcomeScreen
+            signIn={async () => setWelcomePreview(false)}
+            signUp={async () => setWelcomePreview(false)}
+          />
+        </View>
       ) : null}
       {foundations && mode === "preview" ? (
         <ProFoundations

@@ -1,0 +1,1 @@
+export { GetPaidScreen } from "./GetPaidScreen";

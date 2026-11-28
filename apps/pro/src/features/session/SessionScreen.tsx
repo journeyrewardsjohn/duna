@@ -67,9 +67,14 @@ import {
   type SessionDetail,
   type SessionPerson,
 } from "./session-model";
+import type { CourtBookingCapability } from "./cancel-plan";
+import {
+  CancelCalendarSessionSheet,
+  CancelCourtBookingSheet,
+  GroupCancelPreview,
+} from "./CancelSheets";
 import {
   CancelRefundSheet,
-  CancelSessionSheet,
   ExtendSheet,
   NudgeSheet,
   RequestCancelSheet,
@@ -93,6 +98,7 @@ const ACTION_ICONS: Readonly<Record<SessionActionKey, GlyphName>> = {
   "run-anyway": "play",
   "cancel-refund": "close",
   "cancel-session": "close",
+  "cancel-booking": "close",
 };
 
 const SCORING_KINDS = new Set(["tournament", "league", "pickup"]);
@@ -106,6 +112,7 @@ type Sheet =
   | "run-anyway"
   | "cancel-refund"
   | "cancel-session"
+  | "cancel-booking"
   | null;
 
 interface Feedback {
@@ -241,6 +248,8 @@ function ReadySession({
   const [sheet, setSheet] = useState<Sheet>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [removing, setRemoving] = useState<SessionPerson | null>(null);
+  const [courtBooking, setCourtBooking] =
+    useState<CourtBookingCapability>("unknown");
 
   const display = useMemo(() => sessionDisplay(detail, now), [detail, now]);
   const copy = sessionCopy(display);
@@ -253,6 +262,7 @@ function ReadySession({
   const actions = sessionActions(detail, {
     audience: shell.audience,
     now,
+    courtBooking,
     hasMatches:
       matches.length > 0 ||
       SCORING_KINDS.has(detail.kind ?? "") ||
@@ -626,30 +636,44 @@ function ReadySession({
               : undefined,
           })
         }
+        preview={
+          <GroupCancelPreview
+            detail={detail}
+            visible={sheet === "cancel-refund"}
+          />
+        }
         summary={occurrenceSummary.line}
         visible={sheet === "cancel-refund"}
       />
-      <CancelSessionSheet
-        cancel={(reason, key) =>
-          call(() =>
-            client!.operator.cancelCalendarSession.mutate({
-              sessionId: detail.id,
-              reason,
-              confirmed: true,
-              idempotencyKey: key,
-            }),
-          )
-        }
+      <CancelCalendarSessionSheet
         detail={detail}
         onClose={() => setSheet(null)}
         onDone={() =>
           done({
             tone: "positive",
             title: `${detail.title} is cancelled`,
-            text: "Everyone booked is being told.",
+            text: "Everyone booked is being told, with your reason. Paid orders are refunded the way they paid.",
           })
         }
         visible={sheet === "cancel-session"}
+      />
+      <CancelCourtBookingSheet
+        detail={detail}
+        onCapability={setCourtBooking}
+        onClose={() => setSheet(null)}
+        onDone={({ toTell }) =>
+          done({
+            tone: "positive",
+            title: `${detail.title} is cancelled`,
+            text: toTell
+              ? `A message draft is ready for ${toTell} ${toTell === 1 ? "person" : "people"}. Nothing is sent until you review it.`
+              : "The court is released. Refunds go back the way each person paid.",
+            action: detail.audienceKey
+              ? { label: "Review the message", onPress: openMessages }
+              : undefined,
+          })
+        }
+        visible={sheet === "cancel-booking"}
       />
       <StopPlaySheet
         detail={detail}
