@@ -53,11 +53,15 @@ async function loadSubject(subjectId: string) {
   const row = await getDatabase()
     .select({ occurrence: catalogSessionOccurrences, item: catalogItems })
     .from(catalogSessionOccurrences)
-    .innerJoin(catalogItems, eq(catalogSessionOccurrences.catalogItemId, catalogItems.id))
+    .innerJoin(
+      catalogItems,
+      eq(catalogSessionOccurrences.catalogItemId, catalogItems.id),
+    )
     .where(eq(catalogSessionOccurrences.id, subjectId))
     .limit(1)
     .then((rows) => rows[0]);
-  if (!row) throw new ParticipationError("NOT_FOUND", "This session was not found.");
+  if (!row)
+    throw new ParticipationError("NOT_FOUND", "This session was not found.");
   return row;
 }
 
@@ -91,26 +95,54 @@ export async function joinParticipationWaitlist(input: {
 }> {
   requireParticipationDatabase();
   if (input.subjectType !== CATALOG_SUBJECT) {
-    throw new ParticipationError("INVALID", "This session has no waitlist yet.");
+    throw new ParticipationError(
+      "INVALID",
+      "This session has no waitlist yet.",
+    );
   }
   const participant = input.participantPersonId ?? input.actor.personId;
   if (participant !== input.actor.personId) {
     try {
-      await assertGuardianCanBookFor({ actor: input.actor, participantPersonId: participant });
+      await assertGuardianCanBookFor({
+        actor: input.actor,
+        participantPersonId: participant,
+      });
     } catch {
-      throw new ParticipationError("FORBIDDEN", "You can only add family members you manage.");
+      throw new ParticipationError(
+        "FORBIDDEN",
+        "You can only add family members you manage.",
+      );
     }
   }
   const { occurrence, item } = await loadSubject(input.subjectId);
   if (occurrence.status !== "scheduled" || occurrence.startsAt <= input.now) {
-    throw new ParticipationError("NOT_ALLOWED", "This session is no longer taking bookings.");
+    throw new ParticipationError(
+      "NOT_ALLOWED",
+      "This session is no longer taking bookings.",
+    );
   }
-  const picture = await catalogSessionPicture({ occurrence, item, now: input.now });
+  const picture = await catalogSessionPicture({
+    occurrence,
+    item,
+    now: input.now,
+  });
   if (!picture?.rule.waitlist) {
-    throw new ParticipationError("NOT_ALLOWED", "This session doesn't keep a waitlist.");
+    throw new ParticipationError(
+      "NOT_ALLOWED",
+      "This session doesn't keep a waitlist.",
+    );
   }
-  if (await personHoldsPlace({ occurrenceId: occurrence.id, personId: participant, now: input.now })) {
-    throw new ParticipationError("CONFLICT", "You're already booked for this session.");
+  if (
+    await personHoldsPlace({
+      occurrenceId: occurrence.id,
+      personId: participant,
+      now: input.now,
+    })
+  ) {
+    throw new ParticipationError(
+      "CONFLICT",
+      "You're already booked for this session.",
+    );
   }
   const database = getDatabase();
   const existing = await database.query.participationWaitlistEntries.findFirst({
@@ -134,12 +166,17 @@ export async function joinParticipationWaitlist(input: {
     picture.held -
     (await offeredPlaces({ subjectId: occurrence.id, now: input.now }));
   if (open >= input.quantity) {
-    throw new ParticipationError("CONFLICT", "There's a place now: book it instead.");
+    throw new ParticipationError(
+      "CONFLICT",
+      "There's a place now: book it instead.",
+    );
   }
   // Positions are unique per session; a concurrent join retries once.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const [{ next }] = (await database
-      .select({ next: sql<number>`coalesce(max(${participationWaitlistEntries.position}), 0)::int + 1` })
+      .select({
+        next: sql<number>`coalesce(max(${participationWaitlistEntries.position}), 0)::int + 1`,
+      })
       .from(participationWaitlistEntries)
       .where(
         and(
@@ -192,7 +229,10 @@ export async function leaveParticipationWaitlist(input: {
     (entry.personId !== input.actor.personId &&
       entry.requestedByPersonId !== input.actor.personId)
   ) {
-    throw new ParticipationError("NOT_FOUND", "This waitlist place was not found.");
+    throw new ParticipationError(
+      "NOT_FOUND",
+      "This waitlist place was not found.",
+    );
   }
   if (entry.status === "waiting" || entry.status === "offered") {
     await database
@@ -220,20 +260,23 @@ export async function myWaitlistEntry(input: {
     }
   | undefined
 > {
-  const entry = await getDatabase().query.participationWaitlistEntries.findFirst({
-    where: and(
-      eq(participationWaitlistEntries.subjectType, CATALOG_SUBJECT),
-      eq(participationWaitlistEntries.subjectId, input.subjectId),
-      eq(participationWaitlistEntries.personId, input.personId),
-      inArray(participationWaitlistEntries.status, ["waiting", "offered"]),
-    ),
-  });
+  const entry =
+    await getDatabase().query.participationWaitlistEntries.findFirst({
+      where: and(
+        eq(participationWaitlistEntries.subjectType, CATALOG_SUBJECT),
+        eq(participationWaitlistEntries.subjectId, input.subjectId),
+        eq(participationWaitlistEntries.personId, input.personId),
+        inArray(participationWaitlistEntries.status, ["waiting", "offered"]),
+      ),
+    });
   if (!entry) return undefined;
   return {
     entryId: entry.id,
     position: await rankOf(entry),
     status: entry.status === "offered" ? "offered" : "waiting",
-    ...(entry.holdExpiresAt ? { holdExpiresAt: entry.holdExpiresAt.toISOString() } : {}),
+    ...(entry.holdExpiresAt
+      ? { holdExpiresAt: entry.holdExpiresAt.toISOString() }
+      : {}),
   };
 }
 
@@ -257,7 +300,9 @@ export async function acceptWaitlistOnBooking(input: {
 }
 
 /** Offers that ran out become "expired"; their places go to the next person. */
-export async function expireWaitlistOffers(input: { readonly now: Date }): Promise<number> {
+export async function expireWaitlistOffers(input: {
+  readonly now: Date;
+}): Promise<number> {
   const expired = await getDatabase()
     .update(participationWaitlistEntries)
     .set({ status: "expired", updatedAt: input.now })
@@ -308,8 +353,13 @@ export async function offerOpenPlaces(input: {
   let offered = 0;
   for (const subjectId of subjects) {
     const { occurrence, item } = await loadSubject(subjectId);
-    if (occurrence.status !== "scheduled" || occurrence.startsAt <= input.now) continue;
-    const picture = await catalogSessionPicture({ occurrence, item, now: input.now });
+    if (occurrence.status !== "scheduled" || occurrence.startsAt <= input.now)
+      continue;
+    const picture = await catalogSessionPicture({
+      occurrence,
+      item,
+      now: input.now,
+    });
     if (!picture) continue;
     let open =
       occurrence.capacity -
@@ -340,7 +390,12 @@ export async function offerOpenPlaces(input: {
       );
       const claimed = await database
         .update(participationWaitlistEntries)
-        .set({ status: "offered", offeredAt: input.now, holdExpiresAt, updatedAt: input.now })
+        .set({
+          status: "offered",
+          offeredAt: input.now,
+          holdExpiresAt,
+          updatedAt: input.now,
+        })
         .where(
           and(
             eq(participationWaitlistEntries.id, entry.id),

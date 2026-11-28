@@ -369,6 +369,149 @@ export const participationQuoteSchema = z.object({
   /** Decision 5: show "You're already booked" with "Add a player". */
   alreadyBooked: z.boolean(),
   lockAt: w3DateTimeSchema.optional(),
+  /** PART-4: the viewer's place on the waitlist, if any. */
+  waitlist: z
+    .object({
+      entryId: w3IdSchema,
+      position: z.number().int().positive(),
+      status: z.enum(["waiting", "offered"]),
+      holdExpiresAt: w3DateTimeSchema.optional(),
+    })
+    .optional(),
 });
 
 export type ParticipationQuoteOutput = z.infer<typeof participationQuoteSchema>;
+
+// ---------------------------------------------------------------------------
+// Part 2: waitlist, invite links, merges, rules on other session kinds
+// ---------------------------------------------------------------------------
+
+export const participationWaitlistPlaceSchema = z.object({
+  entryId: w3IdSchema,
+  /** 1 = next in line. */
+  position: z.number().int().positive(),
+  status: z.enum(["waiting", "offered"]),
+  /** When an offer runs out (2 hours, never past the start). */
+  holdExpiresAt: w3DateTimeSchema.optional(),
+});
+
+export const participationJoinWaitlistInputSchema = z.object({
+  subjectType: participationSubjectTypeSchema,
+  subjectId: w3IdSchema,
+  participantPersonId: w3IdSchema.optional(),
+  quantity: z.number().int().min(1).max(20).default(1),
+  idempotencyKey: w3IdempotencyKeySchema,
+});
+
+export const participationJoinWaitlistSchema = z.object({
+  entryId: w3IdSchema,
+  position: z.number().int().positive(),
+  status: z.enum(["waiting", "offered"]),
+});
+
+export const participationLeaveWaitlistInputSchema = z.object({
+  entryId: w3IdSchema,
+  idempotencyKey: w3IdempotencyKeySchema,
+});
+
+export const participationLeaveWaitlistSchema = z.object({
+  status: z.literal("cancelled"),
+});
+
+export const participationCreateInviteInputSchema = z.object({
+  subjectType: participationSubjectTypeSchema,
+  subjectId: w3IdSchema,
+});
+
+export const participationInviteLinkSchema = z.object({
+  url: z.string(),
+  code: z.string().regex(/^[A-Za-z0-9_-]{8,24}$/),
+  expiresAt: w3DateTimeSchema,
+});
+
+export const participationInviteInputSchema = z.object({
+  code: z.string().regex(/^[A-Za-z0-9_-]{8,24}$/),
+});
+
+/** The public invite landing: no names, no roster. */
+export const participationInviteSchema = z.object({
+  title: z.string(),
+  club: z.string(),
+  startsAt: w3DateTimeSchema,
+  timezone: z.string(),
+  displayState: participationDisplayStateSchema,
+  needs: z.number().int().nonnegative().optional(),
+  status: z.string(),
+  line: z.string().optional(),
+  bookHref: z.string(),
+});
+
+export const participationMergeSessionsInputSchema = z.object({
+  fromOccurrenceId: w3IdSchema,
+  intoOccurrenceId: w3IdSchema,
+  /** The interaction kit's `strong` tier (people moved, prices never up). */
+  confirmed: z.literal(true),
+  idempotencyKey: w3IdempotencyKeySchema,
+});
+
+export const participationMergeSessionsSchema = z.object({
+  moved: z.number().int().nonnegative(),
+  /** People already booked in the target, refunded in full. */
+  refunded: z.number().int().nonnegative(),
+  priceChanges: z
+    .array(
+      z.object({
+        bookingId: w3IdSchema,
+        creditsReturned: z.number().int().nonnegative(),
+      }),
+    )
+    .readonly(),
+});
+
+export const participationMergeDivisionsInputSchema = z.object({
+  fromDivisionId: w3IdSchema,
+  intoDivisionId: w3IdSchema,
+  confirmed: z.literal(true),
+  idempotencyKey: w3IdempotencyKeySchema,
+});
+
+export const participationMergeDivisionsSchema = z.object({
+  moved: z.number().int().nonnegative(),
+});
+
+export const participationOtherSubjectTypeSchema = z.enum([
+  "session",
+  "division",
+  "pickup-session",
+]);
+
+export const participationSetSubjectRuleInputSchema = z.object({
+  subjectType: participationOtherSubjectTypeSchema,
+  subjectId: w3IdSchema,
+  rules: participationRuleInputSchema,
+  idempotencyKey: w3IdempotencyKeySchema,
+});
+
+export const participationSetPickupRuleInputSchema = z.object({
+  pickupSessionId: w3IdSchema,
+  rules: participationRuleInputSchema,
+  idempotencyKey: w3IdempotencyKeySchema,
+});
+
+export const participationRuleToReviewSchema = z.object({
+  subjectType: z.enum(["session", "pickup-session"]),
+  subjectId: w3IdSchema,
+  title: z.string(),
+  startsAt: w3DateTimeSchema,
+  minParticipants: z.number().int().positive(),
+});
+
+export const participationKeepRuleInputSchema = z.object({
+  subjectType: z.enum(["session", "pickup-session"]),
+  subjectId: w3IdSchema,
+  idempotencyKey: w3IdempotencyKeySchema,
+});
+
+export const participationKeepRuleSchema = z.object({
+  state: z.literal("kept"),
+});

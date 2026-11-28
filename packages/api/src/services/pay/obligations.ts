@@ -246,7 +246,10 @@ async function catalogLineFacts(input: {
         .from(participationDecisions)
         .where(
           and(
-            eq(participationDecisions.subjectType, "catalog-session-occurrence"),
+            eq(
+              participationDecisions.subjectType,
+              "catalog-session-occurrence",
+            ),
             eq(participationDecisions.subjectId, occurrence.id),
           ),
         )
