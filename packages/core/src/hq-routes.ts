@@ -86,10 +86,12 @@ export const hqRoutes = {
   setupStart: "/setup/start",
   setupStartComplete: "/setup/start/complete",
   setupIdentity: "/setup/identity",
+  setupReview: "/setup/review",
   places: "/setup/places",
   placeCreate: "/setup/places/create",
   place: "/setup/places/[venueId]",
   placeLayout: "/setup/places/[venueId]/layout",
+  placeDetails: "/setup/places/[venueId]/details",
   placeCourtCreate: "/setup/places/[venueId]/courts/create",
   placeCourt: "/setup/places/[venueId]/courts/[courtId]",
   /** Duna Pay (Stripe Connect) return and refresh address; never rename. */
