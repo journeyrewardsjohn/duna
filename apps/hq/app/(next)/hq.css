@@ -1115,6 +1115,7 @@
 
     .hqs-section {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       align-content: start;
       gap: var(--td-space-3);
       padding: var(--td-space-4) var(--td-space-5) var(--td-space-5);
@@ -1156,6 +1157,8 @@
 
     .today {
       display: grid;
+      /* Never let one long line widen the page (implicit tracks are auto). */
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--td-space-5);
 
       > .hqs-page-head {
@@ -1176,6 +1179,7 @@
 
     .today-ask {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--td-space-3);
     }
 
@@ -1225,10 +1229,16 @@
       margin: 0;
       padding: 0;
       list-style: none;
+
+      > li {
+        min-width: 0;
+        max-width: 100%;
+      }
     }
 
     .today-ask__suggestion {
       display: inline-flex;
+      max-width: 100%;
       min-height: 36px;
       align-items: center;
       gap: var(--td-space-2);
@@ -1337,6 +1347,7 @@
 
     .today-col {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       min-width: 0;
       gap: var(--td-space-5);
     }
