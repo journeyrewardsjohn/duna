@@ -17,7 +17,7 @@ import {
   coachServicePrice,
   coachSupportsVirtual,
 } from "./coach-format";
-import { discoveryDistance } from "../discovery/discovery-distance";
+import { discoveryDistance } from "../find/discovery-distance";
 import { colors } from "../../shared/palette";
 import { CoachProfileModal } from "./CoachProfileModal";
 import { styles } from "../../legacy/styles";
