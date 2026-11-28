@@ -39,3 +39,4 @@ export * from "./conditions";
 export * from "./document";
 export * from "./score";
 export * from "./identity";
+export * from "./object";

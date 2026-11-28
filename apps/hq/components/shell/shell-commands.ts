@@ -90,6 +90,52 @@ const create: readonly ShellCommand[] = [
   },
 ];
 
+/** Money (H10): its tabs and the money tasks people ask for by name. */
+const money: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("moneyPayouts")}`,
+    label: "Go to payouts",
+    group: "Money",
+    icon: "wallet",
+    keywords: ["payout", "bank", "schedule", "transfer"],
+  },
+  {
+    value: `go:${hqHref("moneyTransactions")}`,
+    label: "Go to transactions",
+    group: "Money",
+    icon: "pay",
+    keywords: ["sales", "payments", "orders", "fees"],
+  },
+  {
+    value: `go:${hqHref("moneyTransactions")}?refund=1`,
+    label: "Refund a sale…",
+    group: "Money",
+    icon: "undo",
+    keywords: ["refund", "money back", "credit"],
+  },
+  {
+    value: `go:${hqHref("moneyDisputes")}`,
+    label: "Respond to a dispute",
+    group: "Money",
+    icon: "policy",
+    keywords: ["chargeback", "dispute", "evidence"],
+  },
+  {
+    value: `go:${hqHref("moneyDunaPay")}`,
+    label: "Set up Duna Pay",
+    group: "Money",
+    icon: "verified",
+    keywords: ["payments", "verify", "bank", "onboarding"],
+  },
+  {
+    value: `go:${hqHref("moneyHolds")}`,
+    label: "See held money",
+    group: "Money",
+    icon: "clock",
+    keywords: ["hold", "reserve", "owed"],
+  },
+];
+
 const run: readonly ShellCommand[] = [
   {
     value: "do:ask",
@@ -125,6 +171,7 @@ const run: readonly ShellCommand[] = [
 export const shellCommands: readonly ShellCommand[] = [
   ...places,
   ...create,
+  ...money,
   ...run,
 ];
 
