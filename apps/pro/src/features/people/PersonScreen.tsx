@@ -42,6 +42,7 @@ import {
   type HouseholdInput,
   type ProfileInput,
 } from "./people-model";
+import { previewRosterEntries } from "./preview-people";
 import { useRoster } from "./use-roster";
 
 type Load<T> =
@@ -147,7 +148,19 @@ function usePersonData(personId: string | undefined) {
                 },
               ]
             : [],
-          sessions: [],
+          sessions: previewRosterEntries(Date.now())
+            .filter((entry) =>
+              entry.attendees.some(
+                (attendee) => attendee.personId === personId,
+              ),
+            )
+            .map((entry) => ({
+              id: entry.id,
+              title: entry.title,
+              startsAt: entry.startsAt,
+              status: "confirmed",
+              venueName: "Pier Courts",
+            })),
           healthAccess: { canView: false },
         },
       });
@@ -221,7 +234,14 @@ function usePersonData(personId: string | undefined) {
   return { profile, household, notes, reload: load, live, setNotes };
 }
 
-export function PersonScreen({ personId }: { readonly personId?: string }) {
+export function PersonScreen({
+  personId,
+  showName = false,
+}: {
+  readonly personId?: string;
+  /** Beside the list with no route header (iPad, open Duo), the page names the person itself. */
+  readonly showName?: boolean;
+}) {
   const shell = useShell();
   const roster = useRoster();
   const edges = usePaneEdges();
@@ -292,10 +312,15 @@ export function PersonScreen({ personId }: { readonly personId?: string }) {
             url={row?.avatarUrl}
           />
           <View style={styles.heroText}>
-            <Text accessibilityRole="header" variant="phone-heading">
-              {name}
-            </Text>
-            <Text tone="text-2" variant="phone-meta">
+            {showName ? (
+              <Text accessibilityRole="header" variant="phone-heading">
+                {name}
+              </Text>
+            ) : null}
+            <Text
+              tone="text-2"
+              variant={showName ? "phone-meta" : "phone-body"}
+            >
               {[
                 ...(roles.length ? roles : ["player"]).map(roleWord),
                 isMinor ? "Junior" : null,
@@ -627,11 +652,13 @@ function BookingsSection({
       (session) =>
         session.status !== "cancelled" && Date.parse(session.startsAt) > now,
     )
-    .toSorted((a, b) => a.startsAt.localeCompare(b.startsAt))
+    .slice()
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
     .slice(0, 5);
   const past = data.sessions
     .filter((session) => Date.parse(session.startsAt) <= now)
-    .toSorted((a, b) => b.startsAt.localeCompare(a.startsAt))
+    .slice()
+    .sort((a, b) => b.startsAt.localeCompare(a.startsAt))
     .slice(0, 3);
   const line = (session: ProfileData["sessions"][number], label: string) => (
     <View key={session.id} style={styles.line}>

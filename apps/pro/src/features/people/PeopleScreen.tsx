@@ -19,6 +19,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  useWindowDimensions,
   type ViewStyle,
 } from "react-native";
 import * as WebBrowser from "expo-web-browser";
@@ -70,7 +71,9 @@ export function PeopleTabRoot({
     <AdaptiveScaffold
       detail={detail}
       emptyDetail={
-        sideBySide && first ? <PersonScreen personId={first.id} /> : null
+        sideBySide && first ? (
+          <PersonScreen personId={first.id} showName />
+        ) : null
       }
       layout={layout}
       primary={
@@ -313,6 +316,9 @@ export function PersonListRow({
   const { colors, tokens } = useTheme();
   const haptics = useHaptics();
   const chip = row.chip ? CHIP_TONES[row.chip.tone] : null;
+  // Accessibility text sizes: names and facts wrap instead of truncating,
+  // and the Sand Rating moves under them as words.
+  const large = useWindowDimensions().fontScale >= 1.5;
   return (
     <Pressable
       accessibilityHint="Opens their plan, bookings, family and notes"
@@ -337,7 +343,7 @@ export function PersonListRow({
       <View style={styles.rowText}>
         <View style={styles.nameLine}>
           <Text
-            numberOfLines={1}
+            numberOfLines={large ? undefined : 1}
             style={styles.name}
             variant="phone-body"
             weight={600}
@@ -363,16 +369,27 @@ export function PersonListRow({
             </View>
           ) : null}
         </View>
-        <Text numberOfLines={1} tone={row.factTone} variant="phone-meta">
+        <Text
+          numberOfLines={large ? undefined : 1}
+          tone={row.factTone}
+          variant="phone-meta"
+        >
           {row.fact}
         </Text>
+        {large ? (
+          <Text tabular tone="text-2" variant="phone-meta">
+            {`Sand Rating ${row.rating.value === null ? "—" : row.rating.value.toFixed(2)}`}
+          </Text>
+        ) : null}
       </View>
-      <RatingRing
-        animate={false}
-        reliability={row.rating.reliability}
-        size="inline"
-        value={row.rating.value}
-      />
+      {large ? null : (
+        <RatingRing
+          animate={false}
+          reliability={row.rating.reliability}
+          size="inline"
+          value={row.rating.value}
+        />
+      )}
     </Pressable>
   );
 }
@@ -419,7 +436,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   rowText: { flex: 1, minWidth: 0, gap: 2 },
-  nameLine: { flexDirection: "row", alignItems: "center", gap: 8 },
+  nameLine: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  },
   name: { flexShrink: 1 },
   chip: { flexShrink: 0, paddingHorizontal: 8, paddingVertical: 2 },
 });

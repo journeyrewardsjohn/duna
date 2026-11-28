@@ -18,6 +18,7 @@ import { StyleSheet, View } from "react-native";
 import { Skeleton, Text, useTheme } from "@duna/ui/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProRuntime } from "../../../runtime";
+import { peekDevParam } from "../dev/dev-params";
 import type { DunaApiClient } from "../../../mobile-api";
 import {
   COURT_BOOKING_MISSING,
@@ -411,7 +412,17 @@ export function CancelCourtBookingSheet({
   }, [visible]);
   const live = mode === "live" && Boolean(client);
   const load = useCallback(async (): Promise<CancelPreview> => {
-    if (!live || !client) return previewFromRoster(detail);
+    if (!live || !client) {
+      // Preview builds: `court=missing` shows the state before SCHED-API lands.
+      if (peekDevParam("court") === "missing")
+        throw Object.assign(
+          new Error(
+            'No procedure found on path "operator.schedule.cancelCourtBookingPreview"',
+          ),
+          { data: { code: "NOT_FOUND" } },
+        );
+      return previewFromRoster(detail);
+    }
     const preview = await scheduleProcedures(
       client,
     ).schedule.cancelCourtBookingPreview.query({

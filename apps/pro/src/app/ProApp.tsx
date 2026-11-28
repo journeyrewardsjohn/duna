@@ -38,6 +38,7 @@ import {
 } from "../features/dev/Foundations";
 import { ProLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
 import { WelcomeScreen } from "../features/welcome";
+import { setDevParams } from "../features/dev/dev-params";
 import { AttendanceProvider } from "../features/session";
 import { ConditionsSheet, DayProvider, useDay } from "../features/today";
 import { darkStyles, lightStyles, setActiveStyles } from "../legacy/styles";
@@ -131,11 +132,17 @@ export function ProApp() {
   setActivePalette(legacyDark ? darkColors : lightColors);
   setActiveStyles(legacyDark ? darkStyles : lightStyles);
 
-  const audience = audienceForRole(
-    authOrganizations?.find(
-      (organization) => organization.id === activeAuthOrganizationId,
-    )?.role,
+  // Preview builds: `audience=owner` in a dev link shows the owner's Pro.
+  const [devAudience, setDevAudience] = useState<"owner" | "coach" | null>(
+    null,
   );
+  const audience =
+    devAudience ??
+    audienceForRole(
+      authOrganizations?.find(
+        (organization) => organization.id === activeAuthOrganizationId,
+      )?.role,
+    );
 
   // Every Pro link resolves to a place in the shell (deep-links.test.ts).
   useEffect(() => {
@@ -156,6 +163,10 @@ export function ProApp() {
       const devShell = parseDevShellUrl(url);
       if (devShell) {
         if (!previewRef.current) return;
+        const query = new URLSearchParams(url?.split("?")[1] ?? "");
+        setDevParams(query);
+        const who = query.get("audience");
+        if (who === "owner" || who === "coach") setDevAudience(who);
         if (devShell.theme) setPreferenceRef.current(devShell.theme);
         for (const action of devShell.actions) dispatch(action);
         if (devShell.conditions) setConditionsDate(null);

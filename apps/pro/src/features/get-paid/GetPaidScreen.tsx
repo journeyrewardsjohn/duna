@@ -63,6 +63,7 @@ import {
 import { DunaTextInput } from "../session/duna-text";
 import { classifyFailure, type Failure } from "../session/failure";
 import { ActionButton, Notice } from "../session/parts";
+import { takeDevParam } from "../dev/dev-params";
 import { initialsFrom } from "../people/people-model";
 import {
   STEPS,
@@ -558,6 +559,99 @@ function GetPaidFlow({
     collectionIdRef.current = undefined;
   };
 
+  // Preview builds: `collect=<step or stage>` in a dev link walks the flow
+  // with the example people so a simulator can show each step and each Tap
+  // to Pay state (the reader SDK cannot run in a simulator).
+  const devDone = useRef(false);
+  useEffect(() => {
+    if (mode === "live" || !workspace || devDone.current) return;
+    devDone.current = true;
+    const target = takeDevParam("collect");
+    if (!target) return;
+    const person = workspace.people[0];
+    const reference = workspace.references[0];
+    if (!person || !reference) return;
+    dispatch({ type: "choose-payer", payerId: person.personId });
+    if (target === "what") return;
+    dispatch({
+      type: "choose-item",
+      item: {
+        key: `${reference.type}:${reference.id}`,
+        type: reference.type,
+        id: reference.id,
+        label: reference.label,
+        ...(reference.suggestedAmountMinor !== undefined
+          ? { suggestedAmountMinor: reference.suggestedAmountMinor }
+          : {}),
+        ...(reference.creditAmount !== undefined
+          ? { creditAmount: reference.creditAmount }
+          : {}),
+      },
+    });
+    if (target === "amount") return;
+    dispatch({ type: "confirm-amount" });
+    if (target === "how") return;
+    const stage = target as StagePhase;
+    dispatch({ type: "choose-tender", tender: "card-present" });
+    setCollection({
+      id: "preview-collection",
+      orderId: "preview-order",
+      payerPersonId: person.personId,
+      payerName: person.displayName,
+      referenceType: reference.type,
+      referenceId: reference.id,
+      referenceLabel: reference.label,
+      tender: "card-present",
+      amountMinor: reference.suggestedAmountMinor ?? 5_000,
+      currency: workspace.currency,
+      applicationFeeMinor: 0,
+      processingFeeMinor: 0,
+      commissionMinor: 0,
+      creditsApplied: 0,
+      walletCashAppliedMinor: 0,
+      netMinor: 0,
+      status: "processing",
+      createdAt: new Date().toISOString(),
+    } as PaymentCollection);
+    setPhase(stage);
+    setReaderPrompt(
+      stage === "ready"
+        ? "Hold the card or phone at the top of this device."
+        : stage === "reading"
+          ? "Reading the card"
+          : stage === "approved"
+            ? "Approved"
+            : stage === "declined"
+              ? "Declined"
+              : stage === "cancelled"
+                ? "Cancelled"
+                : stage === "error"
+                  ? "We hit a snag"
+                  : "Starting Tap to Pay securely…",
+    );
+    if (
+      stage === "approved" ||
+      stage === "declined" ||
+      stage === "error" ||
+      stage === "cancelled"
+    ) {
+      const outcome: ResultState =
+        stage === "approved"
+          ? "approved"
+          : stage === "declined"
+            ? "declined"
+            : "error";
+      setResult(outcome);
+      setClientSecret("preview");
+      if (stage === "error") setError("The reader lost its connection.");
+      if (stage === "declined") setError("The card was declined.");
+      dispatch({ type: "finish", result: outcome });
+    } else {
+      setBusy(true);
+      dispatch({ type: "start" });
+    }
+  }, [mode, workspace]);
+
   const ground = colors.ground;
   if (loading && !workspace) {
     return (
@@ -913,7 +1007,7 @@ function GetPaidFlow({
                     </Text>
                   </View>
                   <Icon
-                    name={on ? "check" : option.available ? "minus" : "block"}
+                    name={on ? "check" : "minus"}
                     size="inline"
                     tone={on ? "text" : "text-3"}
                   />

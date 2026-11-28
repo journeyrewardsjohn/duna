@@ -33,6 +33,7 @@ export function CrestField({
   height,
   color,
   tempo = "calm",
+  net = true,
   style,
   testID,
 }: {
@@ -40,6 +41,8 @@ export function CrestField({
   readonly height: number;
   readonly color: string;
   readonly tempo?: CrestTempo;
+  /** Draw the net line (off for the contactless field: arcs only). */
+  readonly net?: boolean;
   readonly style?: ViewStyle;
   readonly testID?: string;
 }) {
@@ -87,6 +90,7 @@ export function CrestField({
         color={color}
         crests={[crests[0]!, crests[1]!, crests[2]!]}
         height={height}
+        net={net ? 1 : 0}
       />
     </View>
   );

@@ -13,14 +13,7 @@
  * iPhone guidelines require. Reduced motion: the still field.
  */
 import { StyleSheet, View } from "react-native";
-import {
-  Icon,
-  Numerals,
-  Rise,
-  Text,
-  ThemeOverride,
-  useTheme,
-} from "@duna/ui/native";
+import { Icon, Rise, Text, ThemeOverride, useTheme } from "@duna/ui/native";
 import { CrestField, type CrestTempo } from "../../shared/CrestField";
 
 export type StagePhase =
@@ -98,6 +91,7 @@ function Stage({
         <CrestField
           color={fieldColor}
           height={132}
+          net={false}
           style={{
             transform: [{ rotate: "-90deg" }],
             opacity: phase === "preparing" ? 0.45 : 1,
@@ -124,21 +118,14 @@ function Stage({
           Tap to Pay
         </Text>
       </View>
-      <Numerals
-        accessibilityLabel={`Amount ${amount}`}
-        adjustsFontSizeToFit
-        numberOfLines={1}
-        variant="figure-xl"
-      >
-        {amount}
-      </Numerals>
+      {/* The amount, the player and the item stay on the summary card above. */}
       <Text
-        numberOfLines={2}
+        accessibilityLabel={`${amount}, ${context}`}
         style={styles.center}
         tone="text-2"
         variant="phone-meta"
       >
-        {context}
+        {`${amount} · ${context}`}
       </Text>
       <Rise trigger={`${phase}:${prompt}`}>
         <Text style={styles.center} variant="phone-heading">

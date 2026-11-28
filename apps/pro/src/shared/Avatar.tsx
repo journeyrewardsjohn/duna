@@ -23,14 +23,21 @@ export function Avatar({
   /** A hairline ring (on photos over a busy ground). */
   readonly ring?: boolean;
 }) {
-  const { tokens, colors } = useTheme();
+  const { tokens, colors, scheme } = useTheme();
   const [failed, setFailed] = useState(false);
   const { brand } = tokens;
+  // On the dark ground, Night Court and the sunken surface would vanish:
+  // they lift to the raised surface and the strong line instead.
+  const dark = scheme === "dark";
   const grounds = [
-    { fill: brand["night-court"], ink: brand.salt },
+    dark
+      ? { fill: colors["surface-raised"], ink: brand.dune }
+      : { fill: brand["night-court"], ink: brand.salt },
     { fill: brand.dune, ink: brand["night-court"] },
     { fill: brand.hardwood, ink: brand.salt },
-    { fill: colors["surface-sunken"], ink: colors.text },
+    dark
+      ? { fill: colors["line-strong"], ink: brand.salt }
+      : { fill: colors["surface-sunken"], ink: colors.text },
   ] as const;
   const ground = grounds[avatarGround(id)];
   const frame = {

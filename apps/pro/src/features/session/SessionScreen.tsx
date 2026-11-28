@@ -31,7 +31,7 @@ import {
 } from "@duna/ui/native";
 import { useRegionLayout } from "@duna/ui/native/layout";
 import * as Crypto from "expo-crypto";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useProRuntime } from "../../../runtime";
 import { useShell } from "../../app/ShellContext";
 import { Card, SectionHead, usePaneEdges } from "../../app/ui";
@@ -67,6 +67,7 @@ import {
   type SessionDetail,
   type SessionPerson,
 } from "./session-model";
+import { takeDevParam } from "../dev/dev-params";
 import type { CourtBookingCapability } from "./cancel-plan";
 import {
   CancelCalendarSessionSheet,
@@ -250,6 +251,12 @@ function ReadySession({
   const [removing, setRemoving] = useState<SessionPerson | null>(null);
   const [courtBooking, setCourtBooking] =
     useState<CourtBookingCapability>("unknown");
+  // Preview builds: a dev link may open one sheet for a screenshot.
+  useEffect(() => {
+    if (!preview) return;
+    const devSheet = takeDevParam("sheet-session");
+    if (devSheet) setSheet(devSheet as Sheet);
+  }, [preview]);
 
   const display = useMemo(() => sessionDisplay(detail, now), [detail, now]);
   const copy = sessionCopy(display);

@@ -300,7 +300,12 @@ function SummaryCard({
           </Svg>
         )}
       </View>
-      <View style={styles.summaryFoot}>
+      <View
+        style={[
+          styles.summaryFoot,
+          layout.fontScale >= 1.5 ? { flexDirection: "column" } : null,
+        ]}
+      >
         <View style={styles.grow}>
           <Text tone="text-2" variant="phone-meta">
             Net, last 30 days

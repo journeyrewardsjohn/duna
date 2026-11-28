@@ -167,7 +167,8 @@ export function nextSessionFor(
         Date.parse(entry.startsAt) > now &&
         entry.attendees.some((attendee) => attendee.personId === personId),
     )
-    .toSorted((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+    .slice()
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
 }
 
 export function rosterRow(
@@ -309,7 +310,8 @@ export function filterRoster(
   return rows
     .filter((row) => row.segments.has(segment))
     .filter((row) => !needle || row.searchText.includes(needle))
-    .toSorted((a, b) => a.name.localeCompare(b.name));
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function segmentCounts(
@@ -410,7 +412,8 @@ export function nextBestAction(
       (session) =>
         session.status !== "cancelled" && Date.parse(session.startsAt) > now,
     )
-    .toSorted((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+    .slice()
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
   if (activePlan?.cancelAtPeriodEnd) {
     return {
       title: `${activePlan.name} ends this period`,
