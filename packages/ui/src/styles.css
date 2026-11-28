@@ -221,9 +221,10 @@
 
 :root {
   /* Duna type (F3): each app loads Jost, Geist and Geist Mono through
-     next/font (its app/fonts.ts) and sets --td-font-brand, --td-font-ui and
-     --td-font-mono on the html element. The legacy --font-* names below point
-     at them until each surface migrates to the Tideline roles. The Tideline
+     next/font (its app/fonts.ts) as --duna-font-brand, --duna-font-ui and
+     --duna-font-mono on the html element; the --td-font-* tokens in
+     tokens.root.css read them. The legacy --font-* names below point at the
+     tokens until each surface migrates to the Tideline roles. The Tideline
      display and numeric roles are Geist too. */
   --td-font-display: var(--td-font-ui);
   --td-font-numeric: var(--td-font-ui);

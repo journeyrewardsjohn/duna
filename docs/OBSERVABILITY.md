@@ -158,8 +158,8 @@ payouts, refunds, meters, tax), `stripe-connect.ts`, `operator-payments.ts`,
 (Vercel and Neon APIs), `training-service.ts` and `player-research.ts`
 (site reader), `weather.ts`, `resend.ts`, `sent.ts`, `sendblue-outbox.ts`,
 `messaging-delivery.ts` (Expo push), `live-activities.ts` (APNs),
-`video-providers.ts`, `video-youtube-*.ts`, `video-service.ts` (Mux,
-Cloudflare, R2), `higgsfield.ts`, `duna-ai.ts` and `ask-duna-*.ts` (AI
+`video-providers.ts`, `video-youtube-*.ts`, `video-service.ts`
+(Cloudflare, R2), `higgsfield.ts`, `duna-ai.ts` and `ask-duna-*.ts` (AI
 Gateway), `context.ts` (WorkOS) and `identity-verification.ts`.
 
 ### tRPC

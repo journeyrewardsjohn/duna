@@ -14,6 +14,7 @@ const nextConfig = {
     "@duna/pricing",
     "@duna/rating",
     "@duna/scheduling",
+    "@duna/tideline-core",
     "@duna/ui",
   ],
   experimental: {

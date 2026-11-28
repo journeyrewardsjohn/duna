@@ -1,0 +1,599 @@
+/* Tideline NetScore and RatingRing. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- NetScore ---------- */
+
+    .td-ns {
+      --td-ns-net: 1.5px;
+      --td-ns-num: 22px;
+      --td-ns-big: 40px;
+      --td-ns-name: var(--td-type-label);
+      container-type: inline-size;
+      display: grid;
+      gap: var(--td-space-3);
+      min-width: 0;
+      color: var(--td-text);
+    }
+
+    .td-ns--sm {
+      --td-ns-num: 18px;
+      --td-ns-big: 30px;
+    }
+
+    .td-ns--sm .td-ns__lab {
+      width: 44px;
+    }
+
+    .td-ns--lg {
+      --td-ns-net: 2px;
+      --td-ns-num: 26px;
+      --td-ns-big: 56px;
+    }
+
+    /* A live card is its own live-zone scope: Night Court ground, Solar chip. */
+    .td-ns[data-zone="live"] {
+      padding: var(--td-space-4);
+      border-radius: var(--td-radius-lg);
+      background: var(--td-ground);
+      color: var(--td-text);
+    }
+
+    .td-ns__body {
+      display: grid;
+      gap: var(--td-space-3);
+      min-width: 0;
+    }
+
+    .td-ns__head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      align-items: center;
+      min-width: 0;
+    }
+
+    .td-ns__chip {
+      flex: none;
+    }
+
+    .td-ns__title {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      font: var(--td-type-meta);
+      color: var(--td-sun-ink);
+    }
+
+    .td-ns__setswon {
+      font: var(--td-type-meta);
+      font-family: var(--td-font-mono);
+      color: var(--td-text-2);
+    }
+
+    .td-ns__meta {
+      margin: 0;
+      font: var(--td-type-meta);
+      color: var(--td-text-2);
+      overflow-wrap: anywhere;
+    }
+
+    /* Names wrap to two lines, then truncate; the full name is the title and the sentence. */
+    .td-ns__team {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      min-width: 0;
+      font: var(--td-ns-name);
+      color: var(--td-text);
+    }
+
+    .td-ns__team[data-lose] {
+      color: var(--td-text-2);
+      font-weight: 400;
+    }
+
+    .td-ns__team[data-win] {
+      font-weight: 600;
+    }
+
+    .td-ns__name {
+      display: -webkit-box;
+      min-width: 0;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      overflow-wrap: break-word;
+    }
+
+    .td-ns__name--one {
+      -webkit-line-clamp: 1;
+      line-clamp: 1;
+    }
+
+    .td-ns__badge {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--td-positive);
+      color: var(--td-surface);
+    }
+
+    .td-ns__badge--hollow {
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--td-positive);
+      color: var(--td-positive);
+    }
+
+    .td-ns__badge--trophy {
+      background: var(--td-sun-wash);
+      box-shadow: inset 0 0 0 1px var(--td-sun);
+      color: var(--td-sun-ink);
+    }
+
+    .td-ns__serve {
+      flex: none;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--td-text);
+    }
+
+    /* Numerals: Geist Mono, tabular. Winners ink 600, the rest muted. */
+    .td-ns__num {
+      font-family: var(--td-font-mono);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      color: var(--td-text-3);
+    }
+
+    .td-ns__num--win {
+      font-weight: 600;
+      color: var(--td-text);
+    }
+
+    /* ----- net layout: a table mirrored across a hairline net ----- */
+
+    .td-ns__table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+
+      :where(th, td) {
+        padding: 0;
+        font-weight: inherit;
+        text-align: inherit;
+      }
+    }
+
+    .td-ns__lab {
+      width: 76px;
+      padding-inline-end: var(--td-space-2);
+      font: var(--td-type-micro);
+      font-family: var(--td-font-mono);
+      text-align: start;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--td-text-3);
+      vertical-align: middle;
+    }
+
+    .td-ns__gap,
+    .td-ns__net {
+      width: calc(var(--td-space-6) + var(--td-ns-net));
+    }
+
+    .td-ns__names th {
+      padding-block-end: var(--td-space-2);
+      vertical-align: bottom;
+    }
+
+    .td-ns__side--home .td-ns__team {
+      justify-content: flex-end;
+      text-align: end;
+    }
+
+    .td-ns__side--away .td-ns__team {
+      justify-content: flex-start;
+    }
+
+    .td-ns__pt {
+      padding-block: 4px;
+      font-size: var(--td-ns-num);
+      vertical-align: middle;
+    }
+
+    .td-ns__pt--home {
+      text-align: end;
+    }
+
+    .td-ns__pt--away {
+      text-align: start;
+    }
+
+    /* One short hairline segment per row: the cap height plus 10 px, never the heaviest thing. */
+    .td-ns__net {
+      position: relative;
+
+      &::before {
+        position: absolute;
+        inset-block: 50% auto;
+        inset-inline-start: 50%;
+        width: var(--td-ns-net);
+        height: calc(0.72em + 6px);
+        transform: translate(-50%, -50%);
+        background: var(--td-line-strong);
+        content: "";
+      }
+    }
+
+    .td-ns__big .td-ns__net,
+    .td-ns__big .td-ns__pt {
+      font-size: var(--td-ns-big);
+    }
+
+    .td-ns__big .td-ns__pt {
+      padding-block: var(--td-space-1) var(--td-space-2);
+    }
+
+    .td-ns__set .td-ns__net,
+    .td-ns__set .td-ns__pt {
+      font-size: var(--td-ns-num);
+    }
+
+    /* The deciding set reads at a glance: a sunken band across the row. */
+    .td-ns__set--decider > * {
+      background: var(--td-surface-sunken);
+    }
+
+    .td-ns__set--decider > :first-child {
+      border-start-start-radius: var(--td-radius-sm);
+      border-end-start-radius: var(--td-radius-sm);
+      padding-inline-start: var(--td-space-2);
+      color: var(--td-text-2);
+    }
+
+    .td-ns__set--decider > :last-child {
+      border-start-end-radius: var(--td-radius-sm);
+      border-end-end-radius: var(--td-radius-sm);
+    }
+
+    .td-ns__set--open .td-ns__num {
+      color: var(--td-text-2);
+      font-style: italic;
+    }
+
+    .td-ns__pending {
+      padding-block: var(--td-space-3);
+      font: var(--td-type-label);
+      text-align: center;
+      color: var(--td-text-2);
+    }
+
+    /* ----- rows layout: a scoreboard table ----- */
+
+    .td-ns__board {
+      width: 100%;
+      border-collapse: collapse;
+
+      :where(th, td) {
+        padding: var(--td-space-2) 0;
+        font-weight: inherit;
+        text-align: inherit;
+      }
+
+      thead th {
+        padding-block: 0 var(--td-space-1);
+        font: var(--td-type-micro);
+        font-family: var(--td-font-mono);
+        color: var(--td-text-3);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      tbody tr + tr > * {
+        border-top: 1px solid var(--td-line);
+      }
+    }
+
+    .td-ns__boardteam {
+      width: 100%;
+      min-width: 0;
+      max-width: 0;
+    }
+
+    .td-ns__col,
+    .td-ns__cell {
+      min-width: 2.5ch;
+      padding-inline-start: var(--td-space-3);
+      text-align: end;
+      white-space: nowrap;
+    }
+
+    .td-ns__cell {
+      font-size: var(--td-ns-num);
+    }
+
+    .td-ns__col--sets,
+    .td-ns__cell--sets {
+      padding-inline-start: var(--td-space-4);
+    }
+
+    .td-ns__col--decider {
+      color: var(--td-text-2);
+    }
+
+    .td-ns__col--now .td-ns__num {
+      color: var(--td-text);
+      text-decoration: underline;
+      text-decoration-color: var(--td-line-strong);
+      text-underline-offset: 6px;
+    }
+
+    .td-ns__cell--open .td-ns__num {
+      font-style: italic;
+    }
+
+    /* auto: the card, or the table under 320 px of container width. */
+    .td-ns--auto .td-ns__rowsview {
+      display: none;
+    }
+
+    @container (max-width: 319px) {
+      .td-ns--auto .td-ns__netview {
+        display: none;
+      }
+
+      .td-ns--auto .td-ns__rowsview {
+        display: block;
+      }
+    }
+
+    /* ----- compact: one line for chips and map callouts ----- */
+
+    .td-ns--compact .td-ns__body {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      align-items: center;
+    }
+
+    .td-ns__line {
+      display: inline-grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: var(--td-space-2);
+      align-items: center;
+      min-width: 0;
+      flex: 1 1 200px;
+      font: var(--td-type-meta);
+    }
+
+    .td-ns__lineteam {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      min-width: 0;
+      color: var(--td-text-2);
+
+      &:first-child {
+        justify-content: flex-end;
+      }
+
+      &[data-win] {
+        color: var(--td-text);
+        font-weight: 600;
+      }
+
+      .td-ns__badge {
+        width: 16px;
+        height: 16px;
+      }
+    }
+
+    .td-ns__linescore {
+      display: inline-flex;
+      gap: 2px;
+      font-family: var(--td-font-mono);
+      font-weight: 600;
+      color: var(--td-text);
+
+      .td-ns__num {
+        color: inherit;
+      }
+    }
+
+    .td-ns__linescore--muted {
+      color: var(--td-text-2);
+    }
+
+    .td-ns__linescore--words {
+      font-family: var(--td-font-ui);
+      font-weight: 400;
+      color: var(--td-text-3);
+    }
+
+    .td-ns__footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+    }
+
+    /* ---------- RatingRing ---------- */
+
+    .td-ring {
+      --td-ring-arc: var(--td-action);
+      /* The reliability band is Dune: a graphic that never carries meaning alone (the label says it). */
+      --td-ring-band-filled: var(--td-sun);
+      display: inline-flex;
+      gap: var(--td-space-2);
+      align-items: center;
+      vertical-align: middle;
+    }
+
+    .td-ring__dial {
+      position: relative;
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-ring-size);
+      height: var(--td-ring-size);
+    }
+
+    .td-ring__svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .td-ring__track {
+      fill: none;
+      stroke: var(--td-surface-sunken);
+    }
+
+    .td-ring__track--dotted {
+      opacity: 0.45;
+      stroke: var(--td-text-3);
+      stroke-dasharray: 1 9;
+      stroke-linecap: round;
+    }
+
+    .td-ring__arc {
+      fill: none;
+      stroke: var(--td-ring-arc);
+      stroke-linecap: butt;
+    }
+
+    .td-ring__band {
+      fill: none;
+      stroke: var(--td-surface-sunken);
+    }
+
+    .td-ring__band--filled {
+      stroke: var(--td-ring-band-filled);
+    }
+
+    .td-ring__tick {
+      stroke: var(--td-line-strong);
+    }
+
+    .td-ring__inside {
+      position: relative;
+      display: grid;
+      gap: calc(var(--td-ring-size) * 0.02);
+      justify-items: center;
+      text-align: center;
+    }
+
+    .td-ring__label {
+      font-family: var(--td-font-mono);
+      font-size: max(12px, calc(var(--td-ring-size) * 0.042));
+      font-weight: 500;
+      line-height: 1.2;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--td-text-2);
+    }
+
+    .td-ring__number,
+    .td-ring__beside-number {
+      font-family: var(--td-font-numeric);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      color: var(--td-text);
+    }
+
+    .td-ring__beside {
+      display: inline-grid;
+      gap: 2px;
+      justify-items: start;
+    }
+
+    .td-ring__beside-number {
+      font-size: 20px;
+    }
+
+    .td-ring__chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px var(--td-space-2);
+      border-radius: var(--td-radius-pill);
+      font-family: var(--td-font-numeric);
+      font-size: max(12px, calc(var(--td-ring-size) * 0.055));
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: nowrap;
+      background: var(--td-surface-sunken);
+      color: var(--td-text-2);
+    }
+
+    .td-ring__beside .td-ring__chip {
+      font-size: 12px;
+    }
+
+    .td-ring__chip--up {
+      background: var(--td-positive-wash);
+      color: var(--td-positive);
+    }
+
+    .td-ring__chip--down {
+      background: var(--td-danger-wash);
+      color: var(--td-danger);
+    }
+
+    .td-ring__chip--reached {
+      background: var(--td-sun-wash);
+      color: var(--td-sun-ink);
+    }
+
+    /* Rise: the arc grows from where it was, 900 ms; the band Rallies; the chip lands 120 ms after. */
+    .td-ring--animate {
+      .td-ring__arc {
+        animation: td-ring-arc 900ms var(--td-ease-rise) backwards;
+      }
+
+      .td-ring__band {
+        animation: td-ring-fade var(--td-duration-rally) var(--td-ease-rally)
+          backwards;
+        animation-delay: calc(var(--td-stagger-rally) * var(--td-rally-i, 0));
+      }
+
+      .td-ring__chip {
+        animation: td-ring-fade var(--td-duration-rally) var(--td-ease-rise)
+          backwards;
+        animation-delay: 1020ms;
+      }
+    }
+
+    @keyframes td-ring-arc {
+      from {
+        stroke-dashoffset: var(--td-ring-from);
+      }
+    }
+
+    @keyframes td-ring-fade {
+      from {
+        opacity: 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .td-ring--animate {
+        .td-ring__arc,
+        .td-ring__band,
+        .td-ring__chip {
+          animation: td-ring-fade var(--td-duration-fade-reduced) linear
+            backwards;
+          animation-delay: 0ms;
+        }
+      }
+    }
+  }
+}

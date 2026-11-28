@@ -164,9 +164,7 @@ function asCourtDimensions(input: {
 }
 
 function sourceVideoAvailable(video: typeof videos.$inferSelect): boolean {
-  return Boolean(
-    video.r2ObjectKey || video.muxAssetPlaybackId || video.muxLivePlaybackId,
-  );
+  return Boolean(video.r2ObjectKey);
 }
 
 function serializeRun(
@@ -294,7 +292,6 @@ async function dispatchAnalysisRun(input: {
         runId: input.runId,
         videoId: input.video.id,
         r2ObjectKey: input.video.r2ObjectKey ?? undefined,
-        muxAssetId: input.video.muxAssetId ?? undefined,
         visionSessionId: input.visionSessionId,
         court: input.court,
         visionSetup: input.visionSetup,

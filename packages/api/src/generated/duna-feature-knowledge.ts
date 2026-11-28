@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "c8fa4e5578c7d71653b546e4a3b18108cf91fad58900ba1f0f9b5223d1532a0b",
+    "af9155621bbf1405ffcd37ebe469276b43c975219fa62367dfdbb1187b65605c",
   modules: [
     {
       id: "M1",
@@ -120,7 +120,7 @@ export const generatedDunaFeatureKnowledge = {
       name: "Duna Video",
       surfaces: ["Player iOS", "web", "Pro", "Admin"],
       status:
-        "Core implemented; connected Mux, Web R2 credentials, physical-device stream, and audio-isolation provider remain gated",
+        "Core implemented; connected Cloudflare Stream, Web R2 credentials, physical-device stream, and audio-isolation provider remain gated",
     },
   ],
   apiCapabilities: [

@@ -35,7 +35,7 @@ This rebuild delivers the foundations and the two missing coach workflows:
 ## Explicit remaining gates
 
 - A phone upload is not a live broadcast. Live streaming remains the existing
-  Mux path and requires configured Mux plan/provider credentials.
+  Cloudflare Stream path and requires configured Stream credentials.
 - Tournament setup (divisions, eligibility, field rules, and bracket design)
   remains in Duna HQ by design; Pro runs the published structure.
 - Apple widget provisioning was previously the blocker for a signed Duna Pro

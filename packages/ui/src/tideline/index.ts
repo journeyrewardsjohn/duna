@@ -35,3 +35,5 @@ export * from "./motion";
 export * from "./confirm";
 export * from "./states";
 export * from "./form";
+export * from "./score";
+export * from "./identity";

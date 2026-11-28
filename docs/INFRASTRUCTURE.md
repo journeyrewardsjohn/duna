@@ -34,8 +34,7 @@ The variable catalog and deployment-scope matrix are in
 | Upstash    | Redis database referenced by the deployed REST variable names          | Messaging wake hints only                                                  | [Upstash console](https://console.upstash.com/) team/database invitation  |
 | WorkOS     | Duna AuthKit/User Management environment                               | Web/native identity and organizations                                      | [WorkOS dashboard](https://dashboard.workos.com/) organization invitation |
 | Stripe     | Beach Elite LLC, test mode unless an approved release says otherwise   | Checkout, Connect, Identity, Terminal, subscriptions, refunds              | [Stripe dashboard](https://dashboard.stripe.com/test) team invitation     |
-| Cloudflare | R2 bucket configured as `R2_BUCKET_NAME`                               | Private video originals and message attachments                            | [Cloudflare dashboard](https://dash.cloudflare.com/) account invitation   |
-| Mux        | Duna video environment                                                 | Live ingest, assets, playback signing, Data                                | [Mux dashboard](https://dashboard.mux.com/) team invitation               |
+| Cloudflare | Stream account; R2 bucket configured as `R2_BUCKET_NAME`               | Live video (Stream); private video originals and message attachments (R2)  | [Cloudflare dashboard](https://dash.cloudflare.com/) account invitation   |
 | LiveKit    | Duna Cloud project                                                     | Purpose-bound voice rooms and agent dispatch                               | [LiveKit Cloud](https://cloud.livekit.io/) project invitation             |
 | Inngest    | Duna application/environment                                           | Durable event dispatch and recovery                                        | [Inngest dashboard](https://app.inngest.com/) organization invitation     |
 
@@ -378,9 +377,10 @@ code change.
 
 ## Video, storage, and LiveKit
 
-- **Mux:** live ingest, assets, signed/public playback, Data, and signed
-  webhooks. Configure the Mux variable group in every server runtime executing
-  video/admin procedures.
+- **Cloudflare Stream:** the only live video provider — live ingest,
+  recordings, signed/public playback, YouTube outputs, and an authenticated
+  webhook. Configure the Cloudflare Stream variable group in every server
+  runtime executing video/admin procedures.
 - **Cloudflare R2:** private video originals and message attachments. The
   canonical credential names are `CLOUDFLARE_ACCOUNT_ID`, `R2_BUCKET_NAME`,
   `CF_ACCESS_KEY_ID`, and the existing `CE_SECRET_ACCESS_KEY` name. Both Web and

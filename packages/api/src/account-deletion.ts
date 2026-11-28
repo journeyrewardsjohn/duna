@@ -54,14 +54,7 @@ import {
   worldRankings,
 } from "@duna/db";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
-import {
-  completeMuxLiveVideo,
-  deleteMuxLiveVideo,
-  deleteMuxVideoAsset,
-  deleteR2VideoObject,
-  replaceMuxAssetPlaybackPolicy,
-  replaceMuxLivePlaybackPolicy,
-} from "./video-providers";
+import { deleteR2VideoObject } from "./video-providers";
 import { resolveWorkOSCredentials } from "./workos-environment";
 
 export const ACCOUNT_DELETION_GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1_000;
@@ -110,12 +103,6 @@ async function deleteWorkOSIdentity(workosUserId: string): Promise<void> {
 type DeletionVideo = {
   readonly id: string;
   readonly status: string;
-  readonly muxLiveStreamId: string | null;
-  readonly muxLivePlaybackId: string | null;
-  readonly muxLivePlaybackPolicy: string | null;
-  readonly muxAssetId: string | null;
-  readonly muxAssetPlaybackId: string | null;
-  readonly muxAssetPlaybackPolicy: string | null;
   readonly r2ObjectKey: string | null;
 };
 
@@ -124,12 +111,6 @@ async function loadDeletionVideos(personId: string): Promise<DeletionVideo[]> {
     .select({
       id: videos.id,
       status: videos.status,
-      muxLiveStreamId: videos.muxLiveStreamId,
-      muxLivePlaybackId: videos.muxLivePlaybackId,
-      muxLivePlaybackPolicy: videos.muxLivePlaybackPolicy,
-      muxAssetId: videos.muxAssetId,
-      muxAssetPlaybackId: videos.muxAssetPlaybackId,
-      muxAssetPlaybackPolicy: videos.muxAssetPlaybackPolicy,
       r2ObjectKey: videos.r2ObjectKey,
     })
     .from(videos)
@@ -168,43 +149,6 @@ export async function containAccountMedia(input: {
 
   const videoRows = await loadDeletionVideos(input.personId);
   for (const video of videoRows) {
-    let livePlaybackId = video.muxLivePlaybackId;
-    let livePlaybackPolicy = video.muxLivePlaybackPolicy;
-    let assetPlaybackId = video.muxAssetPlaybackId;
-    let assetPlaybackPolicy = video.muxAssetPlaybackPolicy;
-
-    if (video.muxLiveStreamId) {
-      try {
-        await completeMuxLiveVideo(video.muxLiveStreamId);
-      } catch (error) {
-        if (!externalResourceMissing(error)) throw error;
-      }
-    }
-    if (
-      video.muxLiveStreamId &&
-      video.muxLivePlaybackId &&
-      video.muxLivePlaybackPolicy === "public"
-    ) {
-      livePlaybackId = await replaceMuxLivePlaybackPolicy({
-        liveStreamId: video.muxLiveStreamId,
-        previousPlaybackId: video.muxLivePlaybackId,
-        policy: "signed",
-      });
-      livePlaybackPolicy = "signed";
-    }
-    if (
-      video.muxAssetId &&
-      video.muxAssetPlaybackId &&
-      video.muxAssetPlaybackPolicy === "public"
-    ) {
-      assetPlaybackId = await replaceMuxAssetPlaybackPolicy({
-        assetId: video.muxAssetId,
-        previousPlaybackId: video.muxAssetPlaybackId,
-        policy: "signed",
-      });
-      assetPlaybackPolicy = "signed";
-    }
-
     await database
       .update(videos)
       .set({
@@ -212,10 +156,6 @@ export async function containAccountMedia(input: {
         liveVisibility: "link-only",
         recordingVisibility: "private",
         publishedToProfile: false,
-        muxLivePlaybackId: livePlaybackId,
-        muxLivePlaybackPolicy: livePlaybackPolicy,
-        muxAssetPlaybackId: assetPlaybackId,
-        muxAssetPlaybackPolicy: assetPlaybackPolicy,
         endedAt: video.status === "live" ? input.now : undefined,
         updatedAt: input.now,
       })
@@ -359,12 +299,6 @@ export async function permanentlyDeleteAccount(input: {
   ]);
 
   for (const video of videoRows) {
-    if (video.muxLiveStreamId) {
-      await deleteMuxLiveVideo(video.muxLiveStreamId);
-    }
-    if (video.muxAssetId) {
-      await deleteMuxVideoAsset(video.muxAssetId);
-    }
     if (video.r2ObjectKey) {
       await deleteR2VideoObject(video.r2ObjectKey);
     }

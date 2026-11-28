@@ -18,8 +18,9 @@ known only in `verified`, `complete` and `forfeit`; in `pending-verification` it
 is provisional (no badge); `disputed`, `cancelled`, `scheduled`, `warmup`,
 `live` and `not-finished` have none. Scheduled, warmup and cancelled show no
 numbers ("Pending", never `0-0`). Best-of-one shows the set's points as the
-headline. Check badge for a winner, trophy for a title match. `not-finished` is
-**proposed** and not in the `match_status` enum.
+headline. Check badge for a winner, trophy for a title match. `not-finished` (a
+match stopped part-way) is a `match_status` value; its unfinished set never
+counts.
 
 **Rating ring.** Geometry constants from brand book section 4 (r 96 track,
 r 84 three-segment band with an 8-unit gap, tick y 2 to 20). The arc is
@@ -92,6 +93,23 @@ first: "W 9 mph") unless `units: "metric"` is passed; the package never infers
 units from a device or locale. Priority when space is short (first dropped
 last): reason, wind, temperature, rain, UV, sunset; the reason is never
 dropped.
+
+## Score words and club identity
+
+`score-sentence.ts`: `MATCH_STATUSES` (a test compares it with the
+`match_status` enum in `packages/db/src/schema.ts`, so a new value fails until
+it is designed), `parseNetScoreStatus` (hyphens or underscores, never a
+guess), `netScoreSentence` (the one sentence a screen reader hears for a score
+card), `scoreAnnouncementText` (live-region words from `scoreAnnouncement`
+parts) and `createAnnouncementGate` (at most one announcement per quiet
+window; the latest held message wins). `rating-ring.ts` adds
+`ratingRingArcPath` (SVG arcs from 12 o'clock) and `ratingRingLabel` (the
+ring's text alternative). `club-mark.ts` adds `clubMarkModel` (logo, tile or
+monogram; below 28 px a logo becomes the monogram unless it works small; 26%
+radius; digits in a monogram are flagged so they are not set in Jost),
+`generatedClubColor` (a name-hashed ground that passes 4.5:1 with Salt for
+clubs with no colour yet; never used to recolour a chosen brand) and
+`membershipPassModel` (a code only for an active membership that has one).
 
 ## Score announcements
 
