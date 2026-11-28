@@ -1,0 +1,1 @@
+export { CoverScreen } from "./CoverScreen";
