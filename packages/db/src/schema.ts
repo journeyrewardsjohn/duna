@@ -900,7 +900,7 @@ export const waiverExecutions = pgTable(
     signerPersonId: uuid("signer_person_id")
       .notNull()
       .references(() => people.id, { onDelete: "restrict" }),
-    signerRole: varchar("signer_role", { length: 16 }).notNull(),
+    signerRole: varchar("signer_role", { length: 32 }).notNull(),
     relationship: varchar("relationship", { length: 80 }),
     typedLegalName: text("typed_legal_name").notNull(),
     signatureMethod: varchar("signature_method", { length: 24 })
