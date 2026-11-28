@@ -4,7 +4,9 @@ import {
   catalogItems,
   catalogParticipationSettlements,
   catalogSessionOccurrences,
+  courts,
   getDatabase,
+  guardianships,
   getTransactionalDatabase,
   ledgerEntries,
   ledgerJournals,
@@ -16,6 +18,7 @@ import {
   organizationWallets,
   people,
   refundRecords,
+  venues,
 } from "@duna/db";
 import { log } from "@duna/observability";
 import {
@@ -40,7 +43,9 @@ import { refundOrganizationOrder } from "./catalog-service";
 import type { ApiActor } from "./context";
 import {
   bookerNotices,
-  catalogSessionPicture,
+  catalogSessionPictures,
+  occurrenceBookingRows,
+  type OccurrenceBookingRow,
   decisionRule,
   effectiveLockAt,
   ensureCatalogDecision,
@@ -82,7 +87,7 @@ export const ACTIVE_CATALOG_BOOKING_STATUSES = [
   "fulfilled",
 ] as const;
 
-interface OccurrenceBooking {
+export interface OccurrenceBooking {
   readonly fulfillment: typeof catalogFulfillments.$inferSelect;
   readonly order: typeof orders.$inferSelect;
   readonly quantity: number;
@@ -97,42 +102,35 @@ export async function loadOccurrenceBookings(
   occurrenceId: string,
   now: Date,
 ): Promise<readonly OccurrenceBooking[]> {
-  const rows = await getDatabase()
-    .select({ fulfillment: catalogFulfillments, order: orders })
-    .from(catalogFulfillments)
-    .innerJoin(orders, eq(catalogFulfillments.orderId, orders.id))
-    .where(
-      and(
-        eq(catalogFulfillments.catalogSessionOccurrenceId, occurrenceId),
-        inArray(catalogFulfillments.status, [
-          ...ACTIVE_CATALOG_BOOKING_STATUSES,
-        ]),
-      ),
-    )
-    .orderBy(asc(catalogFulfillments.createdAt), asc(catalogFulfillments.id));
-  return rows.map(({ fulfillment, order }) => {
-    const paymentMethod =
-      typeof fulfillment.details.paymentMethod === "string"
-        ? fulfillment.details.paymentMethod
-        : undefined;
-    const paid =
-      order.status === "paid" || order.status === "partially-refunded";
-    const cashReservation =
-      paymentMethod === "cash" &&
-      order.status === "pending" &&
-      (!order.expiresAt || order.expiresAt > now);
-    const credits = Number(fulfillment.details.creditsApplied ?? 0);
-    return {
-      fulfillment,
-      order,
-      quantity: positiveInteger(fulfillment.details.quantity, 1),
-      paymentMethod,
-      confirmed: paid || cashReservation,
-      reservedCredits:
-        Number.isSafeInteger(credits) && credits > 0 ? credits : 0,
-      snapshot: readBookingSnapshot(fulfillment.details),
-    };
-  });
+  return (await occurrenceBookingRows([occurrenceId])).map((row) =>
+    toOccurrenceBooking(row, now),
+  );
+}
+
+/** One booking row as the engine reads it (shared by every loader). */
+export function toOccurrenceBooking(
+  { fulfillment, order }: OccurrenceBookingRow,
+  now: Date,
+): OccurrenceBooking {
+  const paymentMethod =
+    typeof fulfillment.details.paymentMethod === "string"
+      ? fulfillment.details.paymentMethod
+      : undefined;
+  const paid = order.status === "paid" || order.status === "partially-refunded";
+  const cashReservation =
+    paymentMethod === "cash" &&
+    order.status === "pending" &&
+    (!order.expiresAt || order.expiresAt > now);
+  const credits = Number(fulfillment.details.creditsApplied ?? 0);
+  return {
+    fulfillment,
+    order,
+    quantity: positiveInteger(fulfillment.details.quantity, 1),
+    paymentMethod,
+    confirmed: paid || cashReservation,
+    reservedCredits: Number.isSafeInteger(credits) && credits > 0 ? credits : 0,
+    snapshot: readBookingSnapshot(fulfillment.details),
+  };
 }
 
 /** Confirmed places in a session: the headcount minimums and tiers price on. */
@@ -655,6 +653,149 @@ async function systemActor(
   };
 }
 
+/** How a booking was paid, as the cancellation plan and its preview say it. */
+export type ParticipationCancellationMethod =
+  "credits" | "card" | "cash" | "free" | "unpaid";
+
+/**
+ * What cancelling a session does to one booking. Computed by
+ * `planOccurrenceCancellation`, which BOTH the refund below and the operator
+ * preview (`operator.participation.cancelPreview`) call: the preview can
+ * never promise something the cancellation does not do.
+ */
+export interface ParticipationCancellationLine {
+  readonly booking: OccurrenceBooking;
+  /** release: an unpaid reservation or a free place; refund: the order refund path. */
+  readonly action: "release" | "refund";
+  readonly method: ParticipationCancellationMethod;
+  /** Credits restored to the wallet (the redeemed credits still held). */
+  readonly creditsBack: number;
+  /** Money returned to the original payment (card, or cash at the desk). */
+  readonly refundMinor: number;
+  readonly currency: string;
+  /** The status the cancellation reports when the refund path succeeds. */
+  readonly expectedStatus: ParticipationCancellationResult["refundStatus"];
+}
+
+/**
+ * The plan for every remaining booking of a session about to be cancelled:
+ * three queries, whatever the number of bookings. Read-only.
+ */
+export async function planOccurrenceCancellation(input: {
+  readonly organizationId: string;
+  readonly occurrenceId: string;
+  readonly now: Date;
+}): Promise<readonly ParticipationCancellationLine[]> {
+  const database = getDatabase();
+  const bookings = await loadOccurrenceBookings(input.occurrenceId, input.now);
+  const orderIds = bookings.map((booking) => booking.order.id);
+  const [applications, refunds] =
+    orderIds.length === 0
+      ? [[], []]
+      : await Promise.all([
+          database
+            .select({
+              orderId: organizationCreditApplications.orderId,
+              credits: organizationCreditApplications.credits,
+              returnedCredits: organizationCreditApplications.returnedCredits,
+            })
+            .from(organizationCreditApplications)
+            .where(
+              and(
+                eq(
+                  organizationCreditApplications.organizationId,
+                  input.organizationId,
+                ),
+                inArray(organizationCreditApplications.orderId, orderIds),
+                isNull(organizationCreditApplications.restoredAt),
+              ),
+            ),
+          database
+            .select({
+              orderId: refundRecords.orderId,
+              amount: sql<number>`coalesce(sum(${refundRecords.amountMinor}), 0)::bigint`,
+            })
+            .from(refundRecords)
+            .where(
+              and(
+                eq(refundRecords.organizationId, input.organizationId),
+                inArray(refundRecords.orderId, orderIds),
+                inArray(refundRecords.status, ["pending", "succeeded"]),
+              ),
+            )
+            .groupBy(refundRecords.orderId),
+        ]);
+  const redeemed = new Map<string, { count: number; credits: number }>();
+  for (const row of applications) {
+    const entry = redeemed.get(row.orderId) ?? { count: 0, credits: 0 };
+    entry.count += 1;
+    entry.credits += row.credits - row.returnedCredits;
+    redeemed.set(row.orderId, entry);
+  }
+  const refundedByOrder = new Map(
+    refunds.map((row) => [row.orderId, Number(row.amount)]),
+  );
+  return bookings.map((booking) => {
+    const paid =
+      booking.order.status === "paid" ||
+      booking.order.status === "partially-refunded";
+    const currency = booking.order.currency;
+    if (!paid) {
+      return {
+        booking,
+        action: "release" as const,
+        method: "unpaid" as const,
+        creditsBack: 0,
+        refundMinor: 0,
+        currency,
+        expectedStatus: "released" as const,
+      };
+    }
+    if (booking.order.totalMinor === 0 && booking.reservedCredits === 0) {
+      return {
+        booking,
+        action: "release" as const,
+        method: "free" as const,
+        creditsBack: 0,
+        refundMinor: 0,
+        currency,
+        expectedStatus: "released" as const,
+      };
+    }
+    // Mirrors refundOrganizationOrder: an order paid with redeemed credits
+    // (no card payment) restores the credits; anything else refunds the
+    // order total to the original payment.
+    const credits = redeemed.get(booking.order.id);
+    const restoresCredits =
+      credits !== undefined &&
+      credits.count > 0 &&
+      !booking.order.stripePaymentIntentId;
+    const alreadyRefunded = refundedByOrder.get(booking.order.id) ?? 0;
+    const method: ParticipationCancellationMethod = restoresCredits
+      ? "credits"
+      : booking.paymentMethod === "cash"
+        ? "cash"
+        : "card";
+    const refundable = restoresCredits
+      ? credits.credits > 0
+      : booking.order.totalMinor > 0 &&
+        alreadyRefunded + booking.order.totalMinor <= booking.order.totalMinor;
+    return {
+      booking,
+      action: "refund" as const,
+      method,
+      creditsBack: restoresCredits ? Math.max(0, credits.credits) : 0,
+      refundMinor: restoresCredits ? 0 : booking.order.totalMinor,
+      currency,
+      expectedStatus: !refundable
+        ? ("review-required" as const)
+        : booking.reservedCredits > 0
+          ? ("credits-restored" as const)
+          : ("refund-submitted" as const),
+    };
+  });
+}
+
 /**
  * Releases every remaining booking of a session cancelled for missing its
  * minimum. Credits and card payments go back through the existing order
@@ -676,18 +817,16 @@ export async function refundCancelledOccurrenceBookings(input: {
     input.refundReason ??
     "Session cancelled: the minimum number of players was not met.";
   const database = getDatabase();
-  const bookings = await loadOccurrenceBookings(input.occurrenceId, input.now);
+  const plan = await planOccurrenceCancellation(input);
   const results: ParticipationCancellationResult[] = [];
-  for (const booking of bookings) {
+  for (const line of plan) {
+    const { booking } = line;
     const base = {
       fulfillmentId: booking.fulfillment.id,
       orderId: booking.order.id,
       personId: booking.fulfillment.personId,
     };
-    const paid =
-      booking.order.status === "paid" ||
-      booking.order.status === "partially-refunded";
-    if (!paid) {
+    if (line.method === "unpaid") {
       await database.batch([
         database
           .update(catalogFulfillments)
@@ -711,9 +850,7 @@ export async function refundCancelledOccurrenceBookings(input: {
       results.push({ ...base, refundStatus: "released" });
       continue;
     }
-    const free =
-      booking.order.totalMinor === 0 && booking.reservedCredits === 0;
-    if (free) {
+    if (line.method === "free") {
       await database
         .update(catalogFulfillments)
         .set({
@@ -1336,6 +1473,16 @@ export interface OperatorCatalogSessionOccurrence {
   readonly status: "scheduled" | "cancelled" | "complete";
   readonly capacity: number;
   readonly confirmedCount: number;
+  /** PART-B: the first assigned coach (null when none). */
+  readonly coach?: { readonly id: string; readonly displayName: string } | null;
+  /** PART-B: the offering's court, when it names one. */
+  readonly court?: { readonly id: string; readonly name: string } | null;
+  /** PART-B: the offering's venue, when it names one. */
+  readonly venue?: {
+    readonly id: string;
+    readonly name: string;
+    readonly timeZone: string;
+  } | null;
   readonly participation?: OccurrenceParticipationState & {
     readonly minimumPolicy: "cancel" | "run";
     readonly settlementBasis: "cutoff" | "attendance";
@@ -1358,23 +1505,51 @@ export interface OperatorCatalogSessionOccurrence {
     readonly settledCredits?: number;
     readonly returnedCredits?: number;
     readonly attendance?: "attended" | "no-show";
+    /** PART-B: a junior (never a birth date or an age). */
+    readonly isMinor?: boolean;
+    /** PART-B: a junior's guardian (the one who booked, else a linked guardian). */
+    readonly guardianDisplayName?: string;
   }[];
 }
 
-/** Rosters with headcount, minimum, and settlement state for HQ. */
+function configurationId(value: unknown): string | undefined {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      value,
+    )
+    ? value
+    : undefined;
+}
+
+const NO_ID = "00000000-0000-4000-8000-000000000000";
+
+/**
+ * Rosters with headcount, minimum, settlement state, coach, court, venue and
+ * juniors for staff screens. A fixed number of queries whatever the number
+ * of sessions (no per-session reads); never writes.
+ */
 export async function loadOperatorCatalogSessionOccurrences(input: {
   readonly actor: ApiActor;
   readonly catalogItemId?: string;
+  /** One session (the Pro session screen); the window still applies when given. */
+  readonly occurrenceId?: string;
   readonly from?: Date;
   readonly to?: Date;
   readonly now: Date;
 }): Promise<readonly OperatorCatalogSessionOccurrence[]> {
-  if (!process.env.DATABASE_URL) return [];
   const organizationId = input.actor.organizationId;
   if (!organizationId) throw new Error("Choose an organization first.");
   const database = getDatabase();
-  const from = input.from ?? new Date(input.now.getTime() - 24 * 60 * 60_000);
-  const to = input.to ?? new Date(input.now.getTime() + 60 * 24 * 60 * 60_000);
+  const from =
+    input.from ??
+    (input.occurrenceId
+      ? undefined
+      : new Date(input.now.getTime() - 24 * 60 * 60_000));
+  const to =
+    input.to ??
+    (input.occurrenceId
+      ? undefined
+      : new Date(input.now.getTime() + 60 * 24 * 60 * 60_000));
   const rows = await database
     .select({ occurrence: catalogSessionOccurrences, item: catalogItems })
     .from(catalogSessionOccurrences)
@@ -1388,55 +1563,160 @@ export async function loadOperatorCatalogSessionOccurrences(input: {
         input.catalogItemId
           ? eq(catalogSessionOccurrences.catalogItemId, input.catalogItemId)
           : undefined,
-        gte(catalogSessionOccurrences.startsAt, from),
-        lte(catalogSessionOccurrences.startsAt, to),
+        input.occurrenceId
+          ? eq(catalogSessionOccurrences.id, input.occurrenceId)
+          : undefined,
+        from ? gte(catalogSessionOccurrences.startsAt, from) : undefined,
+        to ? lte(catalogSessionOccurrences.startsAt, to) : undefined,
       ),
     )
     .orderBy(asc(catalogSessionOccurrences.startsAt))
     .limit(200);
-  const results: OperatorCatalogSessionOccurrence[] = [];
+  if (rows.length === 0) return [];
+  const bookingRows = await occurrenceBookingRows(
+    rows.map((row) => row.occurrence.id),
+  );
+  const bookingsByOccurrence = new Map<string, OccurrenceBooking[]>();
+  const personIds = new Set<string>();
+  const bookerById = new Map<string, string>();
+  for (const row of bookingRows) {
+    const booking = toOccurrenceBooking(row, input.now);
+    const id = row.fulfillment.catalogSessionOccurrenceId!;
+    const list = bookingsByOccurrence.get(id) ?? [];
+    list.push(booking);
+    bookingsByOccurrence.set(id, list);
+    personIds.add(row.fulfillment.personId);
+    const booker =
+      typeof row.fulfillment.details.bookedByPersonId === "string"
+        ? row.fulfillment.details.bookedByPersonId
+        : row.order.buyerPersonId;
+    bookerById.set(row.fulfillment.id, booker);
+    personIds.add(booker);
+  }
+  const venueIds = new Set<string>();
+  const courtIds = new Set<string>();
   for (const { occurrence, item } of rows) {
-    const bookings = await loadOccurrenceBookings(occurrence.id, input.now);
-    const personIds = [
-      ...new Set(bookings.map((booking) => booking.fulfillment.personId)),
-    ];
-    const names =
-      personIds.length === 0
-        ? []
-        : await database
-            .select({ id: people.id, displayName: people.displayName })
+    const coach = occurrence.coachPersonIds[0];
+    if (coach) personIds.add(coach);
+    const venue = configurationId(item.configuration.venueId);
+    if (venue) venueIds.add(venue);
+    const court = configurationId(item.configuration.courtId);
+    if (court) courtIds.add(court);
+  }
+  const fulfillmentIds = bookingRows.map((row) => row.fulfillment.id);
+  const [pictures, personRows, venueRows, courtRows, attendance] =
+    await Promise.all([
+      catalogSessionPictures({
+        organizationId,
+        rows,
+        bookingRows,
+        now: input.now,
+      }),
+      personIds.size === 0
+        ? Promise.resolve([])
+        : database
+            .select({
+              id: people.id,
+              displayName: people.displayName,
+              isMinor: people.isMinor,
+            })
             .from(people)
-            .where(inArray(people.id, personIds));
-    const nameById = new Map(names.map((row) => [row.id, row.displayName]));
+            .where(inArray(people.id, [...personIds])),
+      venueIds.size === 0
+        ? Promise.resolve([])
+        : database
+            .select({
+              id: venues.id,
+              name: venues.name,
+              timeZone: venues.timezone,
+            })
+            .from(venues)
+            .where(
+              and(
+                eq(venues.organizationId, organizationId),
+                inArray(venues.id, [...venueIds]),
+              ),
+            ),
+      courtIds.size === 0
+        ? Promise.resolve([])
+        : database
+            .select({ id: courts.id, name: courts.name })
+            .from(courts)
+            .innerJoin(venues, eq(courts.venueId, venues.id))
+            .where(
+              and(
+                eq(venues.organizationId, organizationId),
+                inArray(courts.id, [...courtIds]),
+              ),
+            ),
+      database
+        .select({
+          bookingId: participationAttendance.bookingId,
+          status: participationAttendance.status,
+        })
+        .from(participationAttendance)
+        .where(
+          inArray(
+            participationAttendance.bookingId,
+            fulfillmentIds.length > 0 ? fulfillmentIds : [NO_ID],
+          ),
+        ),
+    ]);
+  const personById = new Map(personRows.map((row) => [row.id, row]));
+  const minors = [...personById.values()]
+    .filter((person) => person.isMinor)
+    .map((person) => person.id);
+  const guardianRows =
+    minors.length === 0
+      ? []
+      : await database
+          .select({
+            minorId: guardianships.minorId,
+            guardianId: guardianships.guardianId,
+            displayName: people.displayName,
+          })
+          .from(guardianships)
+          .innerJoin(people, eq(guardianships.guardianId, people.id))
+          .where(
+            and(
+              inArray(guardianships.minorId, minors),
+              eq(guardianships.verified, true),
+            ),
+          )
+          .orderBy(asc(guardianships.createdAt));
+  const venueById = new Map(venueRows.map((row) => [row.id, row]));
+  const courtById = new Map(courtRows.map((row) => [row.id, row]));
+  const attendanceById = new Map(
+    attendance.map((row) => [row.bookingId, row.status]),
+  );
+  const seesMoney =
+    input.actor.scopes.includes("*") ||
+    input.actor.scopes.includes("payments:read");
+  const guardianFor = (minorId: string, bookerId: string) => {
+    const linked = guardianRows.filter((row) => row.minorId === minorId);
+    if (bookerId !== minorId) {
+      const booker = linked.find((row) => row.guardianId === bookerId);
+      if (booker) return booker.displayName;
+      // The adult who booked for the junior speaks for them on this booking.
+      const person = personById.get(bookerId);
+      if (person && !person.isMinor) return person.displayName;
+    }
+    return linked[0]?.displayName;
+  };
+  return rows.map(({ occurrence, item }) => {
+    const bookings = bookingsByOccurrence.get(occurrence.id) ?? [];
     const confirmedCount = bookings
       .filter((booking) => booking.confirmed)
       .reduce((total, booking) => total + booking.quantity, 0);
-    // The snapshot rule, the engine's lock and the same confirmed count as
-    // capacity (participation.md §15).
-    const picture = await catalogSessionPicture({
-      occurrence,
-      item,
-      now: input.now,
-    });
-    const attendance = await database
-      .select()
-      .from(participationAttendance)
-      .where(
-        inArray(
-          participationAttendance.bookingId,
-          bookings.length > 0
-            ? bookings.map((booking) => booking.fulfillment.id)
-            : ["00000000-0000-4000-8000-000000000000"],
-        ),
-      );
-    const attendanceById = new Map(
-      attendance.map((row) => [row.bookingId, row.status]),
-    );
-    const seesMoney =
-      input.actor.scopes.includes("*") ||
-      input.actor.scopes.includes("payments:read");
+    const picture = pictures.get(occurrence.id);
     const confirmedBookings = bookings.filter((booking) => booking.confirmed);
-    results.push({
+    const coachId = occurrence.coachPersonIds[0];
+    const coach = coachId ? personById.get(coachId) : undefined;
+    const venueId = configurationId(item.configuration.venueId);
+    const venue = venueId ? venueById.get(venueId) : undefined;
+    const courtId = configurationId(item.configuration.courtId);
+    const court = courtId ? courtById.get(courtId) : undefined;
+    return {
       id: occurrence.id,
       catalogItemId: item.id,
       title: item.title,
@@ -1449,6 +1729,11 @@ export async function loadOperatorCatalogSessionOccurrences(input: {
           : "scheduled",
       capacity: occurrence.capacity,
       confirmedCount,
+      coach: coach ? { id: coach.id, displayName: coach.displayName } : null,
+      court: court ? { id: court.id, name: court.name } : null,
+      venue: venue
+        ? { id: venue.id, name: venue.name, timeZone: venue.timeZone }
+        : null,
       participation: picture
         ? {
             ...picture.state,
@@ -1470,36 +1755,47 @@ export async function loadOperatorCatalogSessionOccurrences(input: {
               : {}),
           }
         : undefined,
-      bookings: bookings.map((booking) => ({
-        fulfillmentId: booking.fulfillment.id,
-        orderId: booking.order.id,
-        personId: booking.fulfillment.personId,
-        displayName:
-          nameById.get(booking.fulfillment.personId) ?? "Duna member",
-        payerPersonId: booking.order.buyerPersonId,
-        quantity: booking.quantity,
-        paymentMethod: booking.paymentMethod,
-        confirmed: booking.confirmed,
-        reservedCredits: booking.reservedCredits,
-        settledCredits:
-          typeof booking.fulfillment.details.creditsSettled === "number"
-            ? booking.fulfillment.details.creditsSettled
-            : undefined,
-        returnedCredits:
-          typeof booking.fulfillment.details.creditsReturned === "number"
-            ? booking.fulfillment.details.creditsReturned
-            : undefined,
-        attendance:
-          attendanceById.get(booking.fulfillment.id) === "attended"
-            ? "attended"
-            : attendanceById.get(booking.fulfillment.id) === "absent"
-              ? "no-show"
-              : booking.fulfillment.details.attendance === "attended" ||
-                  booking.fulfillment.details.attendance === "no-show"
-                ? booking.fulfillment.details.attendance
-                : undefined,
-      })),
-    });
-  }
-  return results;
+      bookings: bookings.map((booking) => {
+        const person = personById.get(booking.fulfillment.personId);
+        const isMinor = person?.isMinor === true;
+        const guardian = isMinor
+          ? guardianFor(
+              booking.fulfillment.personId,
+              bookerById.get(booking.fulfillment.id) ??
+                booking.order.buyerPersonId,
+            )
+          : undefined;
+        return {
+          fulfillmentId: booking.fulfillment.id,
+          orderId: booking.order.id,
+          personId: booking.fulfillment.personId,
+          displayName: person?.displayName ?? "Duna member",
+          payerPersonId: booking.order.buyerPersonId,
+          quantity: booking.quantity,
+          paymentMethod: booking.paymentMethod,
+          confirmed: booking.confirmed,
+          reservedCredits: booking.reservedCredits,
+          settledCredits:
+            typeof booking.fulfillment.details.creditsSettled === "number"
+              ? booking.fulfillment.details.creditsSettled
+              : undefined,
+          returnedCredits:
+            typeof booking.fulfillment.details.creditsReturned === "number"
+              ? booking.fulfillment.details.creditsReturned
+              : undefined,
+          attendance:
+            attendanceById.get(booking.fulfillment.id) === "attended"
+              ? ("attended" as const)
+              : attendanceById.get(booking.fulfillment.id) === "absent"
+                ? ("no-show" as const)
+                : booking.fulfillment.details.attendance === "attended" ||
+                    booking.fulfillment.details.attendance === "no-show"
+                  ? booking.fulfillment.details.attendance
+                  : undefined,
+          isMinor,
+          ...(guardian ? { guardianDisplayName: guardian } : {}),
+        };
+      }),
+    };
+  });
 }

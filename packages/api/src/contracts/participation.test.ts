@@ -11,6 +11,8 @@ import {
   participationMergeSessionsSchema,
   participationRuleToReviewSchema,
   participationWaitlistPlaceSchema,
+  participationCancelPreviewSchema,
+  participationResolveCancelRequestSchema,
   participationCancelRequestSchema,
   participationCancelSessionSchema,
   participationDefaultsSchema,
@@ -57,8 +59,9 @@ describe("participation contract and demo fixtures (PART-3)", () => {
     });
     expect(byTitle.get("Thursday clinic")?.copy).toMatchObject({
       status: "Minimum reached",
+      // 9 booked: the cheaper rung (8–12 · 2) is already reached.
       price:
-        "3 credits now. If more join by Wed 6:00 PM, the difference comes back.",
+        "3 credits now; 1 comes back when the group is confirmed Wed 6:00 PM.",
     });
     expect(byTitle.get("Saturday open play")?.copy.status).toBe(
       "Cancelled · not enough players",
@@ -245,5 +248,123 @@ describe("participation part 2 fixtures and procedures", () => {
         idempotencyKey: key(),
       }),
     ).toEqual({ state: "kept" });
+  });
+});
+
+describe("PART-B procedures in demo mode", () => {
+  beforeEach(() => {
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_DEMO_MODE", "true");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+  const key = () => crypto.randomUUID();
+  const owner = () =>
+    createCaller(
+      createApiContext({ actor: createDemoActor(["player", "owner"]) }),
+    );
+  const coach = () =>
+    createCaller(
+      createApiContext({ actor: createDemoActor(["player", "coach"]) }),
+    );
+
+  it("fixtures parse against their contracts", () => {
+    participationCancelPreviewSchema.parse(participationDemo.cancelPreview);
+    participationResolveCancelRequestSchema.parse(
+      participationDemo.cancelRequestApproved,
+    );
+    participationResolveCancelRequestSchema.parse(
+      participationDemo.cancelRequestDeclined,
+    );
+    participationInviteLinkSchema.parse(participationDemo.shareLink);
+  });
+
+  it("previews a cancellation with money for the owner and without for a coach", async () => {
+    const subject = {
+      subjectType: "catalog-session-occurrence" as const,
+      subjectId: participationDemo.cancelPreview.subjectId,
+    };
+    const full = await owner().operator.participation.cancelPreview(subject);
+    expect(full.totals.creditsBack).toBeGreaterThan(0);
+    expect(full.bookings.some((booking) => booking.isMinor)).toBe(true);
+    const junior = full.bookings.find((booking) => booking.isMinor)!;
+    expect(junior.displayName).toBe("Sam");
+    expect(
+      full.notices.find((notice) => notice.bookingId === junior.bookingId),
+    ).toMatchObject({ audienceRole: "guardian", audience: "Mara Lewis" });
+    const names = await coach().operator.participation.cancelPreview(subject);
+    expect(names.totals.creditsBack).toBeUndefined();
+    expect(
+      names.bookings.every(
+        (booking) =>
+          booking.creditsBack === undefined &&
+          booking.cardRefundMinor === undefined,
+      ),
+    ).toBe(true);
+  });
+
+  it("resolves a cancel request and makes a share link", async () => {
+    const requestId = participationDemo.cancelRequests[0]!.id;
+    expect(
+      await owner().operator.participation.resolveCancelRequest({
+        requestId,
+        decision: "approve",
+        confirmed: true,
+        idempotencyKey: key(),
+      }),
+    ).toEqual(participationDemo.cancelRequestApproved);
+    expect(
+      (
+        await owner().operator.participation.resolveCancelRequest({
+          requestId,
+          decision: "decline",
+          note: "We have a cover coach",
+          confirmed: true,
+          idempotencyKey: key(),
+        })
+      ).status,
+    ).toBe("declined");
+    expect(
+      await coach().operator.participation.shareLink({
+        subjectType: "catalog-session-occurrence",
+        subjectId: participationDemo.quotes[0]!.subjectId,
+      }),
+    ).toEqual(participationDemo.shareLink);
+  });
+
+  it("answers the staff session list from the fixtures, with detail", async () => {
+    const rows = await owner().operator.catalogSessionOccurrences();
+    expect(rows.length).toBe(participationDemo.occurrences.length);
+    const clinic = rows.find((row) => row.title === "Thursday clinic")!;
+    expect(clinic.coach?.displayName).toBe("Coach Rivera");
+    expect(clinic.venue?.name).toBe("Manhattan Beach Pier");
+    expect(
+      clinic.bookings.find((booking) => booking.isMinor)?.guardianDisplayName,
+    ).toBe("Mara Lewis");
+    const one = await coach().operator.catalogSessionOccurrences({
+      occurrenceId: clinic.id,
+    });
+    expect(one.map((row) => row.id)).toEqual([clinic.id]);
+    expect(one[0]!.participation?.atStakeCredits).toBeUndefined();
+  });
+
+  it("quotes an all-in price on the operator side", async () => {
+    const quote = await owner().operator.fees.quote({
+      priceMinor: 3_000,
+      currency: "USD",
+      method: "card",
+    });
+    expect(quote).toMatchObject({ status: "ok", unit: "money" });
+    if (quote.status === "ok" && quote.unit === "money") {
+      expect(quote.clubReceives.amountMinor).toBe(
+        quote.playerPays.amountMinor - quote.dunaFees.amountMinor,
+      );
+    }
+    expect(
+      await owner().operator.fees.quote({
+        offeringId: participationDemo.atRisk.sessions[0]!.catalogItemId,
+        currency: "USD",
+        method: "credits",
+      }),
+    ).toMatchObject({ status: "ok", unit: "credits" });
   });
 });

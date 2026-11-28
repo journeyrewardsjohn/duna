@@ -5,7 +5,7 @@
  * from the worked examples in docs/plan/participation.md §14. Every credit
  * number is illustrative; no real people.
  */
-import { demoOrganization, demoPlayer } from "../demo";
+import { demoOrganization, demoPeople, demoPlayer, demoVenues } from "../demo";
 import {
   participationDisplay,
   participationLockAt,
@@ -230,9 +230,206 @@ const clubDefaultRule: ParticipationRuleV2 = {
 };
 
 const coachName = "Coach Rivera";
+const coachId = demoId("participation", 601);
+const venue = demoVenues[0]!;
+const courtId = demoId("participation", 602);
+
+/**
+ * PART-B: the staff session list (`operator.catalogSessionOccurrences`) in
+ * demo mode, one session per display state, with coach, court, venue and a
+ * junior booked by a guardian. Names are the demo club's fictional people.
+ */
+function demoRoster(session: DemoSession, index: number) {
+  const names = demoPeople.map((person) => person.displayName);
+  const rows: {
+    fulfillmentId: string;
+    orderId: string;
+    personId: string;
+    displayName: string;
+    payerPersonId: string;
+    quantity: number;
+    paymentMethod?: string;
+    confirmed: boolean;
+    reservedCredits: number;
+    isMinor: boolean;
+    guardianDisplayName?: string;
+  }[] = [];
+  let seat = 0;
+  for (let place = 0; place < session.booked; place += 1) {
+    const n = 1000 + index * 50 + place;
+    // The second booking of every session is a junior booked by a guardian.
+    const junior = rows.length === 1;
+    // The twins: one parent booking two places in the twelve-place clinic.
+    const quantity = session.n === 2 && place === 0 ? 2 : 1;
+    if (quantity === 2) place += 1;
+    const personId = junior
+      ? demoId("participation", n + 500)
+      : demoId("participation", n);
+    rows.push({
+      fulfillmentId: demoId("participation", n + 2000),
+      orderId: demoId("participation", n + 4000),
+      personId,
+      displayName: junior ? "Sam Lewis" : names[seat % names.length]!,
+      payerPersonId: junior ? demoPlayer.id : personId,
+      quantity,
+      paymentMethod: place % 3 === 2 ? "card" : "credit",
+      confirmed: true,
+      reservedCredits:
+        place % 3 === 2
+          ? 0
+          : (session.rule?.tiers[0]?.creditsPerPlayer ?? 2) * quantity,
+      isMinor: junior,
+      ...(junior ? { guardianDisplayName: demoPlayer.displayName } : {}),
+    });
+    seat += 1;
+  }
+  return rows;
+}
+
+const occurrences = sessions.map((session, index) => {
+  const quote = quotes[index]!;
+  const startsAt = new Date(quote.startsAt);
+  const endsAt = new Date(
+    startsAt.getTime() + hours(session.durationHours ?? 1.5),
+  );
+  const rule = session.rule;
+  const lockAt = quote.lockAt;
+  const status =
+    session.outcome === "cancel-under-minimum" ||
+    session.outcome === "cancelled-by-club"
+      ? ("cancelled" as const)
+      : endsAt <= now
+        ? ("complete" as const)
+        : ("scheduled" as const);
+  return {
+    id: quote.subjectId,
+    catalogItemId: demoId("participation", 101),
+    title: session.title,
+    startsAt: quote.startsAt,
+    endsAt: endsAt.toISOString(),
+    timezone: zone,
+    status,
+    capacity: session.capacity,
+    confirmedCount: session.booked,
+    coach: { id: coachId, displayName: coachName },
+    court: index % 2 === 0 ? { id: courtId, name: "Court 3" } : null,
+    venue: { id: venue.id, name: venue.name, timeZone: venue.timezone },
+    ...(rule && lockAt
+      ? {
+          participation: {
+            capacity: session.capacity,
+            bookedCount: session.booked,
+            spotsRemaining: Math.max(0, session.capacity - session.booked),
+            minParticipants: rule.minParticipants,
+            minimumMet: session.booked >= rule.minParticipants,
+            playersNeeded: Math.max(0, rule.minParticipants - session.booked),
+            decisionAt: lockAt,
+            lockAt,
+            freeCancelUntil: lockAt,
+            status:
+              session.outcome === "cancel-under-minimum"
+                ? ("cancelled-under-minimum" as const)
+                : session.outcome === "run-under-minimum"
+                  ? ("running-under-minimum" as const)
+                  : session.outcome === "minimum-met"
+                    ? ("confirmed" as const)
+                    : ("open" as const),
+            displayState: quote.displayState as Exclude<
+              typeof quote.displayState,
+              "open"
+            >,
+            waitlistCount: session.waiting ?? 0,
+            heldCount: session.held ?? 0,
+            minimumPolicy: rule.minimumPolicy,
+            settlementBasis: "cutoff" as const,
+            atStakeCredits:
+              (rule.tiers[0]?.creditsPerPlayer ?? 2) * session.booked,
+            atStakeMinor: 0,
+          },
+        }
+      : {}),
+    bookings: demoRoster(session, index),
+  };
+});
+
+/** `operator.participation.cancelPreview` for the Thursday clinic (twins, a junior, a card payer). */
+const previewSession = occurrences[1]!;
+const cancelPreview = {
+  subjectType: "catalog-session-occurrence" as const,
+  subjectId: previewSession.id,
+  bookings: previewSession.bookings.map((booking) => ({
+    bookingId: booking.fulfillmentId,
+    displayName: booking.isMinor
+      ? booking.displayName.split(" ")[0]!
+      : booking.displayName,
+    isMinor: booking.isMinor,
+    quantity: booking.quantity,
+    method:
+      booking.paymentMethod === "card"
+        ? ("card" as const)
+        : ("credits" as const),
+    outcome:
+      booking.paymentMethod === "card"
+        ? ("refund-submitted" as const)
+        : ("credits-restored" as const),
+    ...(booking.paymentMethod === "card"
+      ? { cardRefundMinor: 3_000 * booking.quantity, currency: "USD" }
+      : { creditsBack: booking.reservedCredits }),
+  })),
+  totals: {
+    bookings: previewSession.bookings.length,
+    places: previewSession.bookings.reduce((sum, row) => sum + row.quantity, 0),
+    creditsBack: previewSession.bookings
+      .filter((row) => row.paymentMethod !== "card")
+      .reduce((sum, row) => sum + row.reservedCredits, 0),
+    cardRefunds: previewSession.bookings.filter(
+      (row) => row.paymentMethod === "card",
+    ).length,
+    cardRefundMinor: previewSession.bookings
+      .filter((row) => row.paymentMethod === "card")
+      .reduce((sum, row) => sum + 3_000 * row.quantity, 0),
+    currency: "USD",
+    released: 0,
+    reviewRequired: 0,
+  },
+  notices: previewSession.bookings.map((booking) => ({
+    bookingId: booking.fulfillmentId,
+    audience: booking.guardianDisplayName ?? booking.displayName,
+    audienceRole: booking.isMinor ? ("guardian" as const) : ("player" as const),
+    channel: "notice" as const,
+  })),
+};
 
 export const participationDemo = {
   now: PARTICIPATION_DEMO_NOW,
+  /** PART-B: `operator.catalogSessionOccurrences` in demo mode. */
+  occurrences,
+  /** PART-B: `operator.participation.cancelPreview` (money for `payments:read`). */
+  cancelPreview,
+  /** PART-B: `operator.participation.resolveCancelRequest`. */
+  cancelRequestApproved: {
+    requestId: demoId("participation", 301),
+    status: "approved" as const,
+    cancellations: [
+      {
+        bookingId: demoId("participation", 201),
+        refundStatus: "credits-restored" as const,
+      },
+    ],
+    coachNotified: false,
+  },
+  cancelRequestDeclined: {
+    requestId: demoId("participation", 301),
+    status: "declined" as const,
+    cancellations: [],
+    coachNotified: false,
+  },
+  /** PART-B: `operator.participation.shareLink`. */
+  shareLink: {
+    url: "/i/demoShare123",
+    code: "demoShare123",
+    expiresAt: quotes[0]!.startsAt,
+  },
   /** Every display state, plus a session without a group rule. */
   quotes,
   defaults: {

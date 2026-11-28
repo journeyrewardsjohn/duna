@@ -10,17 +10,13 @@ import {
   ArrowRight,
   Bot,
   Building2,
-  CalendarDays,
   CircleAlert,
   CreditCard,
   ExternalLink,
-  Boxes,
-  PackageCheck,
   ShoppingBag,
   MapPinned,
   Plus,
   ShieldCheck,
-  Trophy,
   Waves,
 } from "lucide-react";
 import { hqRoutes } from "@duna/core/hq-routes";
@@ -29,10 +25,8 @@ import type { CSSProperties } from "react";
 import {
   eventNavigationItems,
   operatorPanelHref,
-  productNavigationItems,
   type EventNavigationSlug,
   type OperatorPanel,
-  type ProductNavigationSlug,
 } from "./navigation";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { EventsTable } from "./events-table";
@@ -45,7 +39,7 @@ import { VenueMatchOperations } from "./venue-match-operations";
 import { DunaAiWorkspace } from "./duna-ai-workspace";
 
 const moduleCopy: Record<
-  Exclude<OperatorPanel, "today" | "inbox">,
+  Exclude<OperatorPanel, "today" | "inbox" | "offerings">,
   {
     readonly eyebrow: string;
     readonly title: string;
@@ -89,12 +83,6 @@ const moduleCopy: Record<
     title: "Training",
     description:
       "Programs, practice plans, drills, workload, and the athlete handoff in one connected coaching workspace.",
-  },
-  offerings: {
-    eyebrow: "What your organization offers",
-    title: "Products",
-    description:
-      "Events, services, plans, goods, and equipment in one simple catalog.",
   },
   events: {
     eyebrow: "Competition + community",
@@ -257,470 +245,6 @@ function EventInventory({
         )}
       </div>
     </section>
-  );
-}
-
-export type ProductCatalogScope = "service" | "plan" | "good";
-
-export function ProductCatalogPanel({
-  workspace,
-  scope,
-}: {
-  readonly workspace: OperatorWorkspace;
-  readonly scope?: ProductCatalogScope;
-}) {
-  const groups = [
-    {
-      type: "service" as const,
-      label: "Services",
-      detail: "Private lessons, group lessons, and coaching programs.",
-      icon: CalendarDays,
-    },
-    {
-      type: "plan" as const,
-      label: "Plans",
-      detail: "Memberships, organization-specific credit packs, and bundles.",
-      icon: CreditCard,
-    },
-    {
-      type: "good" as const,
-      label: "Goods + equipment",
-      detail: "Sell, rent, or reserve inventory for coaches and operations.",
-      icon: ShoppingBag,
-    },
-  ];
-  const priceLabel = (item: OperatorWorkspace["catalog"][number]) => {
-    const prices = item.variants.flatMap((variant) => variant.prices);
-    const money = prices.find(
-      (price) =>
-        price.paymentKind === "card" && price.amountMinor !== undefined,
-    );
-    const credits = prices.find(
-      (price) =>
-        price.paymentKind === "credit" && price.creditAmount !== undefined,
-    );
-    return [
-      money?.amountMinor !== undefined
-        ? formatMoney(
-            money.amountMinor,
-            money.currency ?? workspace.organization.currency,
-          )
-        : undefined,
-      credits?.creditAmount ? `${credits.creditAmount} credits` : undefined,
-    ]
-      .filter(Boolean)
-      .join(" or ");
-  };
-  const scopeLabel = groups.find((group) => group.type === scope)?.label;
-  const catalog = scope
-    ? workspace.catalog.filter((item) => item.type === scope)
-    : workspace.catalog;
-  const productPerformance = workspace.productPerformance.filter(
-    (performance) =>
-      catalog.some((item) => item.id === performance.catalogItemId),
-  );
-  const inventory = scope
-    ? workspace.inventory.filter((item) =>
-        catalog.some((catalogItem) => catalogItem.id === item.catalogItemId),
-      )
-    : workspace.inventory;
-  const totalPurchases = productPerformance.reduce(
-    (total, item) => total + item.paidPurchases,
-    0,
-  );
-  const grossBookedMinor = productPerformance.reduce(
-    (total, item) => total + item.grossBookedMinor,
-    0,
-  );
-  const uniqueCustomers = new Set(
-    productPerformance
-      .filter((item) => item.uniqueCustomers > 0)
-      .map((item) => item.catalogItemId),
-  ).size;
-  const goodsPerformance = productPerformance.filter(
-    (performance) =>
-      catalog.find((item) => item.id === performance.catalogItemId)?.type ===
-      "good",
-  );
-  const goodsNetSalesMinor = goodsPerformance.reduce(
-    (total, item) => total + item.netSalesMinor,
-    0,
-  );
-  const goodsCogsMinor = goodsPerformance.reduce(
-    (total, item) => total + item.cogsMinor,
-    0,
-  );
-  const goodsGrossProfitMinor = goodsNetSalesMinor - goodsCogsMinor;
-  const inventoryCostOnHandMinor = inventory.reduce(
-    (total, receipt) =>
-      total + (receipt.unitCostMinor ?? 0) * receipt.quantityOnHand,
-    0,
-  );
-  const inventoryReceivedCostMinor = inventory.reduce(
-    (total, receipt) =>
-      total +
-      (receipt.totalCostMinor ??
-        (receipt.unitCostMinor ?? 0) * receipt.quantityReceived),
-    0,
-  );
-  const topOffers = productPerformance
-    .filter((item) => item.paidPurchases > 0)
-    .toSorted((left, right) => right.grossBookedMinor - left.grossBookedMinor)
-    .slice(0, 4);
-  return (
-    <div className="product-catalog">
-      <section className="hq-card product-performance-overview">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Connected product performance</span>
-            <h2>
-              {scopeLabel ? `${scopeLabel} in view.` : "Everything in view."}
-            </h2>
-            <p>
-              Paid purchases and booked value come from connected Duna orders.
-              Duna does not invent conversion rates when impression data is not
-              available.
-            </p>
-          </div>
-          <Badge>{catalog.length} offers</Badge>
-        </header>
-        <div className="product-performance-metrics">
-          <article>
-            <small>Gross booked</small>
-            <Numeric>
-              {formatMoney(grossBookedMinor, workspace.organization.currency)}
-            </Numeric>
-            <span>Before connected refunds</span>
-          </article>
-          <article>
-            <small>Paid purchases</small>
-            <Numeric>{totalPurchases}</Numeric>
-            <span>Across all catalog types</span>
-          </article>
-          <article>
-            <small>Offers with customers</small>
-            <Numeric>{uniqueCustomers}</Numeric>
-            <span>
-              {catalog.filter((item) => item.status === "active").length}{" "}
-              currently live
-            </span>
-          </article>
-          <article>
-            <small>Goods gross profit</small>
-            <Numeric>
-              {formatMoney(
-                goodsGrossProfitMinor,
-                workspace.organization.currency,
-              )}
-            </Numeric>
-            <span>
-              {formatMoney(goodsCogsMinor, workspace.organization.currency)}{" "}
-              connected COGS
-            </span>
-          </article>
-          <article>
-            <small>Inventory cost on hand</small>
-            <Numeric>
-              {formatMoney(
-                inventoryCostOnHandMinor,
-                workspace.organization.currency,
-              )}
-            </Numeric>
-            <span>
-              {formatMoney(
-                inventoryReceivedCostMinor,
-                workspace.organization.currency,
-              )}{" "}
-              received historically
-            </span>
-          </article>
-        </div>
-        {topOffers.length > 0 ? (
-          <div className="product-performance-bars">
-            {topOffers.map((performance) => {
-              const item = catalog.find(
-                (candidate) => candidate.id === performance.catalogItemId,
-              );
-              const maximum = topOffers[0]?.grossBookedMinor || 1;
-              return (
-                <article key={performance.catalogItemId}>
-                  <span>
-                    <strong>{item?.title ?? "Catalog offer"}</strong>
-                    <small>
-                      {performance.paidPurchases} purchase
-                      {performance.paidPurchases === 1 ? "" : "s"} ·{" "}
-                      {performance.uniqueCustomers} customer
-                      {performance.uniqueCustomers === 1 ? "" : "s"}
-                      {item?.type === "good" &&
-                      performance.grossMarginBps !== undefined
-                        ? ` · ${(performance.grossMarginBps / 100).toFixed(1)}% margin`
-                        : ""}
-                    </small>
-                  </span>
-                  <i
-                    aria-label={`${Math.round(
-                      (performance.grossBookedMinor / maximum) * 100,
-                    )}% of the leading booked value`}
-                    style={
-                      {
-                        "--product-performance-width": `${Math.max(
-                          4,
-                          Math.round(
-                            (performance.grossBookedMinor / maximum) * 100,
-                          ),
-                        )}%`,
-                      } as CSSProperties
-                    }
-                  />
-                  <Numeric>
-                    {formatMoney(
-                      performance.grossBookedMinor,
-                      workspace.organization.currency,
-                    )}
-                  </Numeric>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="hq-empty">
-            <strong>Performance begins with the first paid order.</strong>
-            <span>
-              Create a draft, publish it when payments are ready, and Duna will
-              report only connected activity.
-            </span>
-          </div>
-        )}
-      </section>
-      {!scope && (
-        <section className="product-kind-grid">
-          {groups.map((group) => {
-            const items = catalog.filter((item) => item.type === group.type);
-            const Icon = group.icon;
-            return (
-              <article className="hq-card product-kind-card" key={group.type}>
-                <header>
-                  <span className="product-kind-card__icon">
-                    <Icon aria-hidden size={20} />
-                  </span>
-                  <Badge>{items.length}</Badge>
-                </header>
-                <h2>{group.label}</h2>
-                <p>{group.detail}</p>
-                <Link href={`/offerings/create?type=${group.type}`}>
-                  Create a{" "}
-                  {group.type === "good" ? "Good" : group.label.slice(0, -1)}{" "}
-                  <ArrowRight size={15} />
-                </Link>
-              </article>
-            );
-          })}
-        </section>
-      )}
-      {!scope && (
-        <section className="hq-card product-event-builder-callout">
-          <span className="catalog-type-mark catalog-type-mark--event">
-            <Trophy aria-hidden size={18} />
-          </span>
-          <div>
-            <strong>Events have their own builder.</strong>
-            <p>
-              Leagues, tournaments, clinics, camps, pickup, and open play belong
-              in the event workflow with schedules, divisions, tickets, and
-              policies.
-            </p>
-          </div>
-          <Link href="/events/create">
-            Open event builder <ArrowRight aria-hidden size={15} />
-          </Link>
-        </section>
-      )}
-      {scope && (
-        <section className="hq-card product-customer-activity">
-          <header className="hq-card-heading">
-            <div>
-              <span className="hq-eyebrow">Customers by offer</span>
-              <h2>Who is buying each product?</h2>
-              <p>
-                Connected purchases only. Open an offer to manage its pricing,
-                fulfillment, and settings.
-              </p>
-            </div>
-          </header>
-          <div>
-            {catalog.map((item) => {
-              const performance = productPerformance.find(
-                (candidate) => candidate.catalogItemId === item.id,
-              );
-              const customers = workspace.productCustomers.filter(
-                (customer) => customer.catalogItemId === item.id,
-              );
-              return (
-                <article key={item.id}>
-                  <header>
-                    <Link href={`/offerings/${item.id}`}>
-                      <span>
-                        <strong>{item.title}</strong>
-                        <small>
-                          {performance?.paidPurchases ?? 0} purchase
-                          {(performance?.paidPurchases ?? 0) === 1 ? "" : "s"}
-                        </small>
-                      </span>
-                      <ArrowRight aria-hidden size={16} />
-                    </Link>
-                    <span>
-                      <strong>{performance?.uniqueCustomers ?? 0}</strong>
-                      <small>customers</small>
-                    </span>
-                  </header>
-                  {customers.length > 0 && (
-                    <div className="product-customer-activity__people">
-                      {customers.slice(0, 6).map((customer) => (
-                        <Link
-                          href={`/people/${customer.personId}`}
-                          key={customer.personId}
-                        >
-                          {customer.displayName}
-                        </Link>
-                      ))}
-                      {customers.length > 6 && (
-                        <span>+{customers.length - 6} more</span>
-                      )}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-            {catalog.length === 0 && (
-              <div className="hq-empty">
-                <strong>
-                  Customers will appear after the first offer is live.
-                </strong>
-                <span>
-                  Create an offer, set the right audience, then publish it.
-                </span>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-      <section className="hq-card catalog-inventory-card">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Catalog</span>
-            <h2>
-              {catalog.length} {scopeLabel?.toLowerCase() ?? "products"}
-            </h2>
-            <p>
-              One source for storefront pricing, member pricing, credits,
-              fulfillment, and inventory.
-            </p>
-          </div>
-          <Badge>
-            {catalog.filter((item) => item.status === "active").length} live
-          </Badge>
-        </header>
-        <div className="catalog-table">
-          {catalog.map((item) => (
-            <Link
-              aria-label={`Edit ${item.title}`}
-              className="catalog-table__row"
-              href={`/offerings/${item.id}`}
-              key={item.id}
-            >
-              <span
-                className={`catalog-type-mark catalog-type-mark--${item.type}`}
-              >
-                {item.type === "good" ? (
-                  <Boxes size={17} />
-                ) : item.type === "plan" ? (
-                  <CreditCard size={17} />
-                ) : item.type === "event" ? (
-                  <Trophy size={17} />
-                ) : (
-                  <PackageCheck size={17} />
-                )}
-              </span>
-              <span>
-                <strong>{item.title}</strong>
-                <small>
-                  {item.subtype.replaceAll("-", " ")} · {item.visibility}
-                </small>
-              </span>
-              <span>
-                <strong>{priceLabel(item) || "Pricing not set"}</strong>
-                <small>
-                  {item.allowCash ? "cash · " : ""}
-                  {item.allowCard ? "card · " : ""}
-                  {item.allowCredits ? "credits" : ""}
-                </small>
-              </span>
-              <span>
-                <strong>
-                  {item.type === "good"
-                    ? `${item.inventoryOnHand - item.inventoryReserved} available`
-                    : `${item.variants.length} option${item.variants.length === 1 ? "" : "s"}`}
-                </strong>
-                <small>
-                  {item.membershipRequired
-                    ? "membership required"
-                    : "open terms"}
-                </small>
-              </span>
-              <Badge tone={item.status === "active" ? "live" : "neutral"}>
-                {item.status}
-              </Badge>
-              <ArrowRight aria-hidden size={16} />
-            </Link>
-          ))}
-          {catalog.length === 0 && (
-            <div className="hq-empty">
-              <strong>No products yet.</strong>
-              <span>
-                Start with a lesson, clinic, membership, credit pack, or piece
-                of gear.
-              </span>
-            </div>
-          )}
-        </div>
-      </section>
-      {inventory.length > 0 && (
-        <section className="hq-card inventory-snapshot-card">
-          <header className="hq-card-heading">
-            <div>
-              <span className="hq-eyebrow">Equipment + goods</span>
-              <h2>Inventory snapshot</h2>
-            </div>
-            <Badge>{inventory.length} stock records</Badge>
-          </header>
-          <div className="inventory-snapshot-grid">
-            {inventory.slice(0, 8).map((stock) => (
-              <article key={stock.id}>
-                <span>
-                  <strong>{stock.itemTitle}</strong>
-                  <small>
-                    {stock.variantTitle} · {stock.locationName}
-                  </small>
-                </span>
-                <Badge>{stock.purpose}</Badge>
-                <Numeric>
-                  {stock.quantityOnHand - stock.quantityReserved}
-                </Numeric>
-                <small>
-                  available from {stock.quantityReceived} received
-                  {stock.unitCostMinor !== undefined
-                    ? ` at ${formatMoney(
-                        stock.unitCostMinor,
-                        stock.currency ?? workspace.organization.currency,
-                      )} each`
-                    : ""}
-                </small>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
   );
 }
 
@@ -1216,23 +740,23 @@ export function ModulePanel({
   focusedDraftId,
   matches,
   pageCopy,
-  productScope,
   workspace,
   ticketApprovals,
 }: {
-  /** The type link shown as current in the Offerings or Events list. */
-  readonly activeType?: ProductNavigationSlug | EventNavigationSlug;
+  /** The type link shown as current in the Events list. */
+  readonly activeType?: EventNavigationSlug;
   readonly module: OperatorPanel;
   readonly dashboard: OperatorDashboard;
   readonly eventKinds?: readonly OperatorWorkspace["sessions"][number]["kind"][];
   readonly focusedDraftId?: string;
   readonly matches: readonly OperatorScorableMatch[];
   readonly pageCopy?: ModulePageCopy;
-  readonly productScope?: ProductCatalogScope;
   readonly workspace: OperatorWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
-  if (module === "today" || module === "inbox") return null;
+  // Offerings has its own screens in app/(next) (H-OFFER).
+  if (module === "today" || module === "inbox" || module === "offerings")
+    return null;
   const copy = pageCopy ?? moduleCopy[module];
   const createAction =
     module === "events" && eventKinds?.[0]
@@ -1244,32 +768,28 @@ export function ModulePanel({
         ? { href: "/events/create?type=tournament", label: "Create event" }
         : module === "leagues"
           ? { href: "/events/create?type=league", label: "Create league" }
-          : module === "offerings"
-            ? { href: hqRoutes.offeringCreate, label: "Create product" }
-            : module === "places"
-              ? { href: hqRoutes.placeCreate, label: "Add venue" }
-              : module === "people"
-                ? { href: hqRoutes.memberInvite, label: "Invite person" }
-                : module === "team"
-                  ? { href: hqRoutes.teamInvite, label: "Invite team member" }
-                  : module === "marketing"
-                    ? {
-                        href: hqRoutes.marketingCreate,
-                        label: "Create campaign",
-                      }
-                    : module === "money"
-                      ? { href: hqRoutes.moneySetup, label: "Configure money" }
-                      : module === "schedule"
-                        ? { href: "/events/create", label: "Add to calendar" }
-                        : undefined;
+          : module === "places"
+            ? { href: hqRoutes.placeCreate, label: "Add venue" }
+            : module === "people"
+              ? { href: hqRoutes.memberInvite, label: "Invite person" }
+              : module === "team"
+                ? { href: hqRoutes.teamInvite, label: "Invite team member" }
+                : module === "marketing"
+                  ? {
+                      href: hqRoutes.marketingCreate,
+                      label: "Create campaign",
+                    }
+                  : module === "money"
+                    ? { href: hqRoutes.moneySetup, label: "Configure money" }
+                    : module === "schedule"
+                      ? { href: "/events/create", label: "Add to calendar" }
+                      : undefined;
   // Until H9 turns them into in-page filters, the old sidebar children are a
-  // row of type links inside the Offerings and Events lists.
+  // row of type links inside the Events list.
   const typeLinks =
-    module === "offerings"
-      ? productNavigationItems
-      : module === "events" || module === "leagues"
-        ? eventNavigationItems
-        : undefined;
+    module === "events" || module === "leagues"
+      ? eventNavigationItems
+      : undefined;
 
   return (
     <main
@@ -1298,10 +818,7 @@ export function ModulePanel({
       </header>
 
       {typeLinks && (
-        <nav
-          aria-label={module === "offerings" ? "Offering types" : "Event types"}
-          className="hq-page-heading__actions"
-        >
+        <nav aria-label="Event types" className="hq-page-heading__actions">
           {typeLinks.map((item) => (
             <Link
               aria-current={activeType === item.slug ? "page" : undefined}
@@ -1333,8 +850,6 @@ export function ModulePanel({
         <PeopleWorkspace workspace={workspace} />
       ) : module === "team" ? (
         <TeamPanel workspace={workspace} />
-      ) : module === "offerings" ? (
-        <ProductCatalogPanel scope={productScope} workspace={workspace} />
       ) : module === "events" ? (
         <EventsTable
           dashboard={dashboard}

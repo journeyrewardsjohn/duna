@@ -20,6 +20,7 @@
     "@duna/core": "workspace:*",
     "@duna/expo-background-upload": "workspace:*",
     "@duna/expo-device-posture": "workspace:*",
+    "@duna/league-engine": "workspace:*",
     "@duna/messaging-client": "workspace:*",
     "@duna/mobile-auth": "workspace:*",
     "@duna/observability": "workspace:*",
