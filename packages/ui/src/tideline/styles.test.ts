@@ -184,6 +184,10 @@ describe("Tideline stylesheet rules", () => {
         "td-crest-rise",
         "td-draw",
         "td-page-turn",
+        // The rating ring's Rise (once) and the Duna window's drift (once).
+        "td-ring-arc",
+        "td-ring-fade",
+        "td-window-drift",
       ]),
     );
     const marker = "@media (prefers-reduced-motion: reduce)";
@@ -207,6 +211,8 @@ describe("Tideline stylesheet rules", () => {
       ["loaders", ".td-serve__stroke"],
       ["toast", ".td-toast__countdown"],
       ["motion", ".td-firstopen"],
+      ["score", ".td-ring__arc"],
+      ["avatar", ".td-window--drift .td-window__photo"],
     ] as const) {
       expect(reduced(name), selector).toContain(selector);
     }

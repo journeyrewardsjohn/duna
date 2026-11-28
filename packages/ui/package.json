@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@duna/expo-device-posture": "workspace:*",
+    "@duna/tideline-core": "workspace:*",
     "@ui-sdk/core": "0.1.0-beta.17",
     "@ui-sdk/react": "0.1.0-beta.17",
     "react": "^19.2.8"
