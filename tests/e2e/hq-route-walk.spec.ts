@@ -52,6 +52,10 @@ const practicePlan = "33000000-0000-4000-8000-000000000300";
 const practice = "33000000-0000-4000-8000-000000000600";
 const program = "33000000-0000-4000-8000-000000000400";
 const missing = "00000000-0000-4000-8000-000000000001";
+// Duna Pay demo fixtures (@duna/core/demo/pay) and the demo payout.
+const sale = "d0020000-0000-4000-8000-000000000103";
+const dispute = "d0020000-0000-4000-8000-000000000800";
+const payout = "93000000-0000-4000-8000-000000000001";
 
 /** Concrete paths for every dynamic template (static ones walk as written). */
 const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
@@ -92,7 +96,12 @@ const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
     "/offerings/types/plans",
     "/offerings/types/goods",
   ],
-  [hqRoutes.moneyTransaction]: [`/money/transactions/${transaction}`],
+  [hqRoutes.moneyTransaction]: [
+    `/money/transactions/${transaction}`,
+    `/money/transactions/${sale}`,
+  ],
+  [hqRoutes.moneyPayout]: [`/money/payouts/${payout}`],
+  [hqRoutes.moneyDispute]: [`/money/disputes/${dispute}`],
   [hqRoutes.place]: [`/setup/places/${venue}`],
   [hqRoutes.placeLayout]: [`/setup/places/${venue}/layout`],
   [hqRoutes.placeCourtCreate]: [`/setup/places/${venue}/courts/create`],
@@ -136,8 +145,6 @@ const knownFailures: Readonly<Record<string, string>> = {
     "H9: operator.activityDetail needs the connected database in demo mode.",
   [extraPaths.memberHealth]:
     "H4: operator.memberHealthProfile needs the connected database in demo mode.",
-  [extraPaths.stripeReturn]:
-    "H10: Duna Pay return calls WorkOS withAuth, which is not configured in demo mode.",
   [extraPaths.adminMessagingSafety]:
     "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
   [extraPaths.adminSupport]:

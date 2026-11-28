@@ -1,5 +1,4 @@
 import type {
-  OrganizationMoneyWorkspace,
   OperatorDashboard,
   OperatorScorableMatch,
   OperatorWorkspace,
@@ -42,7 +41,6 @@ import { PeopleWorkspace } from "./people-workspace";
 import { TeamWorkspace } from "./team-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
-import { MoneyWorkspace } from "./money-workspace";
 import { VenueMatchOperations } from "./venue-match-operations";
 import { DunaAiWorkspace } from "./duna-ai-workspace";
 
@@ -913,21 +911,6 @@ function TeamPanel({ workspace }: { readonly workspace: OperatorWorkspace }) {
   return <TeamWorkspace workspace={workspace} />;
 }
 
-function PaymentsPanel({
-  dashboard,
-  money,
-}: {
-  readonly dashboard: OperatorDashboard;
-  readonly money: OrganizationMoneyWorkspace;
-}) {
-  return (
-    <MoneyWorkspace
-      money={money}
-      organizationName={dashboard.organization.name}
-    />
-  );
-}
-
 function MessagesPanel({
   workspace,
 }: {
@@ -1235,7 +1218,6 @@ export function ModulePanel({
   pageCopy,
   productScope,
   workspace,
-  moneyWorkspace,
   ticketApprovals,
 }: {
   /** The type link shown as current in the Offerings or Events list. */
@@ -1248,7 +1230,6 @@ export function ModulePanel({
   readonly pageCopy?: ModulePageCopy;
   readonly productScope?: ProductCatalogScope;
   readonly workspace: OperatorWorkspace;
-  readonly moneyWorkspace?: OrganizationMoneyWorkspace;
   readonly ticketApprovals: readonly TicketApprovalSummary[];
 }) {
   if (module === "today" || module === "inbox") return null;
@@ -1376,11 +1357,7 @@ export function ModulePanel({
           <EventHistoryWorkspace kinds={["league"]} workspace={workspace} />
           <EventInventory dashboard={dashboard} kinds={["league"]} />
         </>
-      ) : module === "money" ? (
-        moneyWorkspace ? (
-          <PaymentsPanel dashboard={dashboard} money={moneyWorkspace} />
-        ) : null
-      ) : module === "marketing" ? (
+      ) : module === "money" ? null : module === "marketing" ? (
         <MessagesPanel workspace={workspace} />
       ) : module === "reports" ? (
         <ReportsPanel dashboard={dashboard} />
