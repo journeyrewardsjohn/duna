@@ -387,10 +387,12 @@ test("public pickup pages keep their story and booking rail contained", async ({
 
 test("landing pages remain usable with reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
+  // `/players` now redirects home (proxy.ts); the clubs chapter is on it.
   for (const path of ["/", "/players"]) {
     await page.goto(path);
+    await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.locator("#features")).toBeVisible();
+    await expect(page.locator("#clubs")).toBeAttached();
     await expectNoHorizontalOverflow(page);
   }
 });
