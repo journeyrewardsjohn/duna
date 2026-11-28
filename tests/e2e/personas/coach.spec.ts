@@ -124,7 +124,21 @@ test.describe("CH-4 Score a match", () => {
 });
 
 test.describe("CH-5 Notes and messages", () => {
-  test.fixme("CH-5.1 Write an after-practice note for the program [H6]", async () => {});
+  test("CH-5.1 Write an after-practice note for the program [H6]", async ({
+    page,
+  }) => {
+    await page.goto(
+      hq("/training/practices/d0060000-0000-4000-8000-000000000100"),
+    );
+    const after = page.getByRole("form", { name: "After practice" });
+    await after
+      .getByRole("textbox", { name: /Notes for the program/ })
+      .fill("Passing held up under pressure; shorten transition next time.");
+    await after
+      .getByRole("button", { name: /Record the practice|Save the corrections/ })
+      .click();
+    await expectToast(page, "After-practice record saved");
+  });
   test.fixme("CH-5.2 Message a player or a parent about a session [H3]", async () => {});
 });
 
@@ -172,13 +186,48 @@ test.describe("CH-6 Get paid", () => {
 test.describe("CH-7 Plan practice", () => {
   test("CH-7.1 Open the practice plan builder", async ({ page }) => {
     await page.goto(hq("/training/practice-plans/create"));
-    await expectPageReady(page, "Compose the practice.");
+    await expectPageReady(page, "New practice plan");
   });
   test("CH-7.2 Start a drill from a description", async ({ page }) => {
     await page.goto(hq("/training/drills/create"));
-    await expectPageReady(page, /Describe the drill/);
+    await expectPageReady(page, "New drill");
+    await expect(
+      page.getByRole("textbox", { name: /In one line/ }),
+    ).toBeVisible();
   });
-  test.fixme("CH-7.3 Build a plan with totals, diagrams and coach mode, then print it [H7, B6b]", async () => {});
+  test("CH-7.3 Build a plan with totals, diagrams and coach mode, then print it [H7, B6b]", async ({
+    page,
+  }) => {
+    await page.goto(hq("/training/practice-plans/create"));
+    const add = page.getByRole("region", { name: "Add to the plan" });
+    await add.getByRole("button", { name: /^Add Warm-up/ }).click();
+    await add.getByRole("button", { name: /^Add Games/ }).click();
+    await expect(
+      page.getByRole("region", { name: "Practice totals" }),
+    ).toContainText("Load (estimate)");
+    // The drawing of a drill, in words until the scene player lands.
+    await page.goto(
+      hq("/training/drills/d0070000-0000-4000-8000-000000000001"),
+    );
+    await expect(
+      page.getByRole("region", { name: /the drawing/ }),
+    ).toBeVisible();
+    // Coach mode on the practice the plan is attached to.
+    await page.goto(
+      hq("/training/practices/d0060000-0000-4000-8000-000000000100"),
+    );
+    const run = page.getByRole("region", { name: "Run the plan" });
+    await expect(run).toContainText("Block 1 of");
+    await run.getByRole("button", { name: "Next block" }).click();
+    await expect(run).toContainText("Block 2 of");
+    await page.goto(
+      hq("/training/practice-plans/d0060000-0000-4000-8000-000000000300/print"),
+    );
+    await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
+    await expect(
+      page.getByRole("article", { name: "Run sheet" }),
+    ).toContainText("Totals");
+  });
   test.fixme("CH-7.4 Create a drill with AI placing the players, then edit and version it [B6d, H8]", async () => {});
 });
 
@@ -186,7 +235,20 @@ test.describe("CH-8 Training programs", () => {
   test("CH-8.1 Training opens on the coach's programs", async ({ page }) => {
     await openHqArea(page, "Training");
   });
-  test.fixme("CH-8.2 Open a program's roster and schedule tabs [H6, S3]", async () => {});
+  test("CH-8.2 Open a program's roster and schedule tabs [H6, S3]", async ({
+    page,
+  }) => {
+    await page.goto(
+      hq("/training/programs/d0060000-0000-4000-8000-000000000001"),
+    );
+    await expectPageReady(page, "Fall competition build");
+    await openObjectTab(page, "Athletes");
+    await expect(page.getByText(/athletes are on this program/)).toBeVisible();
+    await openObjectTab(page, "Calendar");
+    await expect(
+      page.getByRole("list", { name: /^Week of/ }).first(),
+    ).toBeVisible();
+  });
 });
 
 test.describe("CH-9 Group sessions that need players", () => {

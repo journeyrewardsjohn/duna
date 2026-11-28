@@ -210,11 +210,46 @@ test.describe("CO-5 Publish a lesson and a program", () => {
     // Expected: tier 1 confirm "Publish to your club page"; blocked with the
     // reason while Duna Pay is not ready.
   });
-  test.fixme("CO-5.3 Create a training program from a sentence and review the proposal [B4, H6]", async () => {
-    // Expected: weekdays, times, coaches, blackout dates; nothing saved until
-    // the person confirms.
+  test("CO-5.3 Create a training program from a sentence and review the proposal [B4, H6]", async ({
+    page,
+  }) => {
+    await page.goto(hq("/training/programs/create"));
+    await expectPageReady(page, "New program");
+    await page
+      .getByRole("textbox", { name: "Describe the season in one sentence" })
+      .fill(
+        "U16 girls, Tuesdays and Thursdays 5 to 7 and Saturdays 9 to 11, 6 January to 28 March, no practice 14 February",
+      );
+    await page.getByRole("button", { name: "Read it" }).click();
+    // Weekdays with their own times, dates off and coaches, all editable.
+    await expect(page.getByLabel("Saturday starts")).toHaveValue("09:00");
+    await expect(page.getByRole("list", { name: "Dates off" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Coaches" })).toBeVisible();
+    // Nothing is saved until the person confirms.
+    await expect(page.getByText("Saving creates a draft only")).toBeVisible();
+    await expect(page).toHaveURL(/\/training\/programs\/create$/);
   });
-  test.fixme("CO-5.4 Publish the program with its linked offering [H6]", async () => {});
+  test("CO-5.4 Publish the program with its linked offering [H6]", async ({
+    page,
+  }) => {
+    await page.goto(
+      hq("/training/programs/d0060000-0000-4000-8000-000000000002"),
+    );
+    await expectPageReady(page, "Spring juniors");
+    await pressAndConfirm(
+      page,
+      page.getByRole("button", { name: "Activate", exact: true }),
+      "confirm",
+      { confirmButton: /^Activate and create/ },
+    );
+    await expectToast(page, "Spring juniors is active");
+    await page.goto(
+      hq("/training/programs/d0060000-0000-4000-8000-000000000001/settings"),
+    );
+    await expect(
+      page.getByRole("link", { name: "Open the offering" }),
+    ).toBeVisible();
+  });
   test.fixme("CO-5.5 The lesson and the program appear on the public club page [P4]", async () => {});
 });
 
