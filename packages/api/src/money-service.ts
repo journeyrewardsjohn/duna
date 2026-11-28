@@ -45,6 +45,8 @@ import {
 } from "./payments";
 import { postCatalogPaymentCapture } from "./catalog-checkout";
 import { report } from "@duna/observability";
+import { reconcilePayBalances } from "./services/pay/balances";
+import { synchronizePayDisputeCase } from "./services/pay/disputes";
 import { ensurePayObligationsForFund } from "./services/pay/obligations";
 import {
   createPayoutFromReleasableTranches,
@@ -1181,6 +1183,14 @@ export async function reconcileStripePaymentLineage(input?: {
   return { inspected: candidates.length, linked, failed };
 }
 
+/**
+ * Duna Pay reconciliation (runs with the money-reconciliation cron):
+ * reserves, negative-balance recovery and processor drift.
+ */
+export async function reconcileDunaPayBalances(now = new Date()) {
+  return reconcilePayBalances({ policy: loadPayPolicySettings(), now });
+}
+
 export async function releaseEligibleFunds(now = new Date()): Promise<number> {
   return getDatabase()
     .update(paymentFundSchedules)
@@ -1893,6 +1903,15 @@ export async function synchronizeMoneyDispute(input: {
         updatedAt: input.now,
       },
     });
+  // Duna Pay: the dispute case, hold, transfer reversal and journals.
+  try {
+    await synchronizePayDisputeCase({ object: input.object, now: input.now });
+  } catch (error) {
+    report(error, {
+      event: "pay.dispute.failed",
+      fields: { orderId: order.id },
+    });
+  }
   const fund = await database.query.paymentFundSchedules.findFirst({
     where: eq(paymentFundSchedules.orderId, order.id),
   });

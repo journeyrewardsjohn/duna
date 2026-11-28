@@ -2121,7 +2121,10 @@ export async function loadConnectedAccountMoney(input: {
       )
       .autoPagingToArray({ limit: 500 }),
     stripe.balanceSettings.retrieve({}, { stripeAccount: input.accountId }),
-    stripe.disputes.list({ limit: 100 }, { stripeAccount: input.accountId }),
+    // Defect 2: destination-charge disputes live on the platform account,
+    // never on the connected account. HQ lists the club's disputes from
+    // Duna's own records (webhooks on the platform), not from here.
+    Promise.resolve({ data: [] as Stripe.Dispute[] }),
     stripe.v2.core.accounts.retrieve(input.accountId, {
       include: [
         "configuration.merchant",
@@ -2616,6 +2619,72 @@ export async function refundPayment(input: {
     { idempotencyKey: input.idempotencyKey },
   );
   return { id: refund.id, status: refund.status };
+}
+
+/**
+ * Duna Pay dispute handling (payout-policy §5.1). Destination-charge
+ * disputes debit the platform; Duna recovers the amount from the club by
+ * reversing the charge's transfer, and re-transfers on a win.
+ */
+export async function reverseConnectedTransfer(input: {
+  readonly transferId: string;
+  readonly amountMinor: number;
+  readonly idempotencyKey: string;
+}): Promise<{ readonly id: string; readonly amountMinor: number }> {
+  const reversal = await withProviderCall(
+    "stripe",
+    "transfers.createReversal",
+    () =>
+      getStripeClient().transfers.createReversal(
+        input.transferId,
+        {
+          amount: input.amountMinor,
+          metadata: { dunaReason: "dispute" },
+        },
+        { idempotencyKey: input.idempotencyKey },
+      ),
+  );
+  return { id: reversal.id, amountMinor: reversal.amount };
+}
+
+export async function createConnectedTransfer(input: {
+  readonly connectedAccountId: string;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly idempotencyKey: string;
+  readonly reason: string;
+}): Promise<{ readonly id: string }> {
+  const transfer = await withProviderCall("stripe", "transfers.create", () =>
+    getStripeClient().transfers.create(
+      {
+        amount: input.amountMinor,
+        currency: input.currency.toLowerCase(),
+        destination: input.connectedAccountId,
+        metadata: { dunaReason: input.reason },
+      },
+      { idempotencyKey: input.idempotencyKey },
+    ),
+  );
+  return { id: transfer.id };
+}
+
+/** Send a person-confirmed explanation to the processor and submit it. */
+export async function submitProcessorDisputeEvidence(input: {
+  readonly disputeId: string;
+  readonly explanation: string;
+  readonly idempotencyKey: string;
+}): Promise<{ readonly status: string }> {
+  const dispute = await withProviderCall("stripe", "disputes.update", () =>
+    getStripeClient().disputes.update(
+      input.disputeId,
+      {
+        evidence: { uncategorized_text: input.explanation.slice(0, 20_000) },
+        submit: true,
+      },
+      { idempotencyKey: input.idempotencyKey },
+    ),
+  );
+  return { status: dispute.status };
 }
 
 export async function transferPrize(input: {

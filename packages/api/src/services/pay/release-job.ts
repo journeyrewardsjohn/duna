@@ -24,7 +24,6 @@ import {
   organizationPayAccounts,
   payDeliveryEvents,
   payHolds,
-  payObligationRefunds,
   payObligations,
   payReleaseTranches,
   paymentFundSchedules,
@@ -43,6 +42,8 @@ import {
   sum,
 } from "drizzle-orm";
 import { addBusinessDays } from "./business-days";
+import { obligationDisputeTotals } from "./disputes";
+import { fundPendingRefunds, refundedProceedsForPlan } from "./refunds";
 import type { DeliverySnapshot, DeliverySource } from "./obligations";
 import {
   ensurePayObligationsForFund,
@@ -443,7 +444,6 @@ export async function loadObligationPlan(
     holds,
     accountRows,
     fundRows,
-    fundedRefunds,
     grantRows,
   ] = await Promise.all([
     loadReleaseEvents(obligation.id),
@@ -480,10 +480,6 @@ export async function loadObligationPlan(
           .where(eq(paymentFundSchedules.id, obligation.fundScheduleId))
           .limit(1)
       : Promise.resolve([]),
-    database
-      .select({ total: sum(payObligationRefunds.amountMinor) })
-      .from(payObligationRefunds)
-      .where(eq(payObligationRefunds.obligationId, obligation.id)),
     obligation.deliveryRule === "credit-pack-reserve"
       ? database
           .select({ initialCredits: organizationCreditGrants.initialCredits })
@@ -504,17 +500,25 @@ export async function loadObligationPlan(
         )
       : 0;
   const refundedGrossMinor = fund ? share(fund.refundedMinor) : 0;
-  // A processor refund before funding records exist (pull request 2 adds
-  // them): the whole refunded amount comes off the club's proceeds, as the
-  // pre-obligation rail did (net − refunded). Conservative: the club is
-  // never paid a refunded cent, and never more than the old rail paid.
-  const refundedFromFund = refundedGrossMinor;
+  // Refunds: what funding records say, plus any processor refund not funded
+  // yet taken in full from the proceeds (the club is never paid a refunded
+  // cent). A lost or accepted dispute costs the club like a refund.
+  const disputes = await obligationDisputeTotals(obligation.id);
   const refundedProceedsMinor = Math.min(
     obligation.proceedsMinor,
-    Math.max(refundedFromFund, Number(fundedRefunds[0]?.total ?? 0)),
+    (await refundedProceedsForPlan({
+      obligation,
+      refundedGrossShareMinor: refundedGrossMinor,
+    })) + Math.min(obligation.proceedsMinor, disputes.lostMinor),
   );
-  const disputedMinor =
-    fund && fund.status === "disputed" ? share(fund.disputedMinor) : 0;
+  // Open disputes: the processor cases, or the legacy fund marker before a
+  // case exists.
+  const disputedMinor = Math.max(
+    disputes.openMinor,
+    fund && fund.status === "disputed" && disputes.lostMinor === 0 && disputes.openMinor === 0
+      ? share(fund.disputedMinor)
+      : 0,
+  );
   const firstPayoutNotBefore =
     account && !account.firstPayoutDelayWaivedAt
       ? (account.firstPayoutNotBefore ?? undefined)
@@ -723,6 +727,14 @@ export async function runPayReleaseJob(input: {
           : undefined,
       ),
     );
+
+  const refunds = await fundPendingRefunds({
+    policy,
+    now: input.now,
+    organizationId: input.organizationId,
+    limit,
+  });
+  failures += refunds.failures;
 
   let refreshed = 0;
   let deliveryEvents = 0;
