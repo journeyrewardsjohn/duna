@@ -366,9 +366,82 @@ test.describe("CO-14 Pay the team", () => {
 });
 
 test.describe("CO-15 Group sessions that fill up", () => {
-  test.fixme("CO-15.1 Sets the club booking rule as a sentence; offerings without their own rule show “Club default” [PART-6]", async () => {});
-  test.fixme("CO-15.2 Picks “Clinic” on an offering and enters a price ladder; sees the cliff warning and the live preview [PART-6]", async () => {});
+  test("CO-15.1 Sets the club booking rule as a sentence; offerings without their own rule show “Club default”", async ({
+    page,
+  }) => {
+    await page.goto(hq("/offerings/settings"));
+    await expectPageReady(page, "Booking rules");
+    const fewest = page.getByLabel("Fewest players it runs with");
+    await fewest.fill("4");
+    await fewest.press("Tab");
+    await expect(
+      page.getByText(
+        "That time is also the last moment players can cancel for free.",
+      ),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Save the club's rule" }).click();
+    await expectToast(page, "The club's booking rule saved");
+    await page.goto(hq("/offerings"));
+    await expect(
+      page
+        .getByRole("list", { name: "Offerings" })
+        .getByText(/club default/)
+        .first(),
+    ).toBeVisible();
+  });
+  test("CO-15.2 Picks “Clinic” on an offering and enters a price ladder; sees the cliff warning and the live preview", async ({
+    page,
+  }) => {
+    await page.goto(
+      hq("/offerings/d0130000-0000-4000-8000-000000000103/group-size"),
+    );
+    await expectPageReady(page, "Small group training");
+    await page
+      .getByRole("button", { name: "Change for this offering" })
+      .click();
+    await page.getByRole("radio", { name: /^Clinic/ }).check();
+    await expect(
+      page.getByRole("switch", { name: "Price by group size" }),
+    ).toBeChecked();
+    await page.getByLabel("Row 1: credits each").fill("3");
+    await page.getByRole("button", { name: "Add a group size" }).click();
+    await page.getByLabel("Row 2: from how many players").fill("8");
+    await page.getByLabel("Row 2: credits each").fill("1");
+    await page.getByLabel("Row 2: credits each").press("Tab");
+    await expect(
+      page.getByText(/8th player lowers your total from 21 to 8 credits/),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Show a fix" }),
+    ).toBeVisible();
+    const preview = page.getByRole("complementary", {
+      name: "What players see",
+    });
+    await expect(preview).toContainText("8 or more · 1 credit each");
+  });
   test.fixme("CO-15.3 Opens Today; “At risk this week” lists a session with “Needs 2 by Thu 6:00 PM” [PART-7]", async () => {});
-  test.fixme("CO-15.4 Cancels a thin session after a strong confirmation restating people and refunds; it shows “Cancelled” [PART-7]", async () => {});
+  test("CO-15.4 Cancels a thin session after a strong confirmation restating people and refunds; it shows “Cancelled”", async ({
+    page,
+  }) => {
+    await page.goto(
+      hq(
+        "/offerings/d0130000-0000-4000-8000-000000000101/schedule?session=d0130000-0000-4000-8000-000000000001",
+      ),
+    );
+    const panel = page.getByRole("dialog", { name: "Saturday semi-private" });
+    await panel.getByRole("button", { name: "Cancel and refund" }).click();
+    await panel
+      .getByRole("button", { name: "Review the cancellation" })
+      .click();
+    await expect(panel).toContainText("Mara Lewis");
+    await expect(panel).toContainText("4 credits back to wallets");
+    await panel
+      .getByRole("button", { name: "Cancel and refund 1 person" })
+      .click();
+    await expectToast(page, /Saturday semi-private cancelled/);
+    await expect(
+      page.getByRole("list", { name: "Sessions of Saturday semi-private" }),
+    ).toContainText("Cancelled by");
+  });
   test.fixme("CO-15.5 Asks Duna to make every clinic need 4 players; a proposal card shows before, after and affected sessions [PART-6]", async () => {});
 });
