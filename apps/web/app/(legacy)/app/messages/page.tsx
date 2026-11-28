@@ -23,7 +23,9 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { ServerReadFailed } from "@/components/observability/server-read-failed";
 import { getServerCaller } from "@/lib/api";
+import { settleServerRead } from "@/lib/server-read";
 import {
   blockPlayerMessagingPrincipal,
   createPlayerConversation,
@@ -325,23 +327,38 @@ export default async function MessagesPage({
 }) {
   const { compose, thread, view, club } = await searchParams;
   const caller = await getServerCaller();
-  const [inbox, composeOptions, clubContact] = await Promise.all([
-    caller.messaging.inbox({ asPrincipal: "user" }),
-    caller.messaging.composeOptions(),
-    club
-      ? caller.messaging.clubContact({ club }).catch(() => null)
-      : Promise.resolve(undefined),
-  ]);
-  const selected =
-    inbox.conversations.find((conversation) => conversation.id === thread) ??
-    inbox.conversations[0];
-  const detail =
-    selected && !club && compose !== "new" && view !== "inbox"
-      ? await caller.messaging.conversation({
-          conversationId: selected.id,
-          asPrincipal: "user",
-        })
-      : undefined;
+  // A refused or failed read shows the busy / error state in the shell
+  // instead of throwing to the root boundary (lib/server-read.ts).
+  const loaded = await settleServerRead(async () => {
+    const [inbox, composeOptions, clubContact] = await Promise.all([
+      caller.messaging.inbox({ asPrincipal: "user" }),
+      caller.messaging.composeOptions(),
+      club
+        ? caller.messaging.clubContact({ club }).catch(() => null)
+        : Promise.resolve(undefined),
+    ]);
+    const selected =
+      inbox.conversations.find((conversation) => conversation.id === thread) ??
+      inbox.conversations[0];
+    const detail =
+      selected && !club && compose !== "new" && view !== "inbox"
+        ? await caller.messaging.conversation({
+            conversationId: selected.id,
+            asPrincipal: "user",
+          })
+        : undefined;
+    return { inbox, composeOptions, clubContact, selected, detail };
+  }, "web.messages.read.failed");
+  if (!loaded.ok) {
+    return (
+      <ServerReadFailed
+        busy={loaded.busy}
+        reference={loaded.reference}
+        retryHref="/app/messages"
+      />
+    );
+  }
+  const { inbox, composeOptions, clubContact, selected, detail } = loaded.value;
   const blockTarget = detail?.participants.find(
     (participant) =>
       participant.principal.id !== inbox.principal.id &&
