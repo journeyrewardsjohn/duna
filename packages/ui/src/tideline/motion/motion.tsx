@@ -43,6 +43,20 @@ function useFirstRender(): boolean {
   return first.current;
 }
 
+/**
+ * Whether `key` has changed since the component mounted. Unlike
+ * `useFirstRender`, a re-render with the same key (a parent's state settling
+ * after mount) still counts as unchanged, so the first view never animates.
+ */
+function useKeyChanged(key: string): boolean {
+  const [seen, setSeen] = useState({ key, changed: false });
+  if (seen.key !== key) {
+    setSeen({ key, changed: true });
+    return true;
+  }
+  return seen.changed;
+}
+
 export interface RallyOnChangeProps extends ComponentProps<"span"> {
   /** When this changes (not on first render), the content Rises again in place. */
   value: unknown;
@@ -101,12 +115,15 @@ export function Cross({
   className,
   ...props
 }: CrossProps) {
-  const first = useFirstRender();
+  // Only a new key crosses. A re-render of the same view (the shell settling
+  // its layout after mount) must not start the Cross on content already on
+  // screen: its travel overflowed phone-width pages on load.
+  const crossed = useKeyChanged(transitionKey);
   return (
     <div
       className={cx(
-        !first && "td-cross",
-        !first && direction === "back" && "td-cross--back",
+        crossed && "td-cross",
+        crossed && direction === "back" && "td-cross--back",
         className,
       )}
       data-transition-key={transitionKey}
