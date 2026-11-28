@@ -574,6 +574,26 @@ describe("group sessions with a minimum (participation.md §5.4)", () => {
     expect(new Date(event!.occurred_at).toISOString()).toBe(occurrenceEndsAt);
   });
 
+  it("waits for the decision when the rule is inherited from the club default", async () => {
+    // The offering has no rule of its own; the session's snapshot (taken at
+    // its first booking from the club default) has a minimum of 3.
+    await pg.exec(`
+      UPDATE catalog_items SET configuration = configuration - 'participation' WHERE id = '${academy.item}';
+      INSERT INTO participation_decisions (organization_id, subject_type, subject_id, rule_snapshot, snapshot_at, lock_at)
+        VALUES ('${academy.org}', 'catalog-session-occurrence', '${academy.occurrence}',
+          '{"version": 2, "unit": "player", "minParticipants": 3, "minimumPolicy": "cancel", "waitlist": false, "tiers": []}',
+          '${paidAt}', '2026-12-09T17:00:00Z');`);
+    const waiting = await processAutomaticOrganizationPayouts(
+      new Date("2026-12-11T09:00:00.000Z"),
+    );
+    expect(waiting.payouts).toBe(0);
+    await decide("minimum-met");
+    const released = await processAutomaticOrganizationPayouts(
+      new Date("2026-12-11T09:00:00.000Z"),
+    );
+    expect(released.payouts).toBe(1);
+  });
+
   it("a session cancelled under its minimum releases nothing", async () => {
     await decide("cancel-under-minimum");
     const result = await processAutomaticOrganizationPayouts(

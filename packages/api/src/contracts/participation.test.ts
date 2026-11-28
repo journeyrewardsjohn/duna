@@ -5,6 +5,12 @@ import { createApiContext, createDemoActor } from "../context";
 import { createCaller } from "../router";
 import {
   participationAtRiskSchema,
+  participationInviteLinkSchema,
+  participationInviteSchema,
+  participationJoinWaitlistSchema,
+  participationMergeSessionsSchema,
+  participationRuleToReviewSchema,
+  participationWaitlistPlaceSchema,
   participationCancelRequestSchema,
   participationCancelSessionSchema,
   participationDefaultsSchema,
@@ -174,5 +180,70 @@ describe("participation routers in demo mode", () => {
         idempotencyKey: key(),
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("participation part 2 fixtures and procedures", () => {
+  beforeEach(() => {
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_DEMO_MODE", "true");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("parses and serves waitlist, invites, merges and rules to review", async () => {
+    participationJoinWaitlistSchema.parse(participationDemo.waitlistJoined);
+    participationWaitlistPlaceSchema.parse(participationDemo.waitlistOffer);
+    participationInviteLinkSchema.parse(participationDemo.inviteLink);
+    participationInviteSchema.parse(participationDemo.invite);
+    participationMergeSessionsSchema.parse(participationDemo.mergeSessions);
+    for (const row of participationDemo.rulesToReview)
+      participationRuleToReviewSchema.parse(row);
+    const api = createCaller(
+      createApiContext({ actor: createDemoActor(["player", "owner"]) }),
+    );
+    const key = () => crypto.randomUUID();
+    const subjectId = participationDemo.quotes[2]!.subjectId;
+    expect(
+      await api.player.participation.joinWaitlist({
+        subjectType: "catalog-session-occurrence",
+        subjectId,
+        idempotencyKey: key(),
+      }),
+    ).toEqual(participationDemo.waitlistJoined);
+    expect(
+      await api.player.participation.leaveWaitlist({
+        entryId: participationDemo.waitlistJoined.entryId,
+        idempotencyKey: key(),
+      }),
+    ).toEqual({ status: "cancelled" });
+    expect(
+      (
+        await api.player.participation.createInvite({
+          subjectType: "catalog-session-occurrence",
+          subjectId,
+        })
+      ).url,
+    ).toBe("/i/demoInvite12");
+    expect(
+      (await api.public.participation.invite({ code: "demoInvite12" })).needs,
+    ).toBe(1);
+    expect(
+      (
+        await api.operator.participation.mergeSessions({
+          fromOccurrenceId: participationDemo.quotes[0]!.subjectId,
+          intoOccurrenceId: participationDemo.quotes[1]!.subjectId,
+          confirmed: true,
+          idempotencyKey: key(),
+        })
+      ).moved,
+    ).toBe(3);
+    expect(await api.operator.participation.rulesToReview()).toHaveLength(2);
+    expect(
+      await api.operator.participation.keepRule({
+        subjectType: "session",
+        subjectId: participationDemo.rulesToReview[0]!.subjectId,
+        idempotencyKey: key(),
+      }),
+    ).toEqual({ state: "kept" });
   });
 });

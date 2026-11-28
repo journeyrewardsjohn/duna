@@ -1,11 +1,6 @@
 import "@duna/ui/tideline/styles.css";
 
-import {
-  buttonClassName,
-  Card,
-  Tideline,
-  TidelineFonts,
-} from "@duna/ui/tideline";
+import { buttonClassName, Card, Tideline } from "@duna/ui/tideline";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -108,7 +103,6 @@ export default async function TidelineGalleryPage({
       theme={theme === "dark" ? "dark" : undefined}
       zone={theme === "live" ? "live" : undefined}
     >
-      <TidelineFonts />
       <header className={styles.top}>
         <div className={styles.brand}>
           <span className="td-title">Tideline</span>

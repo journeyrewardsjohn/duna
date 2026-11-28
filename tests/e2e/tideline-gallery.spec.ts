@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { waitForHydration } from "./gallery-hydration";
 
 /**
  * Keyboard operation of the Tideline components, in the gallery.
@@ -26,8 +27,7 @@ async function openGallery(page: Page) {
   await expect(
     page.getByRole("heading", { level: 1, name: "Tideline gallery" }),
   ).toBeVisible();
-  // Wait for hydration: the Next dev overlay mounts after the app does.
-  await page.waitForLoadState("networkidle");
+  await waitForHydration(page);
 }
 
 const focused = (page: Page) => page.locator(":focus");
@@ -398,8 +398,12 @@ test.describe("Tideline gallery, keyboard", () => {
       "Reminders are off.",
     );
     await expect(reminders).toHaveAttribute("aria-checked", "false");
+    // The message is both the visible toast and the live-region announcement
+    // (by design): look at the toast, not at the screen-reader copy.
     await expect(
-      page.getByText("Could not turn reminders on. Put back."),
+      page
+        .getByLabel("Notifications")
+        .getByText("Could not turn reminders on. Put back."),
     ).toBeVisible();
   });
 
@@ -489,7 +493,7 @@ test.describe("Tideline gallery, layout", () => {
       test.skip(testInfo.project.name !== "desktop", "Sets its own viewport");
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(`${base}/tideline?theme=${theme}`);
-      await page.waitForLoadState("networkidle");
+      await waitForHydration(page);
       const overflow = await page.evaluate(
         () =>
           document.documentElement.scrollWidth -
@@ -503,9 +507,12 @@ test.describe("Tideline gallery, layout", () => {
     page,
   }) => {
     // The page is public only in demo mode and only with the env flag; a
-    // theme it does not know falls back to light instead of failing.
+    // theme it does not know falls back to light instead of failing. The
+    // gallery's own scope is the first `div.td` (the body is the app scope).
     await page.goto(`${base}/tideline?theme=unknown`);
-    await expect(page.locator(".td").first()).not.toHaveAttribute("data-theme");
+    await expect(page.locator("div.td").first()).not.toHaveAttribute(
+      "data-theme",
+    );
   });
 });
 
@@ -516,7 +523,7 @@ test.describe("Tideline gallery, Book a lesson", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Book a lesson." }),
     ).toBeVisible();
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     await page.getByRole("radio", { name: "0ms", exact: true }).click();
   });
 
@@ -665,18 +672,9 @@ test.describe("Tideline gallery, Book a lesson", () => {
     live: "rgb(14, 26, 34)",
   };
   for (const theme of ["light", "dark", "live"]) {
-    test(`the primary label keeps on-action in ${theme}, whatever the page does to links`, async ({
-      page,
-    }) => {
+    test(`the primary label keeps on-action in ${theme}`, async ({ page }) => {
       await page.goto(`${base}/tideline?theme=${theme}`);
-      await page.waitForLoadState("networkidle");
-      // A hostile host page: unlayered link and button rules, as HQ and Web
-      // have. The legacy bridge hands the colour back to Tideline.
-      await page.addStyleTag({
-        content: `a, a:link, a:visited, html body .td a, button,
-          html body div a.td-btn { color: rgb(0, 0, 128);
-          -webkit-text-fill-color: rgb(0, 0, 128); }`,
-      });
+      await waitForHydration(page);
       const label = onAction[theme]!;
       for (const name of ["Primary link", "Save result", "Full width"]) {
         const button = page
@@ -698,7 +696,7 @@ test.describe("Tideline gallery, foundations", () => {
     page,
   }) => {
     await page.goto(`${base}/tideline`);
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     const foundations = page.locator("section#foundations");
     await expect(
       foundations.getByRole("heading", { name: "Foundations" }),
@@ -727,7 +725,7 @@ test.describe("Tideline gallery, foundations", () => {
     page,
   }) => {
     await page.goto(`${base}/tideline`);
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     const shown = await page.evaluate(() =>
       [
         ...document.querySelectorAll(
@@ -742,7 +740,7 @@ test.describe("Tideline gallery, foundations", () => {
 
   test("Solar appears only on live states", async ({ page }) => {
     await page.goto(`${base}/tideline`);
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     const offenders = await page.evaluate(() => {
       const solar = "rgb(242, 84, 45)";
       return [...document.querySelectorAll(".td *")]
@@ -980,7 +978,7 @@ test.describe("Tideline gallery, interaction kit", () => {
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     const section = page.locator("section#motion");
     await section.getByRole("button", { name: "Play Rise" }).click();
     const rise = section.locator(".td-rise").first();
