@@ -4,7 +4,7 @@ Backend for HQ People (`operator.people.*`, PEOPLE-API, 28 November 2026).
 Code: `packages/api/src/services/people/**`, router
 `packages/api/src/routers/people.ts`, contract
 `packages/api/src/contracts/people.ts`, tables in
-`packages/db/src/schema/people.ts` (migration `0123_people_api`).
+`packages/db/src/schema/people.ts` (migration `0124_people_api`).
 
 ## What each part does
 

@@ -4,6 +4,7 @@ import { Icon } from "../icons/Icon";
 import { tokenEasing } from "../motion/easing";
 import { useHaptics } from "../motion/haptics";
 import { useReducedMotion } from "../motion/reduced-motion";
+import { runWithWatchdog, settleValues } from "../motion/watchdog";
 import { useTheme } from "../theme/ThemeProvider";
 import { Text } from "../type/Text";
 import {
@@ -66,8 +67,10 @@ export function SearchBar({
       easing: reduceMotion ? Easing.linear : tokenEasing("cross"),
       useNativeDriver: true,
     });
-    animation.start();
-    return () => animation.stop();
+    return runWithWatchdog(animation, {
+      timeline: SEARCH_BAR_FADE_MS,
+      settle: settleValues([[opacity, 1]]),
+    });
   }, [collapsed, opacity, reduceMotion]);
 
   const shell = {
