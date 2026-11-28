@@ -166,6 +166,9 @@ importers:
       '@duna/expo-background-upload':
         specifier: workspace:*
         version: link:../../packages/expo-background-upload
+      '@duna/expo-device-posture':
+        specifier: workspace:*
+        version: link:../../packages/expo-device-posture
       '@duna/messaging-client':
         specifier: workspace:*
         version: link:../../packages/messaging-client
@@ -301,6 +304,9 @@ importers:
       react-native-safe-area-context:
         specifier: ~5.11.1
         version: 5.11.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
+      react-native-screens:
+        specifier: 4.30.1
+        version: 4.30.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
       react-native-svg:
         specifier: 15.16.0
         version: 15.16.0(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
@@ -329,6 +335,9 @@ importers:
       '@duna/expo-background-upload':
         specifier: workspace:*
         version: link:../../packages/expo-background-upload
+      '@duna/expo-device-posture':
+        specifier: workspace:*
+        version: link:../../packages/expo-device-posture
       '@duna/league-engine':
         specifier: workspace:*
         version: link:../../packages/league-engine
@@ -464,6 +473,9 @@ importers:
       react-native-safe-area-context:
         specifier: ~5.11.1
         version: 5.11.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
+      react-native-screens:
+        specifier: 4.30.1
+        version: 4.30.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
       react-native-svg:
         specifier: 15.16.0
         version: 15.16.0(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
@@ -707,6 +719,34 @@ importers:
         specifier: 0.88.1
         version: 0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0)
 
+  packages/expo-device-posture:
+    dependencies:
+      expo:
+        specifier: ~58.1.0
+        version: 58.1.0(@babel/core@7.29.7)(@expo/dom-webview@58.0.2)(bufferutil@4.1.0)(expo-widgets@58.0.30)(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.2(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)(typescript@6.0.3)
+      expo-hinge:
+        specifier: ~58.0.2
+        version: 58.0.2(expo@58.1.0)(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
+      expo-modules-core:
+        specifier: ~58.2.0
+        version: 58.2.0(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-native:
+        specifier: 0.88.1
+        version: 0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.3
+        version: 19.3.3
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(vite@8.1.5(@types/node@26.1.2)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
+
   packages/league-engine:
     devDependencies:
       fast-check:
@@ -784,12 +824,15 @@ importers:
 
   packages/ui:
     dependencies:
+      '@duna/expo-device-posture':
+        specifier: workspace:*
+        version: link:../expo-device-posture
       '@ui-sdk/core':
         specifier: 0.1.0-beta.17
         version: 0.1.0-beta.17
       '@ui-sdk/react':
         specifier: 0.1.0-beta.17
-        version: 0.1.0-beta.17(@types/react@19.2.17)(@ui-sdk/core@0.1.0-beta.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 0.1.0-beta.17(@types/react@19.2.17)(@ui-sdk/core@0.1.0-beta.17)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -797,6 +840,21 @@ importers:
       '@types/react':
         specifier: ^19.2.17
         version: 19.2.17
+      '@types/react-test-renderer':
+        specifier: 19.1.0
+        version: 19.1.0
+      react-native:
+        specifier: 0.88.1
+        version: 0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8)
+      react-native-safe-area-context:
+        specifier: 5.11.1
+        version: 5.11.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8))(react@19.2.8)
+      react-native-screens:
+        specifier: 4.30.1
+        version: 4.30.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8))(react@19.2.8)
+      react-test-renderer:
+        specifier: 19.2.8
+        version: 19.2.8(react@19.2.8)
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(vite@8.1.5(@types/node@26.1.2)(esbuild@0.28.1)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
@@ -4435,6 +4493,9 @@ packages:
     peerDependencies:
       '@types/react': ^19.2.0
 
+  '@types/react-test-renderer@19.1.0':
+    resolution: {integrity: sha512-XD0WZrHqjNrxA/MaR9O22w/RNidWR9YZmBdRGI7wcnWGrv/3dA8wKCJ8m63Sn+tLJhcjmuhOi629N66W6kgWzQ==}
+
   '@types/react@19.2.17':
     resolution: {integrity: sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==}
 
@@ -7793,11 +7854,20 @@ packages:
     peerDependencies:
       react: ^19.3.0
 
+  react-freeze@1.0.4:
+    resolution: {integrity: sha512-r4F0Sec0BLxWicc7HEyo2x3/2icUTrRmDjaaRyzzn+7aDyFZliszMDOgLVwSnQnYENOlL1o569Ze2HZefk8clA==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      react: '>=17.0.0'
+
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
 
   react-is@18.3.1:
     resolution: {integrity: sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==}
+
+  react-is@19.3.1:
+    resolution: {integrity: sha512-RRieF6IyxQBkcK6pP8xOHprLTPW6QjRkbGdImtqNme+/hYVwCZkLQLdlZGOhUqXwkS9IEynaGvPJtv6XB/cz0Q==}
 
   react-native-qrcode-svg@6.3.21:
     resolution: {integrity: sha512-6vcj4rcdpWedvphDR+NSJcudJykNuLgNGFwm2p4xYjR8RdyTzlrELKI5LkO4ANS9cQUbqsfkpippPv64Q2tUtA==}
@@ -7808,6 +7878,12 @@ packages:
 
   react-native-safe-area-context@5.11.1:
     resolution: {integrity: sha512-yCltXXwhwp42vMqfhAsH5BWgAysbLNgwfn3PDwNpOn/CgwfM+eMWgScZIbHbMzJYNLi5bKJEOIUEG4RwKNiECA==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
+  react-native-screens@4.30.1:
+    resolution: {integrity: sha512-wLzZSQpvMx3FxIlDnb6raDJjsv2x45tFLGFz8RFUvxHzsKU9dWOkZYv9fy2siWtFf3eWGcRh66hL+o+dHhRJLQ==}
     peerDependencies:
       react: '*'
       react-native: '*'
@@ -7843,6 +7919,11 @@ packages:
   react-refresh@0.14.2:
     resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
     engines: {node: '>=0.10.0'}
+
+  react-test-renderer@19.2.8:
+    resolution: {integrity: sha512-GHKPaDRaNYU24PHTLG8Bx8VMY9t+qNfxQbt/Yjp7aMWBkKU6766SR0n6TnYu7P5I1MfEuAMUadqiyDHyI4Yy9Q==}
+    peerDependencies:
+      react: ^19.2.8
 
   react@19.2.8:
     resolution: {integrity: sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw==}
@@ -8770,6 +8851,9 @@ packages:
 
   vlq@1.0.1:
     resolution: {integrity: sha512-gQpnTgkubC6hQgdIcRdYGDSDc+SaujOdyesZQMv6JlfQee/9Mp0Qhnys6WxDWvQnL5WZdT7o2Ul187aSt0Rq+w==}
+
+  warn-once@0.1.1:
+    resolution: {integrity: sha512-VkQZJbO8zVImzYFteBXvBOZEl1qL175WH8VmZcxF2fZAoudNhNDvHi+doCaAEdU2l2vtcIwa2zn0QK5+I1HQ3Q==}
 
   wcwidth@1.0.1:
     resolution: {integrity: sha512-XHPEwS0q6TaxcvG85+8EYkbiCux2XtWG2mkc47Ng2A77BQu9+DqIOJldST4HgPkuea7dvKSj5VgX3P1d4rW8Tg==}
@@ -12175,6 +12259,15 @@ snapshots:
 
   '@react-native/normalize-colors@0.88.1': {}
 
+  '@react-native/virtualized-lists@0.88.1(@types/react@19.2.17)(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      invariant: 2.2.4
+      nullthrows: 1.1.1
+      react: 19.2.8
+      react-native: 0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8)
+    optionalDependencies:
+      '@types/react': 19.2.17
+
   '@react-native/virtualized-lists@0.88.1(@types/react@19.3.3)(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)':
     dependencies:
       invariant: 2.2.4
@@ -13735,6 +13828,10 @@ snapshots:
     dependencies:
       '@types/react': 19.2.17
 
+  '@types/react-test-renderer@19.1.0':
+    dependencies:
+      '@types/react': 19.3.3
+
   '@types/react@19.2.17':
     dependencies:
       csstype: 3.2.3
@@ -13854,11 +13951,11 @@ snapshots:
 
   '@ui-sdk/core@0.1.0-beta.17': {}
 
-  '@ui-sdk/react@0.1.0-beta.17(@types/react@19.2.17)(@ui-sdk/core@0.1.0-beta.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@ui-sdk/react@0.1.0-beta.17(@types/react@19.2.17)(@ui-sdk/core@0.1.0-beta.17)(react-dom@19.3.0(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@ui-sdk/core': 0.1.0-beta.17
       react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
+      react-dom: 19.3.0(react@19.2.8)
     optionalDependencies:
       '@types/react': 19.2.17
 
@@ -17742,14 +17839,29 @@ snapshots:
       react: 19.2.8
       scheduler: 0.27.0
 
+  react-dom@19.3.0(react@19.2.8):
+    dependencies:
+      react: 19.2.8
+      scheduler: 0.28.0
+
   react-dom@19.3.0(react@19.3.0):
     dependencies:
       react: 19.3.0
       scheduler: 0.28.0
 
+  react-freeze@1.0.4(react@19.2.8):
+    dependencies:
+      react: 19.2.8
+
+  react-freeze@1.0.4(react@19.3.0):
+    dependencies:
+      react: 19.3.0
+
   react-is@16.13.1: {}
 
   react-is@18.3.1: {}
+
+  react-is@19.3.1: {}
 
   react-native-qrcode-svg@6.3.21(react-native-svg@15.16.0(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0):
     dependencies:
@@ -17760,10 +17872,29 @@ snapshots:
       react-native-svg: 15.16.0(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0)
       text-encoding: 0.7.0
 
+  react-native-safe-area-context@5.11.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8))(react@19.2.8):
+    dependencies:
+      react: 19.2.8
+      react-native: 0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8)
+
   react-native-safe-area-context@5.11.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0):
     dependencies:
       react: 19.3.0
       react-native: 0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0)
+
+  react-native-screens@4.30.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8))(react@19.2.8):
+    dependencies:
+      react: 19.2.8
+      react-freeze: 1.0.4(react@19.2.8)
+      react-native: 0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8)
+      warn-once: 0.1.1
+
+  react-native-screens@4.30.1(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0):
+    dependencies:
+      react: 19.3.0
+      react-freeze: 1.0.4(react@19.3.0)
+      react-native: 0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0)
+      warn-once: 0.1.1
 
   react-native-svg@15.16.0(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0))(react@19.3.0):
     dependencies:
@@ -17792,6 +17923,48 @@ snapshots:
     transitivePeerDependencies:
       - encoding
     optional: true
+
+  react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8):
+    dependencies:
+      '@react-native/asset-utils': 0.88.1
+      '@react-native/codegen': 0.88.1(@babel/core@7.29.7)
+      '@react-native/community-cli-plugin': 0.88.1(bufferutil@4.1.0)
+      '@react-native/gradle-plugin': 0.88.1
+      '@react-native/normalize-colors': 0.88.1
+      '@react-native/virtualized-lists': 0.88.1(@types/react@19.2.17)(react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.8))(react@19.2.8)
+      anser: 1.4.10
+      ansi-regex: 5.0.1
+      base64-js: 1.5.1
+      flow-enums-runtime: 0.0.6
+      flow-parser: 0.327.0
+      hermes-compiler: 260318099.0.5
+      invariant: 2.2.4
+      memoize-one: 5.2.1
+      metro-runtime: 0.87.3
+      metro-source-map: 0.87.3
+      nullthrows: 1.1.1
+      pretty-format: 29.7.0
+      promise: 8.3.0
+      react: 19.2.8
+      react-devtools-core: 6.1.5(bufferutil@4.1.0)
+      react-refresh: 0.14.2
+      regenerator-runtime: 0.13.11
+      scheduler: 0.28.0
+      semver: 7.8.5
+      stacktrace-parser: 0.1.11
+      tinyglobby: 0.2.17
+      whatwg-fetch: 3.6.20
+      ws: 7.5.13(bufferutil@4.1.0)
+      yargs: 17.7.3
+    optionalDependencies:
+      '@types/react': 19.2.17
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@react-native-community/cli'
+      - '@react-native/metro-config'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
 
   react-native@0.88.1(@babel/core@7.29.7)(@types/react@19.3.3)(bufferutil@4.1.0)(react@19.3.0):
     dependencies:
@@ -17836,6 +18009,12 @@ snapshots:
       - utf-8-validate
 
   react-refresh@0.14.2: {}
+
+  react-test-renderer@19.2.8(react@19.2.8):
+    dependencies:
+      react: 19.2.8
+      react-is: 19.3.1
+      scheduler: 0.27.0
 
   react@19.2.8: {}
 
@@ -18836,6 +19015,8 @@ snapshots:
       - msw
 
   vlq@1.0.1: {}
+
+  warn-once@0.1.1: {}
 
   wcwidth@1.0.1:
     dependencies:

@@ -18,6 +18,7 @@
     "@duna/api": "workspace:*",
     "@duna/core": "workspace:*",
     "@duna/expo-background-upload": "workspace:*",
+    "@duna/expo-device-posture": "workspace:*",
     "@duna/league-engine": "workspace:*",
     "@duna/messaging-client": "workspace:*",
     "@duna/mobile-auth": "workspace:*",
@@ -63,6 +64,7 @@
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
     "react-native-safe-area-context": "~5.11.1",
+    "react-native-screens": "4.30.1",
     "react-native-svg": "15.16.0"
   },
   "devDependencies": {
