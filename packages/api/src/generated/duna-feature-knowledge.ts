@@ -3,7 +3,7 @@
 
 export const generatedDunaFeatureKnowledge = {
   sourceFingerprint:
-    "985bb6ef15566e07b91eeb94c3ba3f86cc156a190df4979904d68c63278532b6",
+    "c8fa4e5578c7d71653b546e4a3b18108cf91fad58900ba1f0f9b5223d1532a0b",
   modules: [
     {
       id: "M1",
