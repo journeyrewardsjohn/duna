@@ -43,7 +43,7 @@ function pricingSections(): string[] {
     `Player service fee: ${feeFacts.serviceFee} on card payments for bookings, registrations, memberships and packages, shown with the total before paying; none with Duna Premium.`,
     `Processing is an estimate the club bears out of the booking price: card ${processing.card}; bank ${processing.bank}.`,
     "Clubs are paid within 3 business days once a payment has settled and the session has taken place (daily payout schedule).",
-    "The terms that go with these prices are drafts until the owner approves them.",
+    "The terms that go with these prices are still in draft.",
   ];
 }
 

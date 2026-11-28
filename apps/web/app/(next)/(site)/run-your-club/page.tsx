@@ -301,7 +301,7 @@ export default function RunYourClubPage() {
         id="plans"
       >
         <SectionHead
-          chip={<span className="site-draft">Draft · owner to confirm</span>}
+          chip={<span className="site-draft">Draft pricing</span>}
           id="plans-title"
           label="Pricing"
           title="Free to start. Cheaper per sale as you grow."

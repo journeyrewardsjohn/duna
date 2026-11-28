@@ -223,7 +223,7 @@ export function PricingTeaser() {
       className="site-wrap site-section site-section--tight"
     >
       <NetLine
-        chip={<span className="site-draft">Draft · owner to confirm</span>}
+        chip={<span className="site-draft">Draft pricing</span>}
         label="Pricing"
       />
       <div className="site-section__head">

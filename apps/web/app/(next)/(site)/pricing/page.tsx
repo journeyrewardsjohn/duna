@@ -187,15 +187,15 @@ export default function PricingPage() {
       <PageHero
         id="pricing-title"
         label="Pricing"
-        lead="Players play free. Clubs and coaches start free and move to a plan with a smaller fee as they sell more. Every number below comes from the same tables Duna charges by."
+        lead="Players play free. Clubs and coaches start free and move to a plan with a smaller fee as they sell more."
         title="Simple to start. Clear as you grow."
       >
         {draft ? (
           <div className="site-notice" role="note">
             <Icon name="info" size="control" />
             <p>
-              These are the prices in Duna’s plan tables today. The terms that
-              go with them are drafts until the owner approves them.{" "}
+              These are Duna’s prices today. Our updated fee terms are still in
+              draft.{" "}
               <Link href="/legal/fees-and-premium">
                 Read the draft fee terms
               </Link>
