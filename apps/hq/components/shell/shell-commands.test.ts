@@ -1,6 +1,10 @@
 import { hqRoutes } from "@duna/core/hq-routes";
 import { describe, expect, it } from "vitest";
-import { parseShellCommand, shellCommands } from "./shell-commands";
+import {
+  parseShellCommand,
+  shellCommands,
+  shellCommandsFor,
+} from "./shell-commands";
 import {
   proposalChanges,
   proposalTier,
@@ -39,6 +43,30 @@ describe("command palette", () => {
     });
     expect(parseShellCommand("do:format-disk")).toEqual({ kind: "unknown" });
     expect(parseShellCommand("do:ask")).toEqual({ kind: "do", action: "ask" });
+  });
+});
+
+describe("People's switched palette entries", () => {
+  const labels = (commands: readonly { label: string }[]) =>
+    commands.map((command) => command.label);
+
+  it("offers import and merge only when their switch is on", () => {
+    expect(labels(shellCommandsFor(undefined))).not.toContain(
+      "Import people from a file",
+    );
+    expect(
+      labels(shellCommandsFor({ import: false, merge: false })),
+    ).not.toContain("Merge duplicate people");
+    const on = shellCommandsFor({ import: true, merge: true });
+    expect(labels(on)).toContain("Import people from a file");
+    expect(labels(on)).toContain("Merge duplicate people");
+    // Still only real addresses, each once, kept with the People group.
+    expect(new Set(on.map((c) => c.value)).size).toBe(on.length);
+    const groups = on.map((command) => command.group);
+    expect(groups.lastIndexOf("People")).toBeLessThan(groups.indexOf("Team"));
+    expect(
+      labels(shellCommandsFor({ import: true, merge: false })),
+    ).not.toContain("Merge duplicate people");
   });
 });
 

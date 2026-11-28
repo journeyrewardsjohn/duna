@@ -19,10 +19,21 @@ export const hqRoutes = {
   /** Retired by the IA (its cards have homes); package B4 removes it. */
   activities: "/activities",
 
-  // People and play. People, Events, Schedule, Marketing and
+  // People and play. Events, Schedule, Marketing and
   // Reports lists are served by the generic module page; see hqModuleHref.
+  /** People (H-PEOPLE): the list, adding, importing, merging, each person. */
+  people: "/people",
+  /** Add a person (the old "Invite a person" address). */
   memberInvite: "/people/invite",
+  peopleImport: "/people/import",
+  peopleMerge: "/people/merge",
   member: "/people/[personId]",
+  memberMemberships: "/people/[personId]/memberships",
+  memberBookings: "/people/[personId]/bookings",
+  memberPayments: "/people/[personId]/payments",
+  memberFamily: "/people/[personId]/family",
+  memberDocuments: "/people/[personId]/documents",
+  memberNotes: "/people/[personId]/notes",
   memberHealth: "/people/[personId]/health",
   /** Team (H-TEAM): the roster, coverage, pay, and each member as an object. */
   team: "/team",
@@ -160,7 +171,6 @@ export function isHqDevOnlyRoute(path: string): boolean {
 export const hqOperatorModuleSlugs = [
   "events",
   "marketing",
-  "people",
   "reports",
   "schedule",
 ] as const;

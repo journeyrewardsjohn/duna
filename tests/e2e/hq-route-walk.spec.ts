@@ -46,6 +46,7 @@ const court = "10000000-0000-4000-8000-000000000103";
 const clinic = "10000000-0000-4000-8000-000000000301";
 const tournament = "10000000-0000-4000-8000-000000000303";
 const member = "10000000-0000-4000-8000-000000000201";
+const junior = "10000000-0000-4000-8000-000000000203";
 const audience = "00000000-0000-4000-8000-000000000091";
 const transaction = "00000000-0000-4000-8000-000000000093";
 const practicePlan = "33000000-0000-4000-8000-000000000300";
@@ -66,15 +67,22 @@ const offering = "d0130000-0000-4000-8000-000000000102";
 /** Concrete paths for every dynamic template (static ones walk as written). */
 const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
   [hqRoutes.ask]: ["/ask", "/ask/history"],
-  [hqRoutes.module]: [
-    "/schedule",
-    "/people",
-    "/events",
-    "/marketing",
-    "/reports",
+  [hqRoutes.module]: ["/schedule", "/events", "/marketing", "/reports"],
+  // People (H-PEOPLE): Maya (adult, shares health) and Ava (a junior).
+  [hqRoutes.member]: [`/people/${member}`, `/people/${junior}`],
+  [hqRoutes.memberMemberships]: [`/people/${member}/memberships`],
+  [hqRoutes.memberBookings]: [`/people/${member}/bookings`],
+  [hqRoutes.memberPayments]: [`/people/${member}/payments`],
+  [hqRoutes.memberFamily]: [
+    `/people/${member}/family`,
+    `/people/${junior}/family`,
   ],
-  [hqRoutes.member]: [`/people/${member}`],
-  [hqRoutes.memberHealth]: [`/people/${member}/health`],
+  [hqRoutes.memberDocuments]: [`/people/${member}/documents`],
+  [hqRoutes.memberNotes]: [`/people/${member}/notes`],
+  [hqRoutes.memberHealth]: [
+    `/people/${member}/health`,
+    `/people/${junior}/health`,
+  ],
   [hqRoutes.teamMember]: [`/team/${coach}`],
   [hqRoutes.teamMemberAvailability]: [`/team/${coach}/availability`],
   [hqRoutes.teamMemberSessions]: [`/team/${coach}/sessions`],
@@ -130,7 +138,6 @@ const extraPaths = {
   eventDivision: `/events/${tournament}/divisions/${missing}`,
   eventCourtBooking: `/events/court-bookings/${missing}`,
   eventMatch: `/events/matches/${missing}`,
-  memberHealth: `/people/${member}/health`,
   stripeReturn: hqRoutes.stripeReturn,
   adminMessagingSafety: hqRoutes.adminMessagingSafety,
   adminSupport: hqRoutes.adminSupport,
@@ -147,8 +154,6 @@ const knownFailures: Readonly<Record<string, string>> = {
     "H9: operator.activityDetail needs the connected database in demo mode.",
   [extraPaths.eventMatch]:
     "H9: operator.activityDetail needs the connected database in demo mode.",
-  [extraPaths.memberHealth]:
-    "H4: operator.memberHealthProfile needs the connected database in demo mode.",
   [extraPaths.adminMessagingSafety]:
     "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
   [extraPaths.adminSupport]:
