@@ -1,7 +1,7 @@
 import "@duna/ui/tideline/styles.css";
 import "@duna/ui/tideline/legacy-bridge.css";
 
-import { buttonClassName, Tideline, TidelineFonts } from "@duna/ui/tideline";
+import { buttonClassName, Tideline } from "@duna/ui/tideline";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import styles from "../gallery.module.css";
@@ -44,7 +44,6 @@ export default async function BookLessonPage({
       theme={theme === "dark" ? "dark" : undefined}
       zone={theme === "live" ? "live" : undefined}
     >
-      <TidelineFonts />
       <header className={styles.top}>
         <a
           className={buttonClassName({ size: "sm", variant: "ghost" })}

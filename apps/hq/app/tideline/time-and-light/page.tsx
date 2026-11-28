@@ -1,12 +1,7 @@
 import "@duna/ui/tideline/styles.css";
 import "@duna/ui/tideline/legacy-bridge.css";
 
-import {
-  buttonClassName,
-  Card,
-  Tideline,
-  TidelineFonts,
-} from "@duna/ui/tideline";
+import { buttonClassName, Card, Tideline } from "@duna/ui/tideline";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -86,7 +81,6 @@ export default async function TimeAndLightPage({
       theme={theme === "dark" ? "dark" : undefined}
       zone={theme === "live" ? "live" : params.zone === "hq" ? "hq" : undefined}
     >
-      <TidelineFonts />
       <header className={styles.top}>
         <a
           className={buttonClassName({ size: "sm", variant: "ghost" })}
