@@ -1,5 +1,4 @@
 import "@duna/ui/tideline/styles.css";
-import "@duna/ui/tideline/legacy-bridge.css";
 
 import {
   buttonClassName,
