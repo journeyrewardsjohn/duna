@@ -55,6 +55,11 @@ function whenLoaded(callback: () => void) {
  * page has loaded, never on data saver, 2G or reduced motion, never with
  * sound; it pauses off screen and when the tab is hidden, and a Pause
  * control stops it for good.
+ *
+ * The `<video>` has no `poster` attribute on purpose: it stays transparent
+ * until it can play, so the optimised photograph underneath is the poster.
+ * A `poster` would download the full-size original (up to 260 KB) the
+ * moment the loop mounts, on phones too (docs/design/website-performance.md).
  */
 export function PhotoStage({
   photo,
@@ -137,7 +142,6 @@ export function PhotoStage({
           muted
           onCanPlay={() => setReady(true)}
           playsInline
-          poster={photo.image.src}
           preload="none"
           ref={player}
           src={video}
