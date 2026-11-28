@@ -10,7 +10,7 @@ Code: `packages/api/src/services/concierge/`, routers
 `packages/api/src/routers/concierge.ts` (`operator.concierge.*`,
 `player.concierge.*`), contract `packages/api/src/contracts/concierge.ts`,
 fixtures `@duna/core/demo/concierge`, tables
-`packages/db/src/schema/concierge.ts` (migration 0124).
+`packages/db/src/schema/concierge.ts` (migration 0125).
 
 ## Threads
 
