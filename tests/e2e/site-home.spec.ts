@@ -157,7 +157,7 @@ test.describe("Home page and site shell", () => {
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Add the court and a score" }),
-    ).toHaveAttribute("href", "/app/score");
+    ).toHaveAttribute("href", "/add-score?where=Qzxv%20Lagoon");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: /^Where/ })).toBeFocused();
   });

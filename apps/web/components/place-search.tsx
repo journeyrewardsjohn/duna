@@ -35,25 +35,35 @@ export function PlaceSearch({
   );
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(false);
+  const [notice, setNotice] = useState<string>();
   const requestNumber = useRef(0);
+  // One provider session per search: every keystroke and the chosen place.
+  const session = useRef<string>("");
+  // A value filled in for the person (an edit, a default) is not a search:
+  // suggestions are asked for only after they type.
+  const typed = useRef(false);
 
   useEffect(() => {
-    if (selected || value.trim().length < 3) {
+    if (!typed.current || selected || value.trim().length < 3) {
       setSuggestions([]);
       return;
     }
     const current = ++requestNumber.current;
     const timer = setTimeout(async () => {
       setLoading(true);
+      session.current ||= crypto.randomUUID();
       try {
         const response = await fetch(
-          `/api/places/autocomplete?q=${encodeURIComponent(value)}`,
+          `/api/places/autocomplete?q=${encodeURIComponent(value)}&session=${session.current}`,
         );
         const payload = (await response.json()) as {
           readonly suggestions?: readonly PlaceSuggestion[];
+          readonly error?: string;
         };
         if (current === requestNumber.current) {
           setSuggestions(payload.suggestions ?? []);
+          // Too many searches: say so quietly; typing again retries.
+          setNotice(response.status === 429 ? payload.error : undefined);
         }
       } finally {
         if (current === requestNumber.current) setLoading(false);
@@ -67,8 +77,13 @@ export function PlaceSearch({
     setSuggestions([]);
     onValue(suggestion.text);
     const response = await fetch(
-      `/api/places/details?placeId=${encodeURIComponent(suggestion.placeId)}`,
+      `/api/places/details?placeId=${encodeURIComponent(suggestion.placeId)}&session=${session.current}`,
     );
+    session.current = "";
+    if (response.status === 429) {
+      setNotice("Lots of searches just now. Try again in a few seconds.");
+      return;
+    }
     if (!response.ok) return;
     const details = (await response.json()) as PlaceDetails;
     onValue(details.address ?? suggestion.text);
@@ -89,6 +104,7 @@ export function PlaceSearch({
         groupClassName="consumer-place-search__input"
         id={id}
         onChange={(event) => {
+          typed.current = true;
           setSelected(false);
           onValue(event.target.value);
           onPlace({});
@@ -118,6 +134,7 @@ export function PlaceSearch({
           <small>Powered by Google</small>
         </span>
       )}
+      {notice ? <small role="status">{notice}</small> : null}
     </div>
   );
 }

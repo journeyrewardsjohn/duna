@@ -23,6 +23,10 @@ export type WhereChoice =
       readonly longitude: number;
       /** Where it came from, for the picker's icon. */
       readonly source: "places" | "duna";
+      /** The provider's place id (Places results). */
+      readonly placeId?: string;
+      /** The Duna venue (Duna results). */
+      readonly venueId?: string;
     };
 
 export type WhenPreset = "today" | "tonight" | "weekend" | "week" | "any";
