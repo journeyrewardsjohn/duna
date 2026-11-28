@@ -3,7 +3,10 @@
 import { hqHref } from "@duna/core/hq-routes";
 import { Icon } from "@duna/ui/icons";
 import {
+  Avatar,
   Button,
+  Checkbox,
+  Chip,
   Combobox,
   ConfirmSlot,
   Field,
@@ -19,10 +22,14 @@ import { useMemo, useState } from "react";
 import {
   cancelItemAction,
   equipmentAction,
-  markPaidAction,
-  removeBlockAction,
   rosterAction,
 } from "@/app/(next)/(hq)/schedule/actions";
+import {
+  BookingCancelForm,
+  DeskPaymentForm,
+  RemoveBlockForm,
+} from "./desk-forms";
+import { paymentStateWords, type DraftHandoff } from "./schedule-desk";
 import {
   clock,
   clockRange,
@@ -49,7 +56,12 @@ import {
 export interface PanelPermissions {
   readonly change: boolean;
   readonly checkIn: boolean;
+  /** Returns money (payments:write). */
   readonly refund: boolean;
+  /** Sees amounts. */
+  readonly money: boolean;
+  /** Records desk payments (payments:collect). */
+  readonly collect: boolean;
   /** This item may be moved (role, procedure and capability switch). */
   readonly move: boolean;
   /** This item may be cancelled from here (a booking needs its procedure). */
@@ -60,13 +72,23 @@ export interface PanelPermissions {
   readonly removeBlock: boolean;
 }
 
+/** The move the panel asks for: where, and whether to prepare a message. */
+export interface MoveRequest {
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly courtId?: string;
+  /** Court bookings: prepare a draft for the people booked (never sent). */
+  readonly notify?: boolean;
+}
+
 /**
  * Anything on the calendar, opened in a side panel: what and when, the
- * people with their payment and check-in, and what can be done, each at
- * its confirmation tier. Cancelling tells the people booked and is
- * confirmed first; a payment recorded at the desk is confirmed; check-in is
- * immediate with Undo. Messages are never sent from here: "Message" opens
- * Inbox with the person, where a person reviews and sends.
+ * people (with their initials) and their payment and check-in, and what can
+ * be done, each at its confirmation tier. A court booking's cancellation
+ * lists who gets what back exactly as the API plans it; a desk payment
+ * says what it does and does not do; removing a block says what stays
+ * cancelled. Check-in is immediate with Undo. Messages are never sent from
+ * here: drafts and "Message" open Inbox, where a person reviews and sends.
  */
 export function ItemPanel({
   item,
@@ -79,6 +101,7 @@ export function ItemPanel({
   onCheckIn,
   onMove,
   onChanged,
+  onDrafted,
 }: {
   readonly item: ScheduleItem | null;
   readonly courts: readonly CourtFacts[];
@@ -92,11 +115,9 @@ export function ItemPanel({
   readonly nowMs: number;
   readonly onClose: () => void;
   readonly onCheckIn: (item: ScheduleItem, person: ItemPerson) => void;
-  readonly onMove: (
-    item: ScheduleItem,
-    next: { startsAt: string; endsAt: string; courtId?: string },
-  ) => void;
+  readonly onMove: (item: ScheduleItem, next: MoveRequest) => void;
   readonly onChanged: () => void;
+  readonly onDrafted: (handoff: DraftHandoff) => void;
 }) {
   const side = useSheetSide();
   const confirm = useConfirm({ presentation: "inline" });
@@ -126,6 +147,7 @@ export function ItemPanel({
               onChanged={onChanged}
               onCheckIn={onCheckIn}
               onClose={onClose}
+              onDrafted={onDrafted}
               onMove={onMove}
               permissions={permissions}
             />
@@ -148,6 +170,7 @@ function PanelBody({
   onMove,
   onChanged,
   onClose,
+  onDrafted,
 }: {
   readonly item: ScheduleItem;
   readonly courts: readonly CourtFacts[];
@@ -161,14 +184,14 @@ function PanelBody({
   readonly nowMs: number;
   readonly confirm: ReturnType<typeof useConfirm>;
   readonly onCheckIn: (item: ScheduleItem, person: ItemPerson) => void;
-  readonly onMove: (
-    item: ScheduleItem,
-    next: { startsAt: string; endsAt: string; courtId?: string },
-  ) => void;
+  readonly onMove: (item: ScheduleItem, next: MoveRequest) => void;
   readonly onChanged: () => void;
   readonly onClose: () => void;
+  readonly onDrafted: (handoff: DraftHandoff) => void;
 }) {
-  const [panel, setPanel] = useState<"home" | "move" | "cancel">("home");
+  const [panel, setPanel] = useState<
+    "home" | "move" | "cancel" | "pay" | "remove"
+  >("home");
   const [reason, setReason] = useState("");
   const [adding, setAdding] = useState<string | null>(null);
   const [gear, setGear] = useState<string | null>(null);
@@ -242,10 +265,63 @@ function PanelBody({
   const due = (item.amountMinor ?? 0) - (item.paidMinor ?? 0);
   const people = item.people;
   const isOver = ended(item, nowMs);
+  const courtBooking =
+    item.kind === "booking" &&
+    (item.source === "court-booking" || item.source === "demo");
+  const back = () => setPanel("home");
+  const date = localDateOf(Date.parse(item.startsAt), zone);
+
+  if (panel === "pay") {
+    return (
+      <DeskPaymentForm
+        confirm={confirm}
+        dueMinor={due}
+        item={item}
+        onBack={back}
+        onDone={() => {
+          onChanged();
+          back();
+        }}
+      />
+    );
+  }
+
+  if (panel === "remove") {
+    return (
+      <RemoveBlockForm
+        confirm={confirm}
+        date={date}
+        item={item}
+        onBack={back}
+        onDone={() => {
+          onChanged();
+          onClose();
+        }}
+      />
+    );
+  }
+
+  if (panel === "cancel" && courtBooking) {
+    return (
+      <BookingCancelForm
+        confirm={confirm}
+        item={item}
+        money={permissions.money}
+        onBack={back}
+        onDone={(handoff) => {
+          if (handoff) onDrafted(handoff);
+          onChanged();
+          onClose();
+        }}
+        refund={permissions.refund}
+      />
+    );
+  }
 
   if (panel === "move") {
     return (
       <MoveForm
+        courtBooking={courtBooking}
         courts={courts.filter(
           (court) => !item.placeId || court.placeId === item.placeId,
         )}
@@ -381,10 +457,21 @@ function PanelBody({
         {item.amountMinor !== undefined ? (
           <>
             <dt>Payment</dt>
-            <dd>
-              {due > 0
-                ? `${money(due, item.currency)} due of ${money(item.amountMinor, item.currency)}`
-                : `Paid · ${money(item.amountMinor, item.currency)}`}
+            <dd className="sch-panel__pay">
+              <Chip tone={due > 0 ? "attention" : "positive"}>
+                {due > 0
+                  ? item.paymentState === "part-paid"
+                    ? paymentStateWords["part-paid"]
+                    : paymentStateWords.unpaid
+                  : item.paymentState
+                    ? paymentStateWords[item.paymentState]
+                    : paymentStateWords.paid}
+              </Chip>
+              <span className="sch-time">
+                {due > 0
+                  ? `${money(due, item.currency)} due of ${money(item.amountMinor, item.currency)}`
+                  : money(item.amountMinor, item.currency)}
+              </span>
             </dd>
           </>
         ) : null}
@@ -407,8 +494,9 @@ function PanelBody({
           <ul className="sch-roster">
             {people.map((person) => (
               <li key={person.id}>
+                <Avatar decorative name={person.name} size="sm" />
                 <span className="sch-roster__who">
-                  <span>{person.name}</span>
+                  <span className="sch-roster__name">{person.name}</span>
                   <small>
                     {[
                       person.checkedIn
@@ -612,31 +700,13 @@ function PanelBody({
             {item.kind === "event" ? "Open the event" : "Open in Offerings"}
           </Button>
         ) : null}
-        {permissions.change &&
+        {permissions.collect &&
         permissions.deskPayment &&
+        courtBooking &&
         due > 0 &&
         !item.cancelled ? (
-          <Button
-            onClick={() => {
-              void confirm
-                .run({
-                  tier: "confirm",
-                  title: `Record ${money(due, item.currency)} paid at the desk?`,
-                  description: `The booking for ${item.who ?? item.title} shows as paid. Use this only when the money was taken in person.`,
-                  verb: `Record ${money(due, item.currency)} paid`,
-                  agentConfirm: `Records ${money(due, item.currency)} paid at the desk for ${item.who ?? item.title}`,
-                  perform: ({ idempotencyKey }) =>
-                    act(markPaidAction({ id: item.id, idempotencyKey })),
-                  success: `${money(due, item.currency)} recorded as paid`,
-                  report: reportError,
-                })
-                .then((outcome) => {
-                  if (outcome.status === "done") onChanged();
-                });
-            }}
-            variant="secondary"
-          >
-            Record payment
+          <Button onClick={() => setPanel("pay")} variant="primary">
+            Record desk payment…
           </Button>
         ) : null}
         {permissions.move && !isOver ? (
@@ -656,31 +726,9 @@ function PanelBody({
         ) : null}
         {permissions.change &&
         permissions.removeBlock &&
-        item.kind === "block" ? (
-          <Button
-            onClick={() => {
-              void confirm
-                .run({
-                  tier: "confirm",
-                  title: `Remove this block from ${item.courtName ?? "the schedule"}?`,
-                  description: `${clockRange(item.startsAt, item.endsAt, zone)} opens again for bookings.`,
-                  verb: "Remove block",
-                  cancelLabel: "Keep block",
-                  agentConfirm: `Removes the block on ${item.courtName ?? "the schedule"} at ${clock(item.startsAt, zone)}`,
-                  perform: ({ idempotencyKey }) =>
-                    act(removeBlockAction({ id: item.id, idempotencyKey })),
-                  success: "Block removed",
-                  report: reportError,
-                })
-                .then((outcome) => {
-                  if (outcome.status === "done") {
-                    onChanged();
-                    onClose();
-                  }
-                });
-            }}
-            variant="ghost"
-          >
+        item.kind === "block" &&
+        item.removable ? (
+          <Button onClick={() => setPanel("remove")} variant="ghost">
             Remove block…
           </Button>
         ) : null}
@@ -701,18 +749,18 @@ function ended(item: ScheduleItem, nowMs: number) {
 function MoveForm({
   item,
   courts,
+  courtBooking,
   onBack,
   onMove,
 }: {
   readonly item: ScheduleItem;
   readonly courts: readonly CourtFacts[];
+  readonly courtBooking: boolean;
   readonly onBack: () => void;
-  readonly onMove: (next: {
-    startsAt: string;
-    endsAt: string;
-    courtId?: string;
-  }) => void;
+  readonly onMove: (next: MoveRequest) => void;
 }) {
+  const [notify, setNotify] = useState(true);
+  const told = item.people.filter((person) => !person.noShow);
   const zone = item.timeZone;
   const day = useMemo(
     () => placeDay(localDateOf(Date.parse(item.startsAt), zone), zone),
@@ -747,6 +795,7 @@ function MoveForm({
             Date.parse(startsAt) + length * MINUTE_MS,
           ).toISOString(),
           ...(courtId ? { courtId } : {}),
+          ...(courtBooking ? { notify: notify && told.length > 0 } : {}),
         });
       }}
     >
@@ -775,6 +824,14 @@ function MoveForm({
         Same length ({clockRange(item.startsAt, item.endsAt, zone)} now). You
         can also drag it on the calendar.
       </p>
+      {courtBooking && told.length > 0 ? (
+        <Checkbox
+          checked={notify}
+          description="A draft opens in Inbox for you to review. Nothing is sent from here."
+          label={`Prepare a message for ${namesWords(told.map((person) => person.name))}`}
+          onCheckedChange={(checked) => setNotify(checked === true)}
+        />
+      ) : null}
       <div className="sch-actions">
         <Button onClick={onBack} variant="secondary">
           Back

@@ -27,8 +27,16 @@ export interface RouteEntry {
   readonly prompt?: string;
   /** The thing a detail route shows (a session occurrence, a venue). */
   readonly targetId?: string;
+  /** Court times: the day, length and kind of booking to open on. */
+  readonly court?: CourtRouteOptions;
   /** Changes on every open, so re-opening the same route re-applies its intent. */
   readonly nonce: number;
+}
+
+export interface CourtRouteOptions {
+  readonly date?: string;
+  readonly durationMinutes?: number;
+  readonly intent?: "private" | "host";
 }
 
 export interface ShellState {
@@ -48,6 +56,7 @@ export type ShellAction =
       readonly conversationId?: string;
       readonly prompt?: string;
       readonly targetId?: string;
+      readonly court?: CourtRouteOptions;
       readonly nonce?: number;
     }
   | { readonly type: "back"; readonly tab: TabKey }
@@ -96,6 +105,7 @@ export function shellReducer(
           : {}),
         ...(action.prompt ? { prompt: action.prompt } : {}),
         ...(action.targetId ? { targetId: action.targetId } : {}),
+        ...(action.court ? { court: action.court } : {}),
         nonce: action.nonce ?? nextNonce(),
       };
       if (definition.presentation === "window") {

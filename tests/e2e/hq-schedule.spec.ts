@@ -1,10 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Schedule on the new shell (H-SCHEDULE), in demo mode: create a booking on
- * an empty slot (a double click books once), a conflict explained in words
- * with a free alternative, a move through its confirmation and Undo, a
- * closure listing what it affects, check-in from "Now and next", the agenda
+ * Schedule on the new shell (H-SCHEDULE, H-SCHEDULE-2), in demo mode: book
+ * a court on an empty slot at the court's price (a double click books
+ * once), a conflict explained in words with a free alternative, a booking
+ * moved through its preview with a message prepared in Inbox and Undo, a
+ * cancellation listing who gets what back, a desk payment, removing a
+ * closure with its acknowledgement, a closure listing what it affects, check-in from "Now and next", the agenda
  * at 375 px, the keyboard path, a coach's limited view, no legacy
  * stylesheet and no horizontal page overflow. Demo changes live in a cookie,
  * so every test starts from the same club day.
@@ -86,8 +88,20 @@ test("creates a booking on an empty slot, and a double click books once", async 
   await expect(sheet.getByText(/^Community Court is free \d/)).toBeVisible();
   await sheet.getByRole("radio", { name: "A walk-in" }).check();
   await sheet.getByLabel("Walk-in's name").fill("Jamie Stone");
+  // The court's own price, from the server's preview.
+  await expect(sheet.getByTestId("booking-price")).toContainText(
+    /\$\d+\.\d\d: Court hire/,
+  );
+  // A payment link needs Duna Pay: offered only when it can work.
+  await expect(
+    sheet.getByRole("radio", { name: /Send a payment link/ }),
+  ).toBeDisabled();
+  // Review waits (disabled) until the preview answers for these choices.
+  await sheet.getByRole("button", { name: "Review the booking" }).click();
+  await expect(sheet).toContainText("Book Community Court for Jamie Stone?");
+  await expect(sheet).toContainText("Nothing is sent to anyone from here.");
   const posts = actionPosts(page);
-  await sheet.getByRole("button", { name: "Book the court" }).dblclick();
+  await sheet.getByRole("button", { name: /^Book for \$/ }).dblclick();
   await expect(page.getByText(/Booking added: Community Court/)).toBeVisible();
   expect(posts).toHaveLength(1);
   await expect(
@@ -118,7 +132,7 @@ test("explains a conflict in words and offers the nearest free time", async ({
   await expect(sheet.getByText(/is free/)).toBeVisible();
 });
 
-test("moves a booking after a confirmation naming who is told, then undoes it", async ({
+test("moves a booking after its preview, prepares a message in Inbox, then undoes it", async ({
   page,
 }) => {
   await openSchedule(page, `?date=${placeDate(1)}&view=day`);
@@ -127,17 +141,28 @@ test("moves a booking after a confirmation naming who is told, then undoes it", 
     .getByRole("button", { name: /Court booking: Court hire, 8:00/ })
     .click();
   const panel = page.getByRole("dialog", { name: "Court hire" });
-  await expect(panel.getByText(/^Paid · /)).toBeVisible();
+  await expect(panel.getByText(/^Paid$/)).toBeVisible();
   await panel.getByRole("button", { name: "Move…" }).click();
   await choose(page, "New start", "2:00 PM");
+  await expect(
+    panel.getByRole("checkbox", { name: /Prepare a message for/ }),
+  ).toBeChecked();
   await panel.getByRole("button", { name: "Review the move" }).click();
   const question = page.getByRole("alertdialog");
   await expect(question).toContainText("Move Court hire to 2:00 PM?");
-  await expect(question).toContainText("1 person booked is sent the new time");
-  await question
-    .getByRole("button", { name: "Move and tell 1 person" })
-    .click();
-  await expect(page.getByText("Court hire moved to 2:00 PM")).toBeVisible();
+  await expect(question).toContainText("The price stays as booked.");
+  await expect(question).toContainText("may ask for a full refund");
+  await expect(question).toContainText(/is prepared in Inbox/);
+  await expect(question).toContainText("Nothing is sent from here.");
+  await question.getByRole("button", { name: "Move to 2:00 PM" }).click();
+  await expect(
+    page.getByText("Court hire moved to 2:00 PM", { exact: true }),
+  ).toBeVisible();
+  const handoff = page.getByTestId("draft-handoff");
+  await expect(handoff).toContainText("A message draft is ready in Inbox");
+  await expect(
+    handoff.getByRole("link", { name: "Open in Inbox" }),
+  ).toHaveAttribute("href", /\/inbox/);
   await expect(
     page.getByRole("button", { name: /Court booking: Court hire, 2:00 PM/ }),
   ).toBeVisible();
@@ -148,6 +173,93 @@ test("moves a booking after a confirmation naming who is told, then undoes it", 
   await expect(
     page.getByRole("button", { name: /Court booking: Court hire, 2:00 PM/ }),
   ).toHaveCount(0);
+});
+
+test("cancels a booking after listing who gets what back, at the strong tier", async ({
+  page,
+}) => {
+  await openSchedule(page, `?date=${placeDate(1)}&view=day`);
+  await page
+    .getByTestId("schedule-grid")
+    .getByRole("button", { name: /Court booking: Court hire, 8:00/ })
+    .click();
+  const panel = page.getByRole("dialog", { name: "Court hire" });
+  await panel.getByRole("button", { name: "Cancel…" }).click();
+  const lines = panel.getByTestId("cancel-lines");
+  await expect(lines).toContainText("Refunded to the card they paid with");
+  await expect(lines).toContainText(/\$\d+\.\d\d back/);
+  await panel.getByRole("radio", { name: "No refund" }).check();
+  await expect(lines).toContainText("Keeps what they paid");
+  await panel.getByRole("radio", { name: "By the policy" }).check();
+  await panel
+    .getByLabel("Reason, for the record and the message draft")
+    .fill("Asked to cancel at the desk");
+  await panel.getByRole("button", { name: "Review the cancellation" }).click();
+  await expect(panel).toContainText("A refund cannot be undone.");
+  await expect(panel).toContainText(/opens in Inbox for you to review/);
+  await panel.getByRole("button", { name: /^Cancel and refund \$/ }).click();
+  await expect(
+    page.getByText("Court hire cancelled", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("draft-handoff")).toContainText(
+    "A message draft is ready in Inbox",
+  );
+});
+
+test("records a desk payment from the Unpaid strip, saying no card is charged", async ({
+  page,
+}) => {
+  await openSchedule(page, "?view=day");
+  const unpaid = page.getByRole("region", { name: "Unpaid" });
+  await unpaid.locator(".sch-link").first().click();
+  const panel = page.getByRole("dialog");
+  await panel.getByRole("button", { name: "Record desk payment…" }).click();
+  await expect(panel).toContainText(
+    "Only the whole amount due can be recorded.",
+  );
+  await panel.getByRole("radio", { name: "Cash" }).check();
+  await panel.getByRole("button", { name: "Review the payment" }).click();
+  await expect(panel).toContainText("No card is charged");
+  await expect(panel).toContainText(
+    "Money shows the booking as paid with no processor payment.",
+  );
+  const posts = actionPosts(page);
+  await panel
+    .getByRole("button", { name: /^Record \$[\d.]+ paid$/ })
+    .dblclick();
+  await expect(page.getByText(/recorded as paid at the desk/)).toBeVisible();
+  expect(posts).toHaveLength(1);
+});
+
+test("removing a closure asks to acknowledge what stays cancelled under it", async ({
+  page,
+}) => {
+  await openSchedule(page, `?date=${placeDate(1)}&view=day`);
+  await page.getByRole("button", { name: "Close courts" }).click();
+  const sheet = page.getByRole("dialog", { name: "Close courts" });
+  await sheet
+    .getByLabel("Reason, shown on the calendar and to the people told")
+    .fill("Sand replacement");
+  await sheet.getByRole("button", { name: "Review the closure" }).click();
+  await sheet.getByRole("button", { name: "Close 2 courts" }).click();
+  await expect(page.getByText(/2 courts closed/)).toBeVisible();
+  await page
+    .getByRole("button", { name: /Blocked time: Closed/ })
+    .first()
+    .click();
+  const panel = page.getByRole("dialog", { name: "Closed" });
+  await panel.getByRole("button", { name: "Remove block…" }).click();
+  await expect(panel).toContainText("Cancelled under this closure");
+  await panel.getByLabel("Why it is removed").fill("Sand arrived early");
+  const review = panel.getByRole("button", { name: "Review the removal" });
+  await expect(review).toBeDisabled();
+  await panel
+    .getByRole("checkbox", { name: /does not bring them back/ })
+    .check();
+  await review.click();
+  await expect(panel).toContainText(/stays? cancelled/);
+  await panel.getByRole("button", { name: "Remove block" }).click();
+  await expect(page.getByText("Block removed")).toBeVisible();
 });
 
 test("a closure lists the sessions it affects and confirms at the strong tier", async ({

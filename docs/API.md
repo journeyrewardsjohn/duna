@@ -337,10 +337,44 @@ procedure is live and returns its fixture from
 | `coverageGrid`                                                                            | `members:read`                                                                                    | Club time zone; a coach teaching a session counts as available for it                                                                                              |
 | `coverageRequests`                                                                        | `members:read`                                                                                    | Filter by status and time                                                                                                                                          |
 | `coverageAction`                                                                          | `members:write`                                                                                   | `suggest` re-ranks; `ask` records the ask (Concierge sends); `assign` re-checks the substitute, reassigns the session and writes an audit row; `decline`; `cancel` |
+| `range` (SCHED-API)                                                                       | `members:read`                                                                                    | Every active coach's schedules, blackouts and time off for at most 62 days, as `availabilityFor` inputs (no commitments); four queries whatever the team size      |
 
 Errors: `FORBIDDEN` (not yours and not a manager), `NOT_FOUND` (outside the
 caller's club), `CONFLICT` (state machine or the substitute is no longer
 free), `BAD_REQUEST` (invalid time zone or window).
+
+## Front desk schedule (`operator.schedule`, SCHED-API)
+
+Court bookings, moves, cancellations, desk payments and blocks for HQ's
+Schedule. Shapes in `packages/api/src/contracts/schedule.ts`; services in
+`packages/api/src/services/schedule/`; product rules in
+[`docs/product/schedule.md`](product/schedule.md). Demo mode answers from
+`@duna/core/demo/schedule`. Every write takes an idempotency key; nothing
+here sends a message (moves and cancellations return a draft and, when they
+should tell people, a Concierge Send review through the hand-off).
+
+| Procedure                    | Scope                                                                                 | Input → output                                                                                                                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createCourtBookingPreview`  | `sessions:read`                                                                       | `{ courtId, startsAt, endsAt, personId? \| walkIn?, paymentIntent }` → `{ available, conflicts[], price? (money), paymentLinkAvailable, timeZone }`                                                                  |
+| `createCourtBooking`         | `sessions:write` (+ `payments:write` for `priceMinor` or a free booking of paid time) | `{ courtId, startsAt, endsAt, personId \| walkIn, priceMinor?, priceReason?, currency, paymentIntent, expectedTotalMinor?, idempotencyKey }` → `{ id, status, paymentState, paymentLink?, orderId? }`                |
+| `moveCourtBookingPreview`    | `sessions:read`                                                                       | `{ bookingId, startsAt, endsAt, courtId? }` → `{ from, to, available, conflicts, price, requiresPriceConfirmation, materialChange, draft, previewToken }`                                                            |
+| `moveCourtBooking`           | `sessions:write`                                                                      | `{ bookingId, startsAt, endsAt, courtId?, notify, previewToken?, confirmedPriceChange?, idempotencyKey }` → `{ id, undo, toTell, sent: 0, draft?, conciergeDraft?, repriced }`                                       |
+| `cancelCourtBookingPreview`  | `sessions:read`                                                                       | `{ bookingId, refund: full \| none \| by-policy, cause: club \| player-asked }` → `{ policy, lines[], totalRefundMinor? (money), needsMoneyPermission, draft, previewToken }`                                        |
+| `cancelCourtBooking`         | `sessions:write` (+ `payments:write` when money is returned)                          | `{ bookingId, reason, refund, cause, confirmed: true, previewToken?, notify, idempotencyKey }` → `{ lines[] with outcome, totalRefundMinor?, toTell, sent: 0, draft, conciergeDraft? }`                              |
+| `recordDeskPayment`          | `payments:collect` + `sessions:write`                                                 | `{ bookingId \| orderId, amountMinor (the whole amount due), method: cash \| card-at-desk-external \| other, note?, confirmed: true, idempotencyKey }` → `{ id, orderId, orderStatus: paid, ledgerRecorded: false }` |
+| `removeCalendarBlockPreview` | `sessions:read`                                                                       | `{ id, scope, date? }` → `{ kind: one-off \| weekly, resource, cancelledUnder[] }`                                                                                                                                   |
+| `removeCalendarBlock`        | `sessions:write`                                                                      | `{ id, reason, scope: this \| this-occurrence \| this-and-following \| all, date?, acknowledgeCancelled?, idempotencyKey }` → `{ removed, stillCancelled }`                                                          |
+| `bookingPayments`            | a money permission (`payments:read` / `write` / `collect`)                            | `{ from, to, venueId? }` → `{ bookings: [{ bookingId, orderId?, totalMinor, paidMinor, paymentState, due }] }` (three queries, whatever the number of bookings)                                                      |
+
+Errors: `NOT_FOUND` (another club's court, booking, block or person),
+`FORBIDDEN` (missing scope), `CONFLICT` (the slot is taken, by the shared
+rule or the database's exclusion constraint; a stale `previewToken`; already
+paid), `PRECONDITION_FAILED` (a price change not confirmed, a payment link
+without Duna Pay, cancelled sessions not acknowledged), `BAD_REQUEST`.
+
+`operator.recordSessionAttendance` now takes `sessions:read` plus one narrow
+rule: the session's assigned coach may record attendance on it; everyone
+else still needs `sessions:write`.
 
 ## Club setup (`operator.setup`, owner B1)
 

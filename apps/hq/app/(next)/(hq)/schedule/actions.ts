@@ -1,36 +1,51 @@
 "use server";
 
+import { scheduleDemoBlock, scheduleDemoIds } from "@duna/core/demo/schedule";
 import { log } from "@duna/observability";
 import { localDateOf, localMinuteOf, weekdayOfDate } from "@duna/scheduling";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import type { MoneyActionResult } from "@/components/money/money-action-result";
 import { isNotConfiguredAnswer } from "@/components/money/money-data";
+import type {
+  BlockPreview,
+  BlockScope,
+  BookingCreated,
+  BookingPreview,
+  CancelCause,
+  CancelPreview,
+  DeskMethod,
+  MovePreview,
+  PaymentIntent,
+  RefundChoice,
+} from "@/components/schedule/schedule-desk";
 import {
   DEMO_SCHEDULE_COOKIE,
   parseDemoSchedule,
   serializeDemoSchedule,
   type DemoScheduleStore,
 } from "@/components/schedule/schedule-demo";
-import {
-  teamAvailabilityToInputs,
-  type CoachFacts,
-  type ItemKind,
-  type ItemSource,
+import type {
+  CoachFacts,
+  ItemKind,
+  ItemSource,
 } from "@/components/schedule/schedule-model";
-import type { ScheduleCapability } from "@/components/schedule/schedule-capabilities";
 import { getHqSession } from "@/components/shell/hq-session";
 import { getServerCaller, getServerContext } from "@/lib/api";
 import { isPermissionDenied } from "@/lib/permission-denied";
 
 /**
- * Schedule's changes (H-SCHEDULE). Each is a person's confirmed action from
- * the calendar: the screen asks first (a move that affects booked people, a
- * cancellation, a closure), then calls one of these with the idempotency
- * key the confirming control made (reused on retry). They answer a result
- * instead of throwing, so the screen can say what happened and give the
- * reference. In demo mode (no Duna Database) changes are kept in a cookie
- * in the person's own browser.
+ * Schedule's changes (H-SCHEDULE, H-SCHEDULE-2). Each is a person's
+ * confirmed action from the calendar: the screen previews first (price,
+ * conflicts, who would be told, who gets what back), asks, then calls one
+ * of these with the idempotency key the confirming control made (reused on
+ * retry). They answer a result instead of throwing, so the screen can say
+ * what happened and give the reference. Court bookings, moves,
+ * cancellations, desk payments and block removals go through
+ * `operator.schedule.*` (SCHED-API), which sends nothing: moves and
+ * cancellations answer a draft for Inbox. In demo mode (no Duna Database)
+ * those procedures answer from their fixtures and the change is kept in a
+ * cookie in the person's own browser, so the calendar shows it.
  */
 
 type Result<T> = MoneyActionResult<T>;
@@ -48,15 +63,33 @@ const plainCodes = new Set([
   "TOO_MANY_REQUESTS",
 ]);
 
+const deniedWords = {
+  change:
+    "Your role can't change the schedule. Nothing was changed; the club's owner or front desk can.",
+  read: "Your role can't see this. Nothing was changed; the club's owner or front desk can.",
+  money:
+    "Your role can't take or return money. Nothing was changed; the club's owner can, and the front desk can record desk payments.",
+} as const;
+
 async function run<T>(
   action: string,
   perform: () => Promise<T>,
+  options: {
+    /** A read (a preview): the calendar is not refreshed. */
+    readonly read?: boolean;
+    readonly denied?: keyof typeof deniedWords;
+  } = {},
 ): Promise<Result<T>> {
   const { requestId } = await getServerContext();
   try {
     const data = await perform();
-    revalidatePath("/schedule");
-    log.info("hq.schedule.action_succeeded", { action });
+    if (!options.read) revalidatePath("/schedule");
+    log.info(
+      options.read
+        ? "hq.schedule.preview_succeeded"
+        : "hq.schedule.action_succeeded",
+      { action },
+    );
     return { ok: true, data };
   } catch (error) {
     if (error instanceof NotAvailableYet) {
@@ -74,7 +107,7 @@ async function run<T>(
         ok: false,
         code: "denied",
         message:
-          "Your role can't change the schedule. Nothing was changed; the club's owner or front desk can.",
+          deniedWords[options.denied ?? (options.read ? "read" : "change")],
         reference: requestId,
       };
     }
@@ -89,34 +122,50 @@ async function run<T>(
     }
     const code = codeOf(error);
     log.warn("hq.schedule.action_failed", { action, code: code ?? "unknown" });
+    const said =
+      code && plainCodes.has(code) && error instanceof Error && error.message
+        ? error.message
+        : undefined;
     return {
       ok: false,
       code: "failed",
-      message:
-        code && plainCodes.has(code) && error instanceof Error && error.message
-          ? `${error.message} Nothing was changed.`
-          : "Something went wrong on our side. Nothing was changed; try again.",
+      message: said
+        ? /Nothing was/.test(said)
+          ? said
+          : `${said} Nothing was changed.`
+        : "Something went wrong on our side. Nothing was changed; try again.",
       reference: requestId,
     };
   }
 }
 
-/** A change the API cannot make yet (listed under "Needs API"). */
+/** A change the API cannot make (said in words, nothing changed). */
 class NotAvailableYet extends Error {}
 
-/**
- * A change whose procedure has not landed (schedule-capabilities.ts). The
- * screen does not offer it while its switch is off; this answer is for a
- * stale page. The guard test fails if a switch is on while this remains.
- */
-function needsApi(capability: ScheduleCapability, message: string): never {
-  throw new NotAvailableYet(message);
-}
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const uuid = (value: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-    ? value
-    : crypto.randomUUID();
+  uuidPattern.test(value) ? value : crypto.randomUUID();
+
+/**
+ * Demo mode answers `operator.schedule.*` from its fixtures, which take the
+ * API's ids; the demo club's own items carry readable ids, so they are sent
+ * as the fixture's. Real ids pass through.
+ */
+const asApiId = (value: string, demoFixture: string) =>
+  uuidPattern.test(value) ? value : demoFixture;
+
+/** A court booking: from the club's data, or one of the demo club's. */
+function isCourtBooking(input: {
+  readonly source: ItemSource;
+  readonly kind?: ItemKind;
+}) {
+  return (
+    input.source === "court-booking" ||
+    (input.source === "demo" && input.kind === "booking")
+  );
+}
 
 async function isDemo() {
   const session = await getHqSession();
@@ -142,8 +191,57 @@ function localStamp(iso: string, zone: string): string {
   return `${localDateOf(at, zone)}T${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 }
 
+/* ------------------------------------------------------------ booking */
+
+export interface BookingSlotInput {
+  readonly courtId: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly personId?: string;
+  readonly walkIn?: { readonly name: string; readonly phoneE164?: string };
+  readonly paymentIntent: PaymentIntent;
+}
+
+function slotFor(input: BookingSlotInput) {
+  return {
+    courtId: asApiId(input.courtId, scheduleDemoIds.court),
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    ...(input.personId && uuidPattern.test(input.personId)
+      ? { personId: input.personId }
+      : {}),
+    ...(input.walkIn
+      ? {
+          walkIn: {
+            name: input.walkIn.name,
+            ...(input.walkIn.phoneE164
+              ? { phoneE164: input.walkIn.phoneE164 }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/** Is the slot free by the shared rule, and what would it cost? */
+export async function previewBookingAction(
+  input: BookingSlotInput,
+): Promise<Result<BookingPreview>> {
+  return run(
+    "booking-preview",
+    async () => {
+      const caller = await getServerCaller();
+      return caller.operator.schedule.createCourtBookingPreview({
+        ...slotFor(input),
+        paymentIntent: input.paymentIntent,
+      });
+    },
+    { read: true },
+  );
+}
+
 export interface CreateItemInput {
-  readonly kind: Exclude<ItemKind, "event" | "session">;
+  readonly kind: "booking" | "block";
   readonly title: string;
   readonly startsAt: string;
   readonly endsAt: string;
@@ -151,9 +249,17 @@ export interface CreateItemInput {
   readonly courtId?: string;
   readonly coachId?: string;
   readonly personId?: string;
-  /** The person's name, or a walk-in's name as typed. */
+  /** The member's name, or the walk-in's name as typed. */
   readonly who?: string;
+  /** Bookings: a walk-in (no Duna profile), with a mobile only if given. */
+  readonly walkIn?: { readonly name: string; readonly phoneE164?: string };
+  readonly paymentIntent?: PaymentIntent;
+  /** Bookings: a staff price (money permission), with its reason. */
   readonly priceMinor?: number;
+  readonly priceReason?: string;
+  /** Bookings: the total the person saw (a different one is refused). */
+  readonly expectedTotalMinor?: number;
+  readonly currency?: string;
   readonly reason?: string;
   readonly mode?: "blocked" | "maintenance";
   /** Blocks only: repeat weekly on the same weekday until this date. */
@@ -163,10 +269,39 @@ export interface CreateItemInput {
 
 export async function createItemAction(
   input: CreateItemInput,
-): Promise<Result<{ id: string }>> {
+): Promise<Result<{ id: string; booking?: BookingCreated }>> {
   return run("create", async () => {
-    const id = `demo-${uuid(input.idempotencyKey)}`;
-    if (await isDemo()) {
+    const demo = await isDemo();
+    if (input.kind === "booking") {
+      if (!input.courtId) {
+        throw new NotAvailableYet("Choose a court for the booking.");
+      }
+      const caller = await getServerCaller();
+      const booking = await caller.operator.schedule.createCourtBooking({
+        ...slotFor({
+          courtId: input.courtId,
+          startsAt: input.startsAt,
+          endsAt: input.endsAt,
+          ...(input.personId ? { personId: input.personId } : {}),
+          ...(input.walkIn ? { walkIn: input.walkIn } : {}),
+          paymentIntent: input.paymentIntent ?? "pay-at-desk",
+        }),
+        paymentIntent: input.paymentIntent ?? "pay-at-desk",
+        currency: input.currency ?? "USD",
+        ...(input.priceMinor !== undefined
+          ? {
+              priceMinor: input.priceMinor,
+              priceReason: input.priceReason ?? "",
+            }
+          : {}),
+        ...(input.expectedTotalMinor !== undefined
+          ? { expectedTotalMinor: input.expectedTotalMinor }
+          : {}),
+        idempotencyKey: uuid(input.idempotencyKey),
+      });
+      if (!demo) return { id: booking.id, booking };
+      // Demo: the fixture answered; the calendar keeps it in this browser.
+      const id = `demo-${uuid(input.idempotencyKey)}`;
       await updateDemo((store) =>
         store.created.some((entry) => entry.id === id)
           ? store
@@ -176,15 +311,40 @@ export async function createItemAction(
                 ...store.created,
                 {
                   id,
-                  kind: input.kind,
+                  kind: "booking",
                   title: input.title,
                   ...(input.who ? { who: input.who } : {}),
                   ...(input.personId ? { personId: input.personId } : {}),
                   startsAt: input.startsAt,
                   endsAt: input.endsAt,
+                  courtId: input.courtId,
+                  ...(booking.totalMinor
+                    ? { priceMinor: booking.totalMinor }
+                    : {}),
+                },
+              ],
+            },
+      );
+      return { id, booking: { ...booking, id } };
+    }
+    if (demo) {
+      const id = `demo-${uuid(input.idempotencyKey)}`;
+      await updateDemo((store) =>
+        store.created.some((entry) => entry.id === id)
+          ? store
+          : {
+              ...store,
+              created: [
+                ...store.created,
+                {
+                  id,
+                  kind: "block",
+                  title: input.title,
+                  ...(input.who ? { who: input.who } : {}),
+                  startsAt: input.startsAt,
+                  endsAt: input.endsAt,
                   ...(input.courtId ? { courtId: input.courtId } : {}),
                   ...(input.coachId ? { coachId: input.coachId } : {}),
-                  ...(input.priceMinor ? { priceMinor: input.priceMinor } : {}),
                   ...(input.reason ? { reason: input.reason } : {}),
                   ...(input.mode ? { mode: input.mode } : {}),
                 },
@@ -192,12 +352,6 @@ export async function createItemAction(
             },
       );
       return { id };
-    }
-    if (input.kind !== "block") {
-      needsApi(
-        "createBooking",
-        "Booking a court or a lesson from HQ isn't available yet. Nothing was booked; players can still book in the app.",
-      );
     }
     const caller = await getServerCaller();
     const resourceType = input.courtId ? "court" : "coach";
@@ -242,21 +396,114 @@ export async function createItemAction(
   });
 }
 
-export interface MoveItemInput {
+/* --------------------------------------------------------------- move */
+
+export interface MoveTarget {
   readonly id: string;
   readonly source: ItemSource;
+  readonly kind: ItemKind;
   readonly startsAt: string;
   readonly endsAt: string;
   readonly courtId?: string;
+}
+
+/** What moving a court booking changes: availability, price, who would be told. */
+export async function previewMoveAction(
+  input: MoveTarget,
+): Promise<Result<MovePreview>> {
+  return run(
+    "move-preview",
+    async () => {
+      if (!isCourtBooking(input)) {
+        throw new NotAvailableYet("Only court bookings are previewed here.");
+      }
+      const caller = await getServerCaller();
+      return caller.operator.schedule.moveCourtBookingPreview({
+        bookingId: asApiId(input.id, scheduleDemoIds.booking),
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        ...(input.courtId
+          ? { courtId: asApiId(input.courtId, scheduleDemoIds.court) }
+          : {}),
+      });
+    },
+    { read: true },
+  );
+}
+
+export interface MoveItemInput extends MoveTarget {
   readonly coachId?: string;
+  /** Court bookings: the preview the person confirmed. */
+  readonly previewToken?: string;
+  /** Court bookings: prepare a draft for the people booked (never sent). */
+  readonly notify?: boolean;
+  /** Court bookings: the person confirmed the new price. */
+  readonly confirmedPriceChange?: boolean;
   readonly idempotencyKey: string;
+}
+
+export interface MoveResult {
+  readonly id: string;
+  /** Where it was: moving back there is the Undo. */
+  readonly undo?: {
+    readonly startsAt: string;
+    readonly endsAt: string;
+    readonly courtId: string;
+  };
+  readonly repriced?: boolean;
+  readonly toTell?: number;
+  readonly draft?: MovePreview["draft"];
+  readonly conciergeDraft?: { readonly conversationId: string };
 }
 
 export async function moveItemAction(
   input: MoveItemInput,
-): Promise<Result<{ id: string }>> {
+): Promise<Result<MoveResult>> {
   return run("move", async () => {
-    if (await isDemo()) {
+    const demo = await isDemo();
+    if (isCourtBooking(input)) {
+      const caller = await getServerCaller();
+      const moved = await caller.operator.schedule.moveCourtBooking({
+        bookingId: asApiId(input.id, scheduleDemoIds.booking),
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        ...(input.courtId
+          ? { courtId: asApiId(input.courtId, scheduleDemoIds.court) }
+          : {}),
+        notify: input.notify ?? false,
+        ...(input.previewToken ? { previewToken: input.previewToken } : {}),
+        ...(input.confirmedPriceChange ? { confirmedPriceChange: true } : {}),
+        idempotencyKey: uuid(input.idempotencyKey),
+      });
+      if (demo) {
+        await updateDemo((store) => ({
+          ...store,
+          moved: {
+            ...store.moved,
+            [input.id]: {
+              startsAt: input.startsAt,
+              endsAt: input.endsAt,
+              ...(input.courtId ? { courtId: input.courtId } : {}),
+            },
+          },
+        }));
+      }
+      return {
+        id: input.id,
+        undo: demo
+          ? // The fixture's own slot is not this booking's: the screen keeps
+            // its own Undo (where the item was) in demo mode.
+            undefined
+          : moved.undo,
+        repriced: moved.repriced,
+        toTell: moved.toTell,
+        ...(moved.draft ? { draft: moved.draft } : {}),
+        ...(moved.conciergeDraft
+          ? { conciergeDraft: moved.conciergeDraft }
+          : {}),
+      };
+    }
+    if (demo) {
       await updateDemo((store) => ({
         ...store,
         moved: {
@@ -271,9 +518,8 @@ export async function moveItemAction(
       return { id: input.id };
     }
     if (input.source !== "calendar-session") {
-      needsApi(
-        "moveBooking",
-        "Moving a court booking from HQ isn't available yet. Nothing was moved.",
+      throw new NotAvailableYet(
+        "This can't be moved from the schedule. Nothing was moved.",
       );
     }
     const caller = await getServerCaller();
@@ -352,39 +598,128 @@ export async function checkInAction(
   });
 }
 
+/* ------------------------------------------------------------- cancel */
+
+export interface CancelTarget {
+  readonly id: string;
+  readonly source: ItemSource;
+  readonly kind: ItemKind;
+  readonly refund: RefundChoice;
+  readonly cause: CancelCause;
+}
+
+/** Exactly who gets what back, by the plan the cancellation runs. */
+export async function previewCancelAction(
+  input: CancelTarget,
+): Promise<Result<CancelPreview>> {
+  return run(
+    "cancel-preview",
+    async () => {
+      if (!isCourtBooking(input)) {
+        throw new NotAvailableYet("Only court bookings are previewed here.");
+      }
+      const caller = await getServerCaller();
+      return caller.operator.schedule.cancelCourtBookingPreview({
+        bookingId: asApiId(input.id, scheduleDemoIds.booking),
+        refund: input.refund,
+        cause: input.cause,
+      });
+    },
+    { read: true },
+  );
+}
+
 export interface CancelItemInput {
   readonly id: string;
   readonly source: ItemSource;
+  readonly kind?: ItemKind;
   readonly reason: string;
+  /** Court bookings: the refund choice and cause the person confirmed. */
+  readonly refund?: RefundChoice;
+  readonly cause?: CancelCause;
+  readonly previewToken?: string;
+  /** Court bookings: prepare a draft for the people booked (never sent). */
+  readonly notify?: boolean;
   readonly idempotencyKey: string;
+}
+
+export interface CancelResult {
+  readonly id: string;
+  readonly lines?: readonly (CancelPreview["lines"][number] & {
+    readonly outcome:
+      | "released"
+      | "refund-submitted"
+      | "refund-failed"
+      | "handed-back-recorded"
+      | "kept";
+  })[];
+  readonly totalRefundMinor?: number;
+  readonly currency?: string;
+  readonly draft?: CancelPreview["draft"];
+  readonly conciergeDraft?: { readonly conversationId: string };
 }
 
 export async function cancelItemAction(
   input: CancelItemInput,
-): Promise<Result<{ id: string }>> {
-  return run("cancel", async () => {
-    if (await isDemo()) {
-      await updateDemo((store) => ({
-        ...store,
-        cancelled: [...new Set([...store.cancelled, input.id])],
-      }));
+): Promise<Result<CancelResult>> {
+  return run(
+    "cancel",
+    async () => {
+      const demo = await isDemo();
+      if (isCourtBooking(input)) {
+        const caller = await getServerCaller();
+        const cancelled = await caller.operator.schedule.cancelCourtBooking({
+          bookingId: asApiId(input.id, scheduleDemoIds.booking),
+          reason: input.reason,
+          refund: input.refund ?? "by-policy",
+          cause: input.cause ?? "player-asked",
+          confirmed: true,
+          ...(input.previewToken ? { previewToken: input.previewToken } : {}),
+          notify: input.notify ?? true,
+          idempotencyKey: uuid(input.idempotencyKey),
+        });
+        if (demo) {
+          await updateDemo((store) => ({
+            ...store,
+            cancelled: [...new Set([...store.cancelled, input.id])],
+          }));
+        }
+        return {
+          id: input.id,
+          lines: cancelled.lines,
+          ...(cancelled.totalRefundMinor !== undefined
+            ? { totalRefundMinor: cancelled.totalRefundMinor }
+            : {}),
+          ...(cancelled.currency ? { currency: cancelled.currency } : {}),
+          draft: cancelled.draft,
+          ...(cancelled.conciergeDraft
+            ? { conciergeDraft: cancelled.conciergeDraft }
+            : {}),
+        };
+      }
+      if (demo) {
+        await updateDemo((store) => ({
+          ...store,
+          cancelled: [...new Set([...store.cancelled, input.id])],
+        }));
+        return { id: input.id };
+      }
+      if (input.source !== "calendar-session") {
+        throw new NotAvailableYet(
+          "This can't be cancelled from the schedule. Nothing was cancelled.",
+        );
+      }
+      const caller = await getServerCaller();
+      await caller.operator.cancelCalendarSession({
+        sessionId: input.id,
+        reason: input.reason,
+        confirmed: true,
+        idempotencyKey: uuid(input.idempotencyKey),
+      });
       return { id: input.id };
-    }
-    if (input.source !== "calendar-session") {
-      needsApi(
-        "cancelBooking",
-        "Cancelling a court booking from HQ isn't available yet. Nothing was cancelled.",
-      );
-    }
-    const caller = await getServerCaller();
-    await caller.operator.cancelCalendarSession({
-      sessionId: input.id,
-      reason: input.reason,
-      confirmed: true,
-      idempotencyKey: uuid(input.idempotencyKey),
-    });
-    return { id: input.id };
-  });
+    },
+    { denied: input.refund && input.refund !== "none" ? "money" : "change" },
+  );
 }
 
 export interface CloseCourtsInput {
@@ -468,23 +803,57 @@ export async function closeCourtsAction(
   });
 }
 
-export async function markPaidAction(input: {
+/* ------------------------------------------------------- desk payment */
+
+export interface DeskPaymentInput {
   readonly id: string;
+  readonly source: ItemSource;
+  readonly kind: ItemKind;
+  /** The whole amount due (the API records only the whole amount). */
+  readonly amountMinor: number;
+  readonly method: DeskMethod;
+  readonly note?: string;
   readonly idempotencyKey: string;
-}): Promise<Result<{ id: string }>> {
-  return run("mark-paid", async () => {
-    if (await isDemo()) {
-      await updateDemo((store) => ({
-        ...store,
-        paid: [...new Set([...store.paid, input.id])],
-      }));
-      return { id: input.id };
-    }
-    needsApi(
-      "deskPayment",
-      "Recording a payment taken at the desk isn't available from HQ yet. Nothing was changed.",
-    );
-  });
+}
+
+/**
+ * Marks a court booking paid at the desk: no card is charged, no Duna Pay
+ * money moves; Money shows the order paid with no processor payment.
+ */
+export async function markPaidAction(
+  input: DeskPaymentInput,
+): Promise<Result<{ id: string; amountMinor: number; currency: string }>> {
+  return run(
+    "desk-payment",
+    async () => {
+      if (!isCourtBooking(input)) {
+        throw new NotAvailableYet(
+          "Desk payments are recorded on court bookings. Nothing was changed.",
+        );
+      }
+      const caller = await getServerCaller();
+      const recorded = await caller.operator.schedule.recordDeskPayment({
+        bookingId: asApiId(input.id, scheduleDemoIds.booking),
+        amountMinor: input.amountMinor,
+        method: input.method,
+        ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+        confirmed: true,
+        idempotencyKey: uuid(input.idempotencyKey),
+      });
+      if (await isDemo()) {
+        await updateDemo((store) => ({
+          ...store,
+          paid: [...new Set([...store.paid, input.id])],
+        }));
+      }
+      return {
+        id: input.id,
+        amountMinor: recorded.amountMinor,
+        currency: recorded.currency,
+      };
+    },
+    { denied: "money" },
+  );
 }
 
 export interface RosterInput {
@@ -591,46 +960,132 @@ export async function equipmentAction(
 
 /**
  * Coaches' availability for the shared rule, read when the person first
- * needs it (creating, moving, "Who is free"). A coach whose availability
- * cannot be read is answered with null: the screen says their conflicts
+ * needs it (creating, moving, "Who is free"), for the dates shown: one call
+ * for the whole team (`operator.teamAvailability.range`). A coach the
+ * answer leaves out is answered with null: the screen says their conflicts
  * can't be checked instead of guessing.
  */
-export async function coachAvailabilityAction(
-  staffProfileIds: readonly string[],
-): Promise<Record<string, NonNullable<CoachFacts["availability"]> | null>> {
-  const caller = await getServerCaller();
-  const entries = await Promise.all(
-    staffProfileIds.slice(0, 40).map(async (staffProfileId) => {
-      try {
-        const page = await caller.operator.teamAvailability.staff({
-          staffProfileId,
-        });
-        return [staffProfileId, teamAvailabilityToInputs(page)] as const;
-      } catch {
-        return [staffProfileId, null] as const;
-      }
-    }),
+export async function coachAvailabilityAction(input: {
+  readonly from: string;
+  readonly to: string;
+  readonly staffProfileIds: readonly string[];
+}): Promise<Record<string, NonNullable<CoachFacts["availability"]> | null>> {
+  const empty = Object.fromEntries(
+    input.staffProfileIds.map((id) => [id, null] as const),
   );
-  return Object.fromEntries(entries);
+  try {
+    const caller = await getServerCaller();
+    const range = await caller.operator.teamAvailability.range({
+      from: input.from,
+      to: input.to,
+    });
+    const loaded: Record<
+      string,
+      NonNullable<CoachFacts["availability"]> | null
+    > = { ...empty };
+    for (const member of range.staff) {
+      loaded[member.staffProfileId] = {
+        schedules: member.schedules.map((schedule) => ({
+          id: schedule.id,
+          status: schedule.status,
+          effectiveFrom: schedule.effectiveFrom,
+          ...(schedule.effectiveTo
+            ? { effectiveTo: schedule.effectiveTo }
+            : {}),
+          timezone: schedule.timezone,
+          windows: schedule.windows.map((window) => ({
+            weekday: window.weekday,
+            startMinute: window.startMinute,
+            endMinute: window.endMinute,
+            ...(window.kind ? { kind: window.kind } : {}),
+            ...(window.venueId ? { venueId: window.venueId } : {}),
+          })),
+        })),
+        blackouts: member.blackouts.map((row) => ({
+          id: row.id,
+          startsAt: row.startsAt,
+          endsAt: row.endsAt,
+        })),
+        timeOff: member.timeOff.map((row) => ({
+          id: row.id,
+          startsAt: row.startsAt,
+          endsAt: row.endsAt,
+          status: row.status,
+        })),
+      };
+    }
+    return loaded;
+  } catch (error) {
+    log.warn("hq.schedule.availability_unavailable", {
+      code: codeOf(error) ?? "unknown",
+    });
+    return empty;
+  }
+}
+
+/* -------------------------------------------------------------- blocks */
+
+/** The demo club's blocks as the fixture's: a closure had a clinic cancelled under it. */
+function demoBlockId(id: string) {
+  if (uuidPattern.test(id)) return id;
+  return id.startsWith("demo-close-")
+    ? scheduleDemoBlock.id
+    : scheduleDemoIds.weeklyBlock;
+}
+
+/** What removing a block does: one-off or weekly, and what was cancelled under it. */
+export async function previewRemoveBlockAction(input: {
+  readonly id: string;
+  readonly date: string;
+}): Promise<Result<BlockPreview>> {
+  return run(
+    "remove-block-preview",
+    async () => {
+      const demo = await isDemo();
+      const caller = await getServerCaller();
+      // "all" answers for a one-off and a weekly block alike, and says which.
+      return caller.operator.schedule.removeCalendarBlockPreview({
+        id: demo ? demoBlockId(input.id) : input.id,
+        scope: demo ? "this" : "all",
+        ...(demo ? {} : { date: input.date }),
+      });
+    },
+    { read: true },
+  );
 }
 
 /** Removes a block or a closure (the court opens again for bookings). */
 export async function removeBlockAction(input: {
   readonly id: string;
+  readonly scope: BlockScope;
+  /** Weekly blocks: the date chosen on the calendar. */
+  readonly date: string;
+  readonly reason: string;
+  /** The person acknowledged what stays cancelled under it. */
+  readonly acknowledgeCancelled?: boolean;
   readonly idempotencyKey: string;
-}): Promise<Result<{ id: string }>> {
+}): Promise<Result<{ id: string; stillCancelled: number }>> {
   return run("remove-block", async () => {
-    if (await isDemo()) {
+    const demo = await isDemo();
+    const caller = await getServerCaller();
+    const removed = await caller.operator.schedule.removeCalendarBlock({
+      id: demo ? demoBlockId(input.id) : input.id,
+      reason: input.reason,
+      scope: input.scope,
+      ...(input.scope === "this-occurrence" ||
+      input.scope === "this-and-following"
+        ? { date: input.date }
+        : {}),
+      ...(input.acknowledgeCancelled ? { acknowledgeCancelled: true } : {}),
+      idempotencyKey: uuid(input.idempotencyKey),
+    });
+    if (demo) {
       await updateDemo((store) => ({
         ...store,
         created: store.created.filter((entry) => entry.id !== input.id),
         cancelled: [...new Set([...store.cancelled, input.id])],
       }));
-      return { id: input.id };
     }
-    return needsApi(
-      "removeBlock",
-      "Removing a block from HQ isn't available yet. Nothing was changed.",
-    );
+    return { id: input.id, stillCancelled: removed.stillCancelled };
   });
 }

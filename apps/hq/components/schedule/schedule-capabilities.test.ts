@@ -47,10 +47,14 @@ describe("schedule capability switches", () => {
       ),
       "utf8",
     );
-    const waiting = [...source.matchAll(/needsApi\(\s*"(\w+)"/g)].map(
+    const pattern = /needsApi\(\s*"(\w+)"/g;
+    // The pattern still recognises a waiting action, should one come back.
+    expect([...'needsApi("moveBooking", "…")'.matchAll(pattern)]).toHaveLength(
+      1,
+    );
+    const waiting = [...source.matchAll(pattern)].map(
       (match) => match[1] as ScheduleCapability,
     );
-    expect(waiting.length).toBeGreaterThan(0);
     for (const capability of waiting) {
       expect(Object.keys(SCHEDULE_CAPABILITY_PROCEDURES)).toContain(capability);
     }
@@ -62,6 +66,16 @@ describe("schedule capability switches", () => {
         live[capability],
         `${capability} is on (its procedure exists) but its action still answers "needs API": wire the action to ${SCHEDULE_CAPABILITY_PROCEDURES[capability]}`,
       ).toBe(false);
+    }
+    // And every switch that is on is wired: its action calls the procedure.
+    for (const [capability, path] of Object.entries(
+      SCHEDULE_CAPABILITY_PROCEDURES,
+    ) as [ScheduleCapability, string][]) {
+      if (!live[capability]) continue;
+      expect(
+        source,
+        `${capability} is on: an action must call ${path}`,
+      ).toContain(`caller.${path}(`);
     }
   });
 });
