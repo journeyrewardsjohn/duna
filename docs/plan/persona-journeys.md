@@ -246,7 +246,7 @@ watches the rating move, watches film, manages membership and wallet.
 | PL-1.1 | Opens Home → direct actions and Next up first, no layout jump                                      | Web           | P1              | Main    |
 | PL-1.2 | Searches by where, when and what (sheets open and close)                                           | Web           | P3, C6          | Main    |
 | PL-1.3 | Filters results to courts                                                                          | Web           | P3              | Main    |
-| PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                           | Web           | P3, C3          | Planned |
+| PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                           | Web           | SITE-4          | Main    |
 | PL-1.5 | Opens a coach's profile and books their next opening                                               | Web           | SITE-5          | Main    |
 | PL-1.n | Finds play in the app: search sheet, list and map                                                  | Player        | M-P2            | Native  |
 | PL-2.1 | Opens a venue and picks day, time and duration (today: "Online rental details are coming soon.")   | Web           | P5              | Planned |
@@ -307,9 +307,9 @@ club, and signs up without losing their place.
 | VI-2.2 | Opens a public event page                                                                                                                                | Web     | P2         | Main   |
 | VI-2.3 | Opens a club's public page                                                                                                                               | Web     | P4         | Main   |
 | VI-2.4 | Reads the rankings                                                                                                                                       | Web     | P2         | Main   |
-| VI-2.5 | Books from a club's offering → signs in and returns to that offering's checkout                                                                          | Web     | SITE-5     | Main   |
 | VI-2.6 | Sees a club's membership as its card ("Your name") and Join leads to the offer                                                                           | Web     | SITE-5     | Main   |
 | VI-2.7 | Sees a tournament's entry list (public adults only; juniors and private profiles never) and the link to its bracket                                      | Web     | SITE-5     | Main   |
+| VI-2.8 | Books from a club's offering → signs in and returns to that offering's checkout                                                                          | Web     | SITE-5     | Main   |
 | VI-3.1 | Opens a public checkout → what happens next is explained                                                                                                 | Web     | P5         | Main   |
 | VI-3.2 | Booking asks them to sign in and returns them to the same place                                                                                          | Web     | P1         | Main   |
 | VI-4.1 | Opens sign-up → a secure account hand-off                                                                                                                | Web     | P2         | Main   |

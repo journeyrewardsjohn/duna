@@ -13,6 +13,7 @@ const migrated: readonly string[] = [
   "apps/player/src/features/home",
   "apps/player/src/features/score",
   "apps/player/src/features/rating",
+  "apps/player/src/features/wallet",
 ];
 
 export const player: SurfaceContract = {

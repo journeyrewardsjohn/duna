@@ -523,6 +523,14 @@ export const trainingProgramsDemoPracticePlanSummaries = [
   planSummary(301, "transition-basics", "Transition basics", "draft", 1),
   planSummary(302, "junior-ball-control", "Junior ball control", "review", 2),
   planSummary(303, "summer-taper", "Summer taper", "archived", 4),
+  planSummary(
+    304,
+    "defence-and-transition",
+    "Defence and transition",
+    "published",
+    2,
+  ),
+  planSummary(305, "game-day-warm-up", "Game-day warm-up", "draft", 1),
 ];
 
 export const trainingProgramsDemoPracticePlan = {
