@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createDebouncer } from "./debouncer";
+import { createDebouncer, type DebounceOptions } from "./debouncer";
+import { DEBOUNCE_MS } from "./timing";
 
 /**
- * Returns `value` once it has stopped changing for `delayMs`. The first
- * render returns the value as given. A waiting update is dropped on unmount.
+ * Returns `value` once it has stopped changing for `delayMs` (220 ms by
+ * default). The first render returns the value as given. A waiting update is
+ * dropped on unmount.
  */
-export function useDebouncedValue<Value>(value: Value, delayMs: number): Value {
+export function useDebouncedValue<Value>(
+  value: Value,
+  delayMs: number = DEBOUNCE_MS,
+): Value {
   const [debounced, setDebounced] = useState(value);
 
   useEffect(() => {
@@ -34,22 +39,29 @@ export interface DebouncedCallback<Args extends unknown[]> {
 
 /**
  * Returns a stable function that calls `callback` once, with the latest
- * arguments, after calls have stopped for `delayMs` (the trailing edge). It
- * always runs the newest `callback`, and a waiting call is cancelled on
- * unmount so nothing runs against a screen that is gone.
+ * arguments, after calls have stopped for `delayMs` (the trailing edge; 220 ms
+ * by default). `{ leading: true }` also runs the first call of a burst at
+ * once. It always runs the newest `callback`, and a waiting call is cancelled
+ * on unmount so nothing runs against a screen that is gone.
  */
 export function useDebouncedCallback<Args extends unknown[]>(
   callback: (...args: Args) => void,
-  delayMs: number,
+  delayMs: number = DEBOUNCE_MS,
+  options: DebounceOptions = {},
 ): DebouncedCallback<Args> {
   const latest = useRef(callback);
   useEffect(() => {
     latest.current = callback;
   });
 
+  const { leading, trailing } = options;
   const debouncer = useMemo(
-    () => createDebouncer<Args>((...args) => latest.current(...args), delayMs),
-    [delayMs],
+    () =>
+      createDebouncer<Args>((...args) => latest.current(...args), delayMs, {
+        leading,
+        trailing,
+      }),
+    [delayMs, leading, trailing],
   );
 
   useEffect(() => () => debouncer.cancel(), [debouncer]);

@@ -77,6 +77,7 @@ Families today, in cascade order: `base` (the `Tideline` scope, fonts,
 `avatar`, `add-players`, `search`, `surfaces`, `progress` (with Stepper),
 `loaders` (with TopProgress and LoadingBoundary), `command-palette`,
 `booking`. `interactions` holds the hooks and has no stylesheet.
+The interaction kit adds `motion`, `confirm`, `states` and `form` (and extends `interactions`, `loaders`, `toast`): see [`interaction-kit.md`](interaction-kit.md).
 
 A family imports another family's file directly (`../button/button-style`),
 never through the package barrel.

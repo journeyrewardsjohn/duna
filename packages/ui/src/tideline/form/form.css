@@ -1,0 +1,94 @@
+/* Tideline form behaviour: money and character inputs, the form status, the autosave indicator and the submit bar. Rules: see styles.css, docs/design/tideline-components.md and docs/design/interaction-kit.md. */
+@layer tideline {
+  .td {
+    .td-money__symbol {
+      color: var(--td-text-2);
+      font: var(--td-type-label);
+    }
+
+    .td-money input {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-charcount {
+      display: inline-flex;
+      gap: var(--td-space-1);
+      color: var(--td-text-3);
+      font: var(--td-type-meta);
+
+      &[data-over] {
+        color: var(--td-text);
+        font-weight: 600;
+      }
+    }
+
+    .td-formstatus__error {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: flex-start;
+      padding: var(--td-space-3);
+      border-radius: var(--td-radius-md);
+      background: var(--td-danger-wash);
+      color: var(--td-text);
+      font: var(--td-type-body);
+
+      .td-icon {
+        flex: none;
+        margin-block-start: 2px;
+        color: var(--td-danger);
+      }
+    }
+
+    /* Holds its line even when empty, so nothing moves when it speaks. */
+
+    .td-autosave {
+      display: inline-flex;
+      gap: var(--td-space-2);
+      align-items: center;
+      min-height: var(--td-control-sm);
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+
+      &[data-status="saved"],
+      &[data-status="success"] {
+        .td-icon {
+          color: var(--td-positive);
+        }
+      }
+
+      &[data-status="error"] {
+        color: var(--td-text);
+
+        .td-icon {
+          color: var(--td-danger);
+        }
+      }
+    }
+
+    .td-submitbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-3);
+      align-items: center;
+      justify-content: space-between;
+      padding-block: var(--td-space-4);
+    }
+
+    .td-submitbar--sticky {
+      position: sticky;
+      bottom: 0;
+      z-index: var(--td-z-sticky);
+      margin-inline: calc(-1 * var(--td-space-4));
+      padding-inline: var(--td-space-4);
+      background: var(--td-ground);
+      box-shadow: inset 0 1px 0 var(--td-line);
+    }
+
+    .td-submitbar__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      margin-inline-start: auto;
+    }
+  }
+}
