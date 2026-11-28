@@ -19,8 +19,12 @@ export const hq: SurfaceContract = {
   owners: "S1, S2, S3, S4, H1–H14, F5a–e",
   // Rebuilt screens on the design system (the Tideline guard checks them).
   migrated: [
+    "apps/hq/app/(next)/(hq)/people/",
+    "apps/hq/components/people/",
     "apps/hq/app/(next)/(hq)/team/",
     "apps/hq/components/team/",
+    "apps/hq/app/(next)/(hq)/schedule/",
+    "apps/hq/components/schedule/",
     "apps/hq/app/(next)/(hq)/training/",
     "apps/hq/components/training/",
   ],
@@ -69,11 +73,13 @@ export const hq: SurfaceContract = {
       "apps/hq/components/shell",
       "apps/hq/components/today",
       "apps/hq/components/money",
+      "apps/hq/components/people",
       "apps/hq/components/team",
       "apps/hq/components/training",
       "apps/hq/components/offerings",
       "apps/hq/components/participation",
       "apps/hq/components/setup",
+      "apps/hq/components/schedule",
     ].map((root) => ({
       kind: "treeExcludes" as const,
       root,

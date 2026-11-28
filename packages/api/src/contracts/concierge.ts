@@ -17,6 +17,7 @@ import {
   conciergeDraftedBy,
   conciergeEndpointStatuses,
   conciergeProposalStatuses,
+  conciergeMessageKinds,
   conciergeUnreachableReasons,
   messagingContextTypeEnum,
 } from "@duna/db/schema";
@@ -90,6 +91,10 @@ export const conciergeThreadSummarySchema = z.object({
 export const conciergeThreadsInputSchema = w3PageInputSchema.extend({
   filter: conciergeThreadFilterSchema.default("all"),
   kind: conciergeThreadKindSchema.optional(),
+  /** B7 (additive): title or context label contains this text. */
+  search: z.string().trim().max(80).optional(),
+  /** B7 (additive, staff only): the club's queue. Ignored for a person. */
+  queue: z.enum(["all", "mine", "unassigned"]).default("all"),
 });
 export const conciergeThreadsSchema = w3PageSchema(
   conciergeThreadSummarySchema,
@@ -187,6 +192,8 @@ export const conciergeDraftSendInputSchema = z.object({
   body: z.string().trim().min(1).max(4000),
   /** "duna" when Ask Duna wrote the text the coach is reviewing. */
   draftedBy: conciergeDraftedBySchema.default("person"),
+  /** B7 (additive): operational notices use each person's operational channel and are not held by quiet hours. */
+  kind: z.enum(conciergeMessageKinds).default("conversation"),
 });
 export const conciergeSetRecipientChannelInputSchema = z.object({
   proposalId: w3IdSchema,
@@ -235,6 +242,8 @@ export const conciergeEndpointSchema = z.object({
 });
 export const conciergeChannelsSchema = z.object({
   preferredChannel: conciergeChannelSchema,
+  /** B7 (additive): channel for operational notices; absent = the preferred channel. */
+  operationalChannel: conciergeChannelSchema.optional(),
   quietHours: z
     .object({
       start: w3TimeOfDaySchema,
@@ -278,6 +287,8 @@ export const conciergeRevokeChannelInputSchema = z.object({
 });
 export const conciergeSetPreferenceInputSchema = z.object({
   preferredChannel: conciergeChannelSchema,
+  /** B7 (additive): null resets operational notices to the preferred channel. */
+  operationalChannel: conciergeChannelSchema.nullable().optional(),
   quietHours: z
     .object({
       start: w3TimeOfDaySchema,
@@ -286,6 +297,101 @@ export const conciergeSetPreferenceInputSchema = z.object({
     })
     .nullable()
     .optional(),
+});
+
+// ------------------------------------------------- B7 additions (additive)
+
+/** Change the text of a card under review (new content hash). */
+export const conciergeEditDraftInputSchema = z.object({
+  proposalId: w3IdSchema,
+  body: z.string().trim().min(1).max(4000),
+});
+
+export const conciergeMarkReadInputSchema = z.object({
+  conversationId: w3IdSchema,
+  sequence: z.number().int().positive(),
+});
+export const conciergeMarkReadResultSchema = z.object({
+  conversationId: w3IdSchema,
+});
+
+export const conciergeThreadMuteInputSchema = z.object({
+  conversationId: w3IdSchema,
+  muted: z.boolean(),
+});
+export const conciergeThreadMuteSchema = z.object({
+  conversationId: w3IdSchema,
+  muted: z.boolean(),
+});
+
+export const conciergeClubMuteInputSchema = z.object({
+  organizationId: w3IdSchema,
+  muted: z.boolean(),
+});
+export const conciergeClubMuteSchema = z.object({
+  organizationId: w3IdSchema,
+  muted: z.boolean(),
+});
+
+export const conciergeAssignThreadInputSchema = z.object({
+  conversationId: w3IdSchema,
+  /** Null clears the assignment (back to Unassigned). */
+  assigneePersonId: w3IdSchema.nullable(),
+});
+export const conciergeAssignThreadSchema = z.object({
+  conversationId: w3IdSchema,
+  assigneePersonId: w3IdSchema.nullable(),
+});
+
+/** What a hand-off is about. `direct`: a club ↔ person thread (contextId = person id). */
+export const conciergeHandoffContextTypeSchema = z.enum([
+  "lesson",
+  "event",
+  "division",
+  "league",
+  "organization",
+  "rental",
+  "direct",
+]);
+export const conciergeHandoffInputSchema = z.object({
+  /** Who handed it over: "hq.offerings.session", "hq.people.nextBestAction", "hq.team" … */
+  source: z
+    .string()
+    .trim()
+    .min(3)
+    .max(64)
+    .regex(/^[a-z][a-zA-Z0-9.-]+$/),
+  contextType: conciergeHandoffContextTypeSchema,
+  contextId: z.string().min(1).max(192),
+  /** Display label when the server cannot resolve one. */
+  label: z.string().trim().min(1).max(160).optional(),
+  suggestedText: z.string().trim().min(1).max(4000).optional(),
+  draftedBy: conciergeDraftedBySchema.default("person"),
+  kind: z.enum(conciergeMessageKinds).default("conversation"),
+});
+/** The thread, and a Send review when there was text. Nothing is sent. */
+export const conciergeHandoffSchema = z.object({
+  conversationId: w3IdSchema,
+  proposal: conciergeSendProposalSchema.optional(),
+});
+
+export const conciergeQuarantineSchema = z.object({
+  items: z.array(
+    z.object({
+      quarantineId: w3IdSchema,
+      channel: z.string(),
+      reason: z.string(),
+      conversationId: w3IdSchema.optional(),
+      text: z.string(),
+      receivedAt: w3DateTimeSchema,
+    }),
+  ),
+});
+export const conciergeDismissQuarantineInputSchema = z.object({
+  quarantineId: w3IdSchema,
+});
+export const conciergeDismissQuarantineSchema = z.object({
+  dismissed: z.boolean(),
 });
 
 export type ConciergeThreadSummary = z.infer<

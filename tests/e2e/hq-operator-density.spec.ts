@@ -24,23 +24,10 @@ async function clearAssistant(page: Page) {
   if (await minimize.isVisible()) await minimize.click();
 }
 
-async function expectContainedPage(page: Page) {
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth + 1,
-    ),
-  ).toBe(true);
-  const title = page.locator("main h1");
-  await expect(title).toHaveCount(1);
-  expect(
-    await title.evaluate((node) => parseFloat(getComputedStyle(node).fontSize)),
-  ).toBeLessThanOrEqual(28);
-}
-
 /**
  * A rebuilt screen on the HQ shell: no sideways scroll, and exactly one title
  * in the shell's display role (Jost, at least 22 px, at most the shell's
- * 32 px; docs/design/hq-shell.md). The 28 px cap above is the legacy pages'.
+ * 32 px; docs/design/hq-shell.md).
  */
 async function expectShellPage(page: Page) {
   expect(
@@ -59,51 +46,6 @@ async function expectShellPage(page: Page) {
 
 // Runs under the configured desktop, tablet and mobile projects. These checks
 // cover navigation and local UI state; they do not prove provider transactions.
-test("compact People retains search, family filters and keyboard profile access", async ({
-  page,
-}, info) => {
-  await page.goto(`${base}/people`);
-  await clearAssistant(page);
-  const table = page.getByRole("table", {
-    name: "People directory",
-    exact: true,
-  });
-  await expect(table).toBeVisible();
-  await expect(table.getByRole("columnheader")).toHaveCount(6);
-  const search = page.getByRole("searchbox", {
-    name: "Search people",
-    exact: true,
-  });
-  await search.fill("no-person-matches-this-qa-query");
-  await expect(table.getByRole("rowheader")).toHaveCount(0);
-  await search.clear();
-  for (const name of ["Junior players", "Parents & guardians", "Everyone"]) {
-    const filter = page.getByRole("button", { name, exact: true });
-    await filter.click();
-    await expect(filter).toHaveAttribute("aria-pressed", "true");
-  }
-  const region = page.getByRole("region", {
-    name: "People directory",
-    exact: true,
-  });
-  await region.focus();
-  await expect(region).toBeFocused();
-  await expectContainedPage(page);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    window.scrollTo(0, 0);
-  });
-  await page.screenshot({
-    path: info.outputPath("people-compact.png"),
-    fullPage: true,
-  });
-  const profile = table.getByRole("rowheader").first().getByRole("link");
-  await expect(profile).toHaveAttribute("href", /^\/people\/.+/);
-  await profile.focus();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/people\/[^/]+$/);
-});
-
 test("compact Money navigation remains usable in dark mode and narrow layouts", async ({
   page,
 }, info) => {

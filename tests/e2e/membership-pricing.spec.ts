@@ -9,13 +9,13 @@ test("Premium plans show separate live and upload allowances", async ({
     page.getByRole("heading", { name: "Duna Premium" }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Free includes 4 uploaded-video hours each month/),
+    page.getByText(/Free includes 4 hours of uploaded video each month/),
   ).toBeVisible();
 
-  const premium = page.locator(".membership-card").filter({
+  const premium = page.locator(".pp-plan").filter({
     has: page.getByText("Premium", { exact: true }),
   });
-  const premiumPlus = page.locator(".membership-card").filter({
+  const premiumPlus = page.locator(".pp-plan").filter({
     has: page.getByText("Premium+", { exact: true }),
   });
 
@@ -31,7 +31,7 @@ test("Premium plans show separate live and upload allowances", async ({
     premiumPlus.getByText("8 hours of live broadcasting each month"),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Monthly" }).click();
+  await page.getByRole("radio", { name: "Monthly" }).click();
   await expect(premium.getByText("$9.99", { exact: true })).toBeVisible();
   await expect(premiumPlus.getByText("$29.99", { exact: true })).toBeVisible();
 

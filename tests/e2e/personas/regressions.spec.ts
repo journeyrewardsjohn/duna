@@ -40,7 +40,7 @@ test.describe("honest provider states answer 200, not an error", () => {
     });
     // Rebuilt pages (the new shell, S1) do not ask at all in demo mode; a
     // page still on the legacy shell asks and must get a 200.
-    await page.goto(hq("/people"));
+    await page.goto(hq("/marketing"));
     await expectPageReady(page);
     await expect.poll(() => asked.length).toBeGreaterThan(0);
     expect(asked.every((status) => status === 200)).toBe(true);

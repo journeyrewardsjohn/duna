@@ -1,4 +1,4 @@
-import { conciergeDemo } from "@duna/core/demo/concierge";
+import { conciergeDemo, conciergeDemoIds } from "@duna/core/demo/concierge";
 import {
   conciergeChannels,
   conciergeDeliveryStatuses,
@@ -33,6 +33,8 @@ describe("concierge contract and demo fixtures (W3-0)", () => {
   it("every fixture parses against its contract", () => {
     conciergeThreadsSchema.parse(conciergeDemo.threads);
     conciergeThreadSchema.parse(conciergeDemo.thread);
+    for (const thread of conciergeDemo.threadDetails)
+      conciergeThreadSchema.parse(thread);
     for (const proposal of conciergeDemo.proposals)
       conciergeSendProposalSchema.parse(proposal);
     conciergeDeliveriesSchema.parse(conciergeDemo.deliveries);
@@ -133,12 +135,35 @@ describe("concierge routers in demo mode and connected mode (W3-0 stubs)", () =>
     });
   });
 
-  it("says 'not implemented yet' outside demo mode", async () => {
+  it("runs the real service outside demo mode (no W3-0 stub left)", async () => {
     dataSource.demo = false;
     const error = await caller()
       .operator.concierge.threads({ filter: "all", limit: 25 })
       .catch((caught: unknown) => caught);
-    expect(error).toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(isNotImplementedYet(error)).toBe(true);
+    expect(isNotImplementedYet(error)).toBe(false);
+  });
+
+  it("serves the richer demo threads and hand-offs without sending", async () => {
+    const operator = caller().operator.concierge;
+    const families = await operator.threads({ filter: "families", limit: 25 });
+    expect(families.items.every((thread) => thread.minorPresent)).toBe(true);
+    const division = await operator.thread({
+      conversationId: conciergeDemoIds.divisionThread,
+    });
+    expect(division.participants.some((p) => p.role === "guardian")).toBe(true);
+    const handoff = await operator.drafts.createFromHandoff({
+      source: "hq.offerings.session",
+      contextType: "lesson",
+      contextId: "11111111-1111-4111-8111-111111111111",
+      suggestedText: "Bring water: it will be hot.",
+    });
+    expect(handoff.proposal?.status).toBe("ready");
+    expect(handoff.proposal?.body).toBe("Bring water: it will be hot.");
+    const withoutText = await operator.drafts.createFromHandoff({
+      source: "hq.people.nextBestAction",
+      contextType: "organization",
+      contextId: "11111111-1111-4111-8111-111111111111",
+    });
+    expect(withoutText.proposal).toBeUndefined();
   });
 });

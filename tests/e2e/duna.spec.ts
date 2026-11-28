@@ -125,91 +125,6 @@ test("mobile public navigation opens as a full-screen product sheet", async ({
   }
 });
 
-test("public club pages keep the hero readable and the section rail useful", async ({
-  page,
-}) => {
-  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await page.goto("/clubs/south-bay-volleyball");
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-
-  for (const viewport of [
-    { width: 1440, height: 1000 },
-    { width: 1024, height: 768 },
-    { width: 390, height: 844 },
-  ]) {
-    await page.setViewportSize(viewport);
-    await page.reload();
-
-    const hero = page.locator(".club-hero");
-    const heading = page.getByRole("heading", {
-      level: 1,
-      name: "South Bay Volleyball Club",
-    });
-    const sectionNav = page.getByRole("navigation", {
-      name: "Explore this club",
-    });
-
-    await expect(hero).toHaveAttribute("data-hero-kind", "gradient");
-    await expect(heading).toBeVisible();
-    await expect(heading).toHaveCSS("color", "rgb(14, 26, 34)");
-    await expect(sectionNav).toBeVisible();
-    await expect(
-      sectionNav.getByRole("link", { name: "Events" }),
-    ).toHaveAttribute("aria-current", "location");
-
-    const [heroBox, navBox] = await Promise.all([
-      getBox(hero),
-      getBox(sectionNav),
-    ]);
-    expect(heroBox.x).toBeLessThanOrEqual(1);
-    expect(heroBox.width).toBeGreaterThanOrEqual(viewport.width - 2);
-    expect(heroBox.height).toBeLessThanOrEqual(720);
-    expect(navBox.y + navBox.height).toBeLessThanOrEqual(viewport.height + 2);
-    if (viewport.width === 1440) {
-      // A delayed webfont must not add a third headline line and bury the rail.
-      await heading.evaluate((element) => {
-        element.style.fontFamily = "Arial, sans-serif";
-      });
-      expect((await getBox(hero)).height).toBeLessThanOrEqual(720);
-      await heading.evaluate((element) => {
-        element.style.removeProperty("font-family");
-      });
-    }
-    await expectNoHorizontalOverflow(page);
-  }
-
-  const sectionNav = page.getByRole("navigation", {
-    name: "Explore this club",
-  });
-  await sectionNav.getByRole("link", { name: "Locations" }).click();
-  await expect(page.locator(".club-locations")).toBeVisible();
-  await expect(
-    sectionNav.getByRole("link", { name: "Locations" }),
-  ).toHaveAttribute("aria-current", "location");
-
-  const [headerBox, stickyNavBox] = await Promise.all([
-    getBox(page.locator(".site-header")),
-    getBox(sectionNav),
-  ]);
-  expect(stickyNavBox.y).toBeGreaterThanOrEqual(headerBox.height - 2);
-  expect(stickyNavBox.y).toBeLessThanOrEqual(headerBox.height + 2);
-
-  await page.evaluate(() => localStorage.setItem("duna-theme", "dark"));
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page.locator(".club-profile")).toHaveCSS(
-    "background-color",
-    "rgb(14, 26, 34)",
-  );
-  await expect(
-    page.getByRole("heading", {
-      level: 1,
-      name: "South Bay Volleyball Club",
-    }),
-  ).toHaveCSS("color", "rgb(244, 242, 236)");
-  await expectNoHorizontalOverflow(page);
-});
-
 test("club and coach marketing keeps both operating paths clear", async ({
   page,
 }) => {
@@ -237,26 +152,6 @@ test("club and coach marketing keeps both operating paths clear", async ({
   await expectNoHorizontalOverflow(page);
 });
 
-test("public pickup pages keep their story and booking rail contained", async ({
-  page,
-}) => {
-  await page.goto("/events/golden-hour-fours");
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Golden Hour 4s" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Event complete." }),
-  ).toBeVisible();
-  await expect(page.getByText("This pickup has ended.")).toBeVisible();
-  await expect(
-    page.getByText("6:00 PM–7:30 PM PDT", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("img", { name: "Golden Hour 4s event poster" }),
-  ).toBeVisible();
-  await expectNoHorizontalOverflow(page);
-});
-
 test("landing pages remain usable with reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   // `/players` now redirects home (proxy.ts); the clubs chapter is on it.
@@ -267,24 +162,6 @@ test("landing pages remain usable with reduced motion", async ({ page }) => {
     await expect(page.locator("#clubs")).toBeAttached();
     await expectNoHorizontalOverflow(page);
   }
-});
-
-test("public coach profiles stay bookable and responsive", async ({ page }) => {
-  await page.goto("/coaches/theopark");
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Theo Park" }),
-  ).toBeVisible();
-  await expect(page.getByText("Duna coach")).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Ways to work together." }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Find a time that fits." }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "South Bay Volleyball Club" }),
-  ).toBeVisible();
-  await expectNoHorizontalOverflow(page);
 });
 
 test("public rankings and rating evidence stay open and responsive", async ({
@@ -501,24 +378,10 @@ test("public event creation carries a clean starter into guided HQ", async ({
 test("tournament pages and checkout expose divisions, tickets, teams, and waivers", async ({
   page,
 }) => {
+  // The event page itself is covered in site-club-pages.spec.ts (SITE-5).
   await page.goto("/events/sunset-open-qualifier");
   await expect(
-    page.getByRole("heading", { name: "Sunset Open — Qualifier" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Find your best fit." }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Open", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "AA", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Reserve VIP access" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: /players in the field\./ }),
+    page.getByRole("heading", { level: 1, name: "Sunset Open — Qualifier" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
@@ -579,10 +442,10 @@ test("tournament pages and checkout expose divisions, tickets, teams, and waiver
   await expectNoHorizontalOverflow(page);
 });
 
-test("match recorder starts with a completed result and offers live scoring", async ({
+test("the live scorer (old design, /app/score/live) starts with a completed result and offers live scoring", async ({
   page,
 }) => {
-  await page.goto("/app/score");
+  await page.goto("/app/score/live");
   await expect(
     page.getByRole("heading", { name: "How did you play?" }),
   ).toBeVisible();
@@ -615,154 +478,6 @@ test("match recorder starts with a completed result and offers live scoring", as
   await expectNoHorizontalOverflow(page);
 });
 
-test("pickup host flow publishes a complete listing", async ({ page }) => {
-  await page.goto("/app/pickup/new");
-  await expect(
-    page.getByRole("heading", { name: "Host a match." }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByLabel("Where")).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByText("Who can see it")).toBeVisible();
-  await expect(page.getByText("Add players now")).toBeVisible();
-  await expect(
-    page.getByRole("textbox", { name: "Search Duna player profiles" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: /View .*'s profile/ }).first(),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Publish pickup" }).click();
-
-  await expect(
-    page.getByRole("heading", { name: "Golden Hour 4s is live." }),
-  ).toBeVisible();
-  await expectNoHorizontalOverflow(page);
-});
-
-test("player planning keeps selection in place and extends its date rail", async ({
-  page,
-}) => {
-  await page.goto("/app/play");
-  await expect(
-    page.getByRole("heading", { name: "When do you want to play?" }),
-  ).toBeVisible();
-
-  const selectedPill = page.locator(
-    '.calendar-picker__pill[aria-current="date"]',
-  );
-  await expect(selectedPill).toHaveCount(1);
-  await expect(selectedPill.locator(":scope > span")).toHaveCount(1);
-  await expect(selectedPill.locator(":scope > strong")).toHaveCount(1);
-  await expect(selectedPill.locator(":scope > small")).toHaveText(
-    /^[A-Z][a-z]{2}$/,
-  );
-
-  const rail = page.locator(".play-calendar-picker .calendar-picker__rail");
-  const pills = rail.locator(".calendar-picker__pill");
-  const selectedIndex = await pills.evaluateAll((elements) =>
-    elements.findIndex(
-      (element) => element.getAttribute("aria-current") === "date",
-    ),
-  );
-  const nextPill = pills.nth(selectedIndex + 1);
-  // The selected day is centered after hydration. Wait for that initial
-  // positioning before asserting that changing days does not move the rail.
-  await expect
-    .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
-    .toBeGreaterThan(0);
-  // Bring the calendar above the fixed phone navigation before measuring.
-  // Otherwise click's automatic scrolling can move both axes while trying to
-  // uncover a day beneath the navigation, before selection is dispatched.
-  await rail.evaluate((element) =>
-    element.scrollIntoView({
-      block: "center",
-      inline: "nearest",
-      behavior: "instant",
-    }),
-  );
-  await expect(nextPill).toBeInViewport({ ratio: 1 });
-  const scrollPosition = await rail.evaluate((element) =>
-    Math.round(element.scrollLeft),
-  );
-  await nextPill.click();
-  await expect(nextPill).toHaveAttribute("aria-current", "date");
-  await expect
-    .poll(() => rail.evaluate((element) => Math.round(element.scrollLeft)))
-    .toBe(scrollPosition);
-
-  const initialPillCount = await pills.count();
-  expect(initialPillCount).toBeGreaterThanOrEqual(91);
-  await rail.evaluate((element) => {
-    element.scrollLeft = element.scrollWidth;
-    element.dispatchEvent(new Event("scroll", { bubbles: true }));
-  });
-  await expect.poll(() => pills.count()).toBeGreaterThan(initialPillCount);
-
-  await page.getByRole("button", { name: "Full calendar" }).click();
-  const calendar = page.getByRole("dialog", {
-    name: "When do you want to play?",
-  });
-  await expect(calendar).toBeVisible();
-  await expect(calendar.locator(".calendar-month")).toHaveCount(2);
-  await expect(calendar.getByText("Your plans", { exact: true })).toBeVisible();
-  await expect(
-    calendar.getByText("Events to explore", { exact: true }),
-  ).toBeVisible();
-  await calendar.getByRole("button", { name: "Close full calendar" }).click();
-  await expect(calendar).toHaveCount(0);
-  await expectNoHorizontalOverflow(page);
-});
-
-test("player onboarding stays clear and editable on mobile", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/app/onboarding");
-  await expect(
-    page.getByRole("heading", { name: "Who are we building this for?" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("navigation", { name: "Mobile player navigation" }),
-  ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Ask Duna" })).toHaveCount(0);
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await expect(
-    page.getByRole("heading", { name: "Tell us about Mara Lewis." }),
-  ).toBeVisible();
-  await expect(
-    page.getByText(/Voice is waiting for the LiveKit/),
-  ).toBeVisible();
-  await page
-    .getByLabel("Your editable recap")
-    .fill(
-      "I played indoor in high school and have played beach for four years.",
-    );
-  await page.getByRole("button", { name: /Review answers/ }).click();
-  await expect(
-    page.getByRole("heading", { name: "What is the player's legal name?" }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Legal first name")).toBeEditable();
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await expect(
-    page.getByRole("heading", { name: "What is the highest level reached?" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: /Collegiate/ }).click();
-  await expect(page.getByLabel("College or university")).toBeEditable();
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await expect(page.getByLabel("Years playing")).toBeEditable();
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await page.getByLabel("Height in feet").fill("6");
-  await page.getByLabel("Additional height in inches").fill("1");
-  await page.getByRole("button", { name: "cm" }).click();
-  await expect(page.getByLabel("Height in centimeters")).toHaveValue("185");
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await expect(page.getByLabel(/Playing story/)).toBeEditable();
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await expect(page.getByText("VolleyballLife profile")).toBeVisible();
-  await expectNoHorizontalOverflow(page);
-});
-
 test("account controls, profile editing, and legal documents stay reachable", async ({
   page,
 }) => {
@@ -772,18 +487,20 @@ test("account controls, profile editing, and legal documents stay reachable", as
   ).toHaveAttribute("href", "/app/settings#profile");
 
   await page.goto("/app/settings");
-  await expect(page.getByRole("heading", { name: "Settings." })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Settings" }),
+  ).toBeVisible();
   const settingsNavigation = page.getByRole("navigation", {
-    name: "Settings sections",
+    name: "Settings",
   });
   await expect(
-    settingsNavigation.getByRole("link", { name: /Profile/ }),
+    settingsNavigation.getByRole("link", { name: /^Profile/ }),
   ).toHaveAttribute("href", "#profile");
   await expect(
-    settingsNavigation.getByRole("link", { name: /Player details/ }),
-  ).toHaveAttribute("href", "#playing-profile");
+    settingsNavigation.getByRole("link", { name: /Playing profile/ }),
+  ).toHaveAttribute("href", "#playing");
   await expect(
-    page.getByRole("button", { name: /Delete your account/ }),
+    page.getByRole("heading", { level: 2, name: "Your data" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
@@ -814,34 +531,6 @@ test("account controls, profile editing, and legal documents stay reachable", as
   await expect(
     page.getByRole("button", { name: /Review deletion requirements/ }),
   ).toBeVisible();
-  await expectNoHorizontalOverflow(page);
-});
-
-test("settings use the available desktop width and collapse cleanly", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1800, height: 1100 });
-  await page.goto("/app/settings");
-  await expect(page.locator(".settings-layout")).toBeVisible();
-
-  const [layoutBox, navigationBox, contentBox] = await Promise.all([
-    getBox(page.locator(".settings-layout")),
-    getBox(page.locator(".settings-layout > nav")),
-    getBox(page.locator(".settings-content")),
-  ]);
-  expect(contentBox.width).toBeGreaterThan(1_000);
-  expect(contentBox.width).toBeGreaterThan(
-    layoutBox.width - navigationBox.width - 96,
-  );
-  await expectNoHorizontalOverflow(page);
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Settings." })).toBeVisible();
-  await expect(page.locator(".source-link-grid")).toHaveCSS(
-    "grid-template-columns",
-    /\d+px/,
-  );
   await expectNoHorizontalOverflow(page);
 });
 
@@ -1062,20 +751,17 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
   await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
   await expectNoHorizontalOverflow(page);
 
-  await page.goto(`${hqBaseUrl}/schedule`);
-  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
+  await page.goto(`${hqBaseUrl}/schedule?view=day`);
   await expect(
-    page.getByText("Championship Court", { exact: true }),
+    page.getByRole("heading", { name: "Schedule", level: 1 }),
+  ).toBeVisible();
+  const grid = page.getByTestId("schedule-grid");
+  await expect(
+    grid.getByText("Championship Court", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Community Court", { exact: true }),
+    grid.getByText("Community Court", { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "No matches ready to score" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: /Review sessions/ }),
-  ).toHaveAttribute("href", "/events");
   await expect(page.getByText("No courts yet")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 

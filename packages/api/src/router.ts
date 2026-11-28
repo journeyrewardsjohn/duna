@@ -1,5 +1,7 @@
 import { participationDemo } from "@duna/core/demo/participation";
 import { TRPCError } from "@trpc/server";
+import { demoOrganizationStorefront } from "@duna/core/demo/storefront";
+import { demoTournamentCompetition } from "@duna/core/demo/tournament";
 import {
   COURT_SURFACE_IDS,
   withEventLifecycle,
@@ -44,6 +46,7 @@ import { setupOperatorRouter } from "./routers/setup";
 import { payOperatorRouter } from "./routers/pay";
 import { teamAvailabilityOperatorRouter } from "./routers/team-availability";
 import { teamPayOperatorRouter } from "./routers/team-pay";
+import { peopleOperatorRouter } from "./routers/people";
 import { teamPayoutsOperatorRouter } from "./routers/team-payouts";
 import {
   trainingProgramsOperatorRouter,
@@ -2091,6 +2094,12 @@ const publicRouter = router({
     .input(z.object({ slug: z.string().min(1) }))
     .output(tournamentCompetitionSnapshotSchema)
     .query(async ({ input }) => {
+      // Demo mode: the demo tournament's published draw (SITE-5).
+      if (usesDemoData()) {
+        const demo = demoTournamentCompetition(input.slug);
+        if (!demo) throw new TRPCError({ code: "NOT_FOUND" });
+        return demo;
+      }
       const event = await getRepository().public.eventBySlug(input.slug);
       if (!event) throw new TRPCError({ code: "NOT_FOUND" });
       try {
@@ -2736,7 +2745,13 @@ const publicRouter = router({
   organizationStorefront: publicProcedure
     .input(z.object({ slug: z.string().trim().min(1).max(64) }))
     .output(publicOrganizationStorefrontSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      // Demo mode (no database): the demo clubs' storefronts (SITE-5).
+      if (usesDemoData()) {
+        const demo = demoOrganizationStorefront(input.slug, ctx.now);
+        if (!demo) throw new TRPCError({ code: "NOT_FOUND" });
+        return demo;
+      }
       const storefront = await loadPublicOrganizationStorefront(input.slug);
       if (!storefront) throw new TRPCError({ code: "NOT_FOUND" });
       return storefront;
@@ -14120,6 +14135,9 @@ const operatorRouter = router({
   fees: feesOperatorRouter,
   legal: legalOperatorRouter,
   participation: participationOperatorRouter,
+  // HQ People (PEOPLE-API): import, merge, notes, tags, households,
+  // documents and membership changes.
+  people: peopleOperatorRouter,
 });
 
 const agentConfirmationSchema = z.object({

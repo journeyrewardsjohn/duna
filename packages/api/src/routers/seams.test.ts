@@ -25,7 +25,6 @@ describe("R3 domain seams", () => {
       operator.trainingPrograms.status(),
       operator.trainingDrills.status(),
       operator.trainingSceneAi.status(),
-      operator.concierge.status(),
       operator.websiteWorkspace.status(),
       operator.websiteTemplates.status(),
       operator.facility.status(),
@@ -40,7 +39,6 @@ describe("R3 domain seams", () => {
       "training-programs",
       "training-drills",
       "training-scene-ai",
-      "concierge",
       "website-workspace",
       "website-templates",
       "facility",
@@ -54,7 +52,6 @@ describe("R3 domain seams", () => {
     const results = await Promise.all([
       caller.player.trainingPrograms.status(),
       caller.player.trainingDrills.status(),
-      caller.player.concierge.status(),
       caller.player.facility.status(),
       caller.player.search.status(),
       caller.public.trainingDrills.status(),
@@ -72,7 +69,6 @@ describe("R3 domain seams", () => {
     expect(results.map((r) => r.domain)).toEqual([
       "training-programs",
       "training-drills",
-      "concierge",
       "facility",
       "search",
       "training-drills",

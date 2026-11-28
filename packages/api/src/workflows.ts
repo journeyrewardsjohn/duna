@@ -1,4 +1,5 @@
 import { processWebsiteStripeEvent } from "./website-billing";
+import { processConciergeDelivery } from "./services/concierge/delivery";
 import type Stripe from "stripe";
 import { report } from "@duna/observability";
 import { syncPayAccount } from "./services/pay/account";
@@ -2062,6 +2063,17 @@ export async function processWorkflowJobById(
       );
     } else if (claimed.kind === "messaging.push-message") {
       await dispatchMessagingPushNotifications(claimed.payload, now);
+    } else if (claimed.kind === "concierge.deliver") {
+      // Concierge (B7): one outside-channel delivery; throws only to retry
+      // the same channel.
+      await processConciergeDelivery(
+        {
+          ...claimed.payload,
+          jobAttempts: claimed.attempts,
+          maximumAttempts: claimed.maximumAttempts,
+        },
+        now,
+      );
     } else if (claimed.kind === "messaging.push-receipts") {
       await processMessagingPushReceipts(claimed.payload, now);
     } else if (claimed.kind === "membership.renewal-reminder") {

@@ -862,6 +862,27 @@
       "when": 1795865923585,
       "tag": "0122_training_library_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1795872361910,
+      "tag": "0123_waiver_signer_role_length",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1795873972449,
+      "tag": "0124_people_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1795875251948,
+      "tag": "0125_concierge_channels",
+      "breakpoints": true
     }
   ]
 }

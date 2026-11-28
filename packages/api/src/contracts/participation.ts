@@ -280,7 +280,17 @@ export const participationCancelSessionInputSchema = z.object({
   idempotencyKey: w3IdempotencyKeySchema,
 });
 
+/**
+ * B7: the Concierge thread (and Send review, when a note was given) a person
+ * opens to tell people. Nothing is sent until they confirm there.
+ */
+export const participationConciergeDraftSchema = z.object({
+  conversationId: w3IdSchema,
+  proposalId: w3IdSchema.optional(),
+});
+
 export const participationCancelSessionSchema = z.object({
+  conciergeDraft: participationConciergeDraftSchema.optional(),
   cancellations: z
     .array(
       z.object({
@@ -614,6 +624,8 @@ export const participationResolveCancelRequestSchema = z.object({
    * coach is not told automatically.
    */
   coachNotified: z.boolean(),
+  /** B7: decline → a thread with the coach; approve with a note → the session thread's Send review. */
+  conciergeDraft: participationConciergeDraftSchema.optional(),
 });
 
 export const participationShareLinkInputSchema = z.object({

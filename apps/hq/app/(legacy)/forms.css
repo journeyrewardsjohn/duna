@@ -193,13 +193,6 @@ body[data-zone="operator"] .hq-shell--focused:not(.admin-shell) .hq-sidebar {
   box-shadow: var(--hq-shadow-control);
 }
 
-.hq-shell--focused .people-directory__header {
-  max-width: 480px;
-}
-.hq-shell--focused :is(.people-filter-row) button {
-  border-radius: 6px;
-}
-
 .hq-shell--focused .venue-create-preview {
   background: var(--hq-soft);
   color: var(--hq-text);
@@ -274,18 +267,6 @@ body[data-zone="operator"]
   border-radius: 8px;
   background: var(--hq-ground);
   box-shadow: var(--hq-shadow-inset);
-}
-
-.hq-shell--focused :is(.people-filter-row) button.active {
-  border-color: var(--hq-line);
-  background: var(--hq-ground);
-  color: var(--hq-text);
-  box-shadow: var(--hq-shadow-control);
-}
-
-.hq-shell--focused :is(.people-filter-row) button {
-  min-height: 48px;
-  border: 1px solid transparent;
 }
 .hq-shell--focused .hq-data-table tbody td:last-child > a {
   justify-content: center;
