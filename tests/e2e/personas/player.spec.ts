@@ -130,9 +130,14 @@ test.describe("PL-6 Membership and wallet", () => {
   }) => {
     await openPlayerArea(page, "Wallet");
     await expect(
-      page.getByRole("heading", { name: "Organization credits" }),
+      page.getByRole("heading", { level: 1, name: "Wallet" }),
     ).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Your club cards" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Your Duna balance" }),
+    ).toBeVisible();
   });
   test("PL-6.2 Premium shows an honest checkout state", async ({ page }) => {
     await openPlayerArea(page, "Settings");

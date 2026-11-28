@@ -1,66 +1,64 @@
+"use client";
+
 import {
-  clubMarkModel,
+  cardAccessibleName,
+  cardArtPalette,
+  cardMetaLine,
+  cardStateChip,
+  defaultCardArt,
+  estimateCardContrast,
+  measureCardContrast,
   MEMBERSHIP_STATUS_TEXT,
-  membershipPassModel,
-  SALT,
+  type CardArtSource,
+  type CardContrast,
+  type CardPixels,
   type MembershipStatus,
 } from "@duna/tideline-core";
-import type { CSSProperties, ReactNode } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import { cx } from "../base/cx";
 import { Icon } from "../base/icons";
-import { CrestMark } from "../motion/crest";
-import { riseClassName } from "../motion/verbs";
-import { ClubMark, type ClubMarkProps } from "./club-mark";
+import { CardArt } from "./card-art";
+import { CardFlip } from "./card-flip";
+import { ClubMark } from "./club-mark";
+import { MembershipPass } from "./membership-pass";
+import type { MembershipCardProps } from "./membership-card-types";
 
-export type MembershipCardClub = Pick<
-  ClubMarkProps,
-  | "name"
-  | "color"
-  | "logo"
-  | "logoLight"
-  | "logoDark"
-  | "tile"
-  | "source"
-  | "worksSmall"
->;
+export type {
+  MembershipCardClub,
+  MembershipCardFace,
+  MembershipCardProps,
+  WalletCard,
+} from "./membership-card-types";
 
-export interface MembershipCardProps {
-  club: MembershipCardClub;
-  /** The member's name as the club knows it. */
-  member: string;
-  /** The plan ("Annual member"). */
-  plan?: string;
-  /** What kind of card ("Club member", "Approved player · public beach"). */
-  kind?: string;
-  status: MembershipStatus;
-  /** Overrides the chip words. */
-  statusText?: string;
-  /** When it is valid through or ended, already formatted ("Nov 30, 2026"). */
-  validThrough?: string;
-  /** "Member since Mar 2024". */
-  since?: string;
-  /** One more line from the club (credits left, renewal as `[date]`). */
-  line?: string;
-  /** The pass code from the server. Never invent one. */
-  code?: string | null;
-  /** The scannable code drawn from the server pass token (a QR component). */
-  qr?: ReactNode;
-  /** An approved club photograph behind the club band. */
-  image?: string;
-  /** The 64 px strip used in the wallet stack. */
-  compact?: boolean;
-  /** Rise when it first renders. Default on. */
-  rise?: boolean;
-  className?: string;
+/** Uploads before measurement: a strong dark scrim errs on the side of reading. */
+const UPLOAD_CONTRAST: CardContrast = {
+  text: "salt",
+  scrim: "#0A1218",
+  top: 0.72,
+  bottom: 0.78,
+  ratio: 5,
+  glow: "#1A2A33",
+};
+
+/** One measurement per piece of art, shared by every card that shows it. */
+const measured = new Map<string, CardContrast>();
+const artKey = (art: CardArtSource) => JSON.stringify(art);
+
+function initialContrast(art: CardArtSource): CardContrast {
+  const known = measured.get(artKey(art));
+  if (known) return known;
+  const palette = cardArtPalette(art);
+  return palette ? estimateCardContrast(palette) : UPLOAD_CONTRAST;
 }
 
-function validityText(status: MembershipStatus, validThrough?: string) {
-  if (!validThrough) return null;
-  if (status === "expired") return `Ended ${validThrough}`;
-  return `Valid through ${validThrough}`;
-}
-
-/** The membership state as a status chip: the brand never fades, the chip says it. */
+/** The membership state as a status chip, for rows and lists outside the card. */
 export function MembershipStatusChip({
   status,
   text,
@@ -77,130 +75,211 @@ export function MembershipStatusChip({
           ? "td-chip--warning"
           : null;
   return (
-    <span className={cx("td-chip td-chip--status td-mcard__chip", tone)}>
+    <span className={cx("td-chip td-chip--status", tone)}>
       {text ?? MEMBERSHIP_STATUS_TEXT[status]}
     </span>
   );
 }
 
 /**
- * A member's card for a club: the club's mark on its colour (and its photo,
- * if it gave one), the member, plan, status and validity, and a code area
- * that is honest when there is no pass to scan. On Salt in light, on Dune in
- * dark. Pending, paused and expired never desaturate the club's brand: the
- * state is a chip and a sentence. No tilt, no shine.
+ * A club's membership card (docs/design/wallet.md): an ID-1 object with
+ * full-bleed club art, a keyline and a glass edge; the club mark and name top
+ * left, one chip top right, the member bottom left and one live fact bottom
+ * right. The art keeps full colour: a measured local scrim brings the type to
+ * 5:1. State is a solid Salt chip; nothing fades (R13). No tilt; a pointer
+ * sheen that moves only with the pointer. The back is the pass.
  */
-export function MembershipCard({
-  club,
-  member,
-  plan,
-  kind,
-  status,
-  statusText,
-  validThrough,
-  since,
-  line,
-  code,
-  qr,
-  image,
-  compact = false,
-  rise = true,
-  className,
-}: MembershipCardProps) {
-  const pass = membershipPassModel({ status, code, validThrough });
-  const validity = validityText(status, validThrough);
-  const chipText = statusText ?? MEMBERSHIP_STATUS_TEXT[status];
-  const brand = clubMarkModel({ ...club, size: 56 });
-  const bandStyle = {
-    "--td-mcard-club": brand.background,
-    "--td-mcard-on-club":
-      image || brand.foreground === SALT
-        ? "var(--td-brand-salt)"
-        : "var(--td-brand-night-court)",
-  } as CSSProperties;
-  const label = `${club.name} membership card for ${member}, ${chipText.toLowerCase()}`;
-
-  if (compact) {
-    return (
-      <article
-        aria-label={label}
-        className={cx("td-mcard td-mcard--compact", className)}
-        data-status={status}
-      >
-        <ClubMark {...club} decorative size="md" />
-        <span className="td-mcard__striptext">
-          <span className="td-mcard__club">{club.name}</span>
-          <span className="td-mcard__plan">
-            {[plan, validity].filter(Boolean).join(" · ") || kind}
-          </span>
-        </span>
-        <MembershipStatusChip status={status} text={statusText} />
-      </article>
-    );
+export function MembershipCard(props: MembershipCardProps) {
+  const {
+    club,
+    member,
+    heldBy,
+    plan,
+    chip,
+    kind,
+    status,
+    statusText,
+    until,
+    number,
+    since,
+    fact,
+    face,
+    flipped = false,
+    onFlip,
+    size = "card",
+    motion = "auto",
+    label,
+    className,
+  } = props;
+  const art = props.art ?? defaultCardArt({ id: club.name, color: club.color });
+  const key = artKey(art);
+  const [contrast, setContrast] = useState<CardContrast>(() =>
+    initialContrast(art),
+  );
+  const [contrastFor, setContrastFor] = useState(key);
+  if (contrastFor !== key) {
+    setContrastFor(key);
+    setContrast(initialContrast(art));
   }
+  const used = props.contrast ?? contrast;
+  const onPoster = useCallback(
+    (pixels: CardPixels) => {
+      if (props.contrast) return;
+      const next = measureCardContrast(pixels);
+      measured.set(key, next);
+      setContrast(next);
+    },
+    [key, props.contrast],
+  );
 
+  const ref = useRef<HTMLElement>(null);
+  const onPointerMove = (event: PointerEvent<HTMLElement>) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty(
+      "--td-mcard-mx",
+      `${((event.clientX - box.left) / box.width) * 100}%`,
+    );
+    event.currentTarget.style.setProperty(
+      "--td-mcard-my",
+      `${((event.clientY - box.top) / box.height) * 100}%`,
+    );
+  };
+
+  const state = cardStateChip({
+    status,
+    ...(statusText ? { statusText } : {}),
+    ...(until ? { until } : {}),
+  });
+  const meta = cardMetaLine({
+    status,
+    ...(number !== undefined ? { number } : {}),
+    ...(since ? { since } : {}),
+    ...(face ? { face } : {}),
+    ...(chip ? { chip } : {}),
+  });
+  const name =
+    label ??
+    cardAccessibleName({
+      club: club.name,
+      ...(plan ? { plan } : {}),
+      member,
+      ...(heldBy ? { heldBy } : {}),
+      status,
+      ...(statusText ? { statusText } : {}),
+      fact: fact ?? null,
+    });
+  const style = {
+    "--td-mcard-scrim": used.scrim,
+    "--td-mcard-st": used.top,
+    "--td-mcard-sb": used.bottom,
+    "--td-mcard-glow": used.glow,
+  } as CSSProperties;
+
+  const front = (
+    <span className="td-mcard__face td-mcard__front">
+      <CardArt
+        animate={motion === "auto" && !flipped && size !== "strip"}
+        art={art}
+        className="td-mcard__art"
+        onPoster={onPoster}
+      />
+      <span aria-hidden="true" className="td-mcard__scrim" />
+      <span aria-hidden="true" className="td-mcard__sheen" />
+      <span aria-hidden="true" className="td-mcard__keyline" />
+      <span className="td-mcard__top">
+        <ClubMark {...club} decorative size={size === "strip" ? 26 : 30} />
+        <span className="td-mcard__club">{club.name}</span>
+        {state ? (
+          <span className="td-mcard__state" data-tone={state.tone}>
+            <Icon
+              name={
+                state.icon === "pause"
+                  ? "timeout"
+                  : state.icon === "clock"
+                    ? "clock"
+                    : "alert"
+              }
+              size="chip"
+            />
+            {state.text}
+          </span>
+        ) : chip && face?.chip !== false ? (
+          <span className="td-mcard__chip">{chip}</span>
+        ) : null}
+      </span>
+      {size === "strip" ? null : (
+        <span className="td-mcard__bottom">
+          <span className="td-mcard__who">
+            <span className="td-mcard__member">{member}</span>
+            {heldBy ? (
+              <span className="td-mcard__held">{`Held by ${heldBy}, guardian`}</span>
+            ) : null}
+            {meta ? <span className="td-mcard__meta">{meta}</span> : null}
+          </span>
+          {fact && status !== "pending" ? (
+            <span className="td-mcard__fact" data-kind={fact.kind}>
+              {fact.text}
+            </span>
+          ) : null}
+        </span>
+      )}
+    </span>
+  );
+
+  const back =
+    size === "strip" ? null : (
+      <span className="td-mcard__face td-mcard__back">
+        <MembershipPass
+          club={club}
+          member={member}
+          status={status}
+          {...(heldBy ? { heldBy } : {})}
+          {...(plan ? { plan } : {})}
+          {...(kind ? { kind } : {})}
+          {...(number !== undefined ? { number } : {})}
+          {...(props.validThrough ? { validThrough: props.validThrough } : {})}
+          {...(until ? { until } : {})}
+          {...(props.pass !== undefined ? { pass: props.pass } : {})}
+        />
+      </span>
+    );
+
+  const interactive = onFlip !== undefined;
+  const toggle = () => onFlip?.(!flipped);
   return (
     <article
-      aria-label={label}
-      className={cx("td-mcard", rise && riseClassName(), className)}
+      aria-label={interactive ? undefined : name}
+      aria-pressed={interactive ? flipped : undefined}
+      className={cx("td-mcard", className)}
+      data-kind={kind}
+      data-size={size}
       data-status={status}
+      data-contrast={used.ratio}
+      data-measured={props.contrast || measured.has(key) ? "" : undefined}
+      data-text={used.text}
+      onClick={interactive ? toggle : undefined}
+      onKeyDown={
+        interactive
+          ? (event: KeyboardEvent<HTMLElement>) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggle();
+              }
+            }
+          : undefined
+      }
+      onPointerMove={onPointerMove}
+      ref={ref}
+      role={interactive ? "button" : undefined}
+      style={style}
+      tabIndex={interactive ? 0 : undefined}
+      {...(interactive
+        ? {
+            "aria-label": `${name}. ${flipped ? "Showing the pass; turn back to the card" : "Turn over to show the pass"}`,
+          }
+        : {})}
     >
-      <div
-        className="td-mcard__band"
-        data-photo={image ? "" : undefined}
-        style={bandStyle}
-      >
-        {image ? (
-          <img alt="" className="td-mcard__photo" loading="lazy" src={image} />
-        ) : null}
-        <ClubMark {...club} decorative onPhoto={Boolean(image)} size="lg" />
-        <span className="td-mcard__bandtext">
-          <span className="td-mcard__club">{club.name}</span>
-          {kind ? <span className="td-mcard__kind">{kind}</span> : null}
-        </span>
-        <CrestMark className="td-mcard__duna" micro />
-      </div>
-      <div className="td-mcard__face">
-        <div className="td-mcard__who">
-          <span className="td-mcard__member">{member}</span>
-          <MembershipStatusChip status={status} text={statusText} />
-        </div>
-        {plan || since ? (
-          <p className="td-mcard__plan">
-            {[plan, since].filter(Boolean).join(" · ")}
-          </p>
-        ) : null}
-        {validity || line ? (
-          <p className="td-mcard__line">
-            {[validity, line].filter(Boolean).join(" · ")}
-          </p>
-        ) : null}
-        <div
-          className={cx(
-            "td-mcard__pass",
-            pass.kind === "message" && "td-mcard__pass--none",
-          )}
-          data-pass={pass.kind === "code" ? "code" : pass.reason}
-        >
-          {pass.kind === "code" ? (
-            <>
-              {qr ? <span className="td-mcard__qr">{qr}</span> : null}
-              <span className="td-mcard__code">
-                <span className="td-mcard__codelabel">Member code</span>
-                <span className="td-mcard__codevalue">{pass.code}</span>
-              </span>
-            </>
-          ) : (
-            <>
-              <Icon
-                name={pass.reason === "pending" ? "clock" : "pass"}
-                size="inline"
-              />
-              <span>{pass.text}</span>
-            </>
-          )}
-        </div>
-      </div>
+      {back ? <CardFlip back={back} flipped={flipped} front={front} /> : front}
     </article>
   );
 }

@@ -136,7 +136,9 @@ the web; a demo junior booking fixture.
 
 With no sign-in, demo mode, `DUNA_DEMO_PERSONAS=enabled` and never on a
 production deployment: `duna-demo-player=first-day` shows Home for a player
-with nothing booked, played or joined yet.
+with nothing booked, played or joined yet, and `duna-demo-wallet=0|1|5|12`
+gives the Wallet that many example club cards (fictional clubs, a sample pass
+labelled as one; `tests/e2e/player-wallet.spec.ts`).
 
 Specs: `tests/e2e/player-web-shell.spec.ts`; persona steps PL-1.1, PA-7.1,
 PA-7.2, VI-3.2, VI-4.2; unit tests `lib/app-routes.test.ts`,
