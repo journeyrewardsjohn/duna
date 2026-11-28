@@ -166,6 +166,35 @@ class DatabaseRateLimitStore implements RateLimitStore {
   }
 }
 
+/**
+ * Browser-test budget override for the per-procedure tRPC limits
+ * (`rateLimitMiddleware` in auth.ts).
+ *
+ * The Playwright suite drives every page as ONE demo actor from several
+ * workers and three viewports at once, so the real per-actor budget (180 calls
+ * a minute) runs out and server renders fail with TOO_MANY_REQUESTS. The
+ * Playwright web servers (playwright.config.ts) start with
+ * `DUNA_E2E_RATE_LIMIT_MULTIPLIER`, which multiplies each procedure's capacity
+ * and refill rate. It is a whole number from 1 to 100 and anything else counts
+ * as 1. It is IGNORED on a production deployment (`VERCEL_ENV` is
+ * `"production"`), so production limits never change.
+ *
+ * Only the tRPC procedure budgets read it. Limiters that call
+ * `consumeRateLimit` directly (Places search, Add a score drafts, Ask Duna,
+ * client error reports) keep their real budgets in every environment.
+ */
+export const E2E_RATE_LIMIT_MULTIPLIER_ENV = "DUNA_E2E_RATE_LIMIT_MULTIPLIER";
+
+export function e2eRateLimitMultiplier(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): number {
+  if (env.VERCEL_ENV === "production") return 1;
+  const raw = env[E2E_RATE_LIMIT_MULTIPLIER_ENV];
+  if (!raw || !/^\d{1,3}$/.test(raw)) return 1;
+  const value = Number.parseInt(raw, 10);
+  return value >= 1 && value <= 100 ? value : 1;
+}
+
 const memoryStore = new MemoryRateLimitStore();
 const databaseStore = new DatabaseRateLimitStore();
 
