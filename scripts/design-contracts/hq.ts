@@ -28,6 +28,8 @@ export const hq: SurfaceContract = {
     "apps/hq/components/schedule/",
     "apps/hq/app/(next)/(hq)/training/",
     "apps/hq/components/training/",
+    "apps/hq/app/(next)/(hq)/inbox/",
+    "apps/hq/components/inbox/",
   ],
   checks: [
     { kind: "noFontPackages", app: "hq" },
