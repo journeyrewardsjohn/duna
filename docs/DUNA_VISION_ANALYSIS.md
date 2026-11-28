@@ -1,10 +1,10 @@
 # Duna Vision analysis control plane
 
 Duna Vision keeps video playback, match truth, and computer-vision inference
-separate. Mux serves live/playback, private R2 stores originals and derived
-artifacts, Duna Web owns authorization and durable commands, and an external
-GPU worker owns decode and inference. No video bytes or model weights belong in
-Vercel.
+separate. Cloudflare Stream serves live/playback, private R2 stores originals
+and derived artifacts, Duna Web owns authorization and durable commands, and an
+external GPU worker owns decode and inference. No video bytes or model weights
+belong in Vercel.
 
 ## Product contract
 
@@ -83,7 +83,6 @@ worker receives a small reference command, not media bytes:
   "runId": "uuid",
   "videoId": "uuid",
   "r2ObjectKey": "private source key when available",
-  "muxAssetId": "Mux asset reference when available",
   "visionSessionId": "uuid",
   "court": {
     "widthMeters": 8,

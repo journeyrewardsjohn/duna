@@ -11,7 +11,7 @@
   },
   "src/video-service.ts": {
     "no-console": {
-      "count": 8
+      "count": 6
     }
   }
 }

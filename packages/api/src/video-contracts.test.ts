@@ -16,13 +16,8 @@ import {
   visionTimelineEventSchema,
 } from "./contracts";
 import {
-  buildMuxLiveStreamInput,
-  isMuxLivePlanUnavailable,
-  isMuxSignedPlaybackConfigured,
-  isMuxVideoConfigured,
   isR2MultipartUploadAlreadyAbsent,
   isR2VideoConfigured,
-  muxDataEnvironmentKey,
   R2_VIDEO_PART_SIZE_BYTES,
 } from "./video-providers";
 import {
@@ -486,7 +481,7 @@ describe("Duna Video contracts", () => {
         musicRemovalStatus: "not-requested",
         createdAt: "2026-08-04T18:00:00.000Z",
       },
-      provider: "mux",
+      provider: "cloudflare",
       playbackId: "signed-playback-id",
       playbackToken: "signed-token",
       viewSessionId: crypto.randomUUID(),
@@ -495,7 +490,7 @@ describe("Duna Video contracts", () => {
       canEditPrivateNote: false,
     };
     expect(videoPlaybackSchema.parse(base)).toMatchObject({
-      provider: "mux",
+      provider: "cloudflare",
       isOwner: false,
     });
     expect(() =>
@@ -666,7 +661,6 @@ describe("Duna Video contracts", () => {
         calibrationSamples: [],
       },
       cloudflareConfigured: true,
-      muxConfigured: false,
       r2Configured: true,
     });
     expect(overview).toMatchObject({
@@ -716,33 +710,6 @@ describe("Duna Video contracts", () => {
 });
 
 describe("Duna Video provider readiness", () => {
-  it("requires both Mux API values and both signed-playback values", () => {
-    vi.stubEnv("MUX_TOKEN_ID", "token-id");
-    vi.stubEnv("MUX_TOKEN_SECRET", "token-secret");
-    expect(isMuxVideoConfigured()).toBe(true);
-    expect(isMuxSignedPlaybackConfigured()).toBe(false);
-
-    vi.stubEnv("MUX_SIGNING_KEY_ID", "signing-key");
-    vi.stubEnv("MUX_PRIVATE_KEY", "private-key");
-    vi.stubEnv("MUX_DATA_ENV_KEY", "data-environment");
-    expect(isMuxSignedPlaybackConfigured()).toBe(true);
-    expect(muxDataEnvironmentKey()).toBe("data-environment");
-  });
-
-  it("accepts the Mux dashboard secret names and base64 signing key", () => {
-    vi.stubEnv("MUX_TOKEN_ID", "token-id");
-    vi.stubEnv("MUX_SECRET_KEY", "token-secret");
-    vi.stubEnv("MUX_SIGNING_KEY_ID", "signing-key");
-    vi.stubEnv(
-      "MUX_SIGNING_SECRET",
-      Buffer.from(
-        "-----BEGIN RSA PRIVATE KEY-----\nprivate-key\n-----END RSA PRIVATE KEY-----",
-      ).toString("base64"),
-    );
-    expect(isMuxVideoConfigured()).toBe(true);
-    expect(isMuxSignedPlaybackConfigured()).toBe(true);
-  });
-
   it("accepts the supplied R2 S3 credential names and fixed part size", () => {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "example-account");
     vi.stubEnv("CF_ACCESS_KEY_ID", "r2-access-key");
@@ -852,44 +819,5 @@ describe("Duna Video provider readiness", () => {
     vi.stubEnv("AI_GATEWAY_API_KEY", "");
     vi.stubEnv("VERCEL_OIDC_TOKEN", "");
     expect(isVideoPerformanceReviewGatewayConfigured()).toBe(false);
-  });
-
-  it("places Duna passthrough on the live stream for inherited asset metadata", () => {
-    const videoId = crypto.randomUUID();
-    const built = buildMuxLiveStreamInput({
-      videoId,
-      title: "Championship match",
-      liveVisibility: "public",
-      recordingVisibility: "private",
-      maximumDurationSeconds: 14_400,
-    });
-
-    expect(built.request).toMatchObject({
-      passthrough: videoId,
-      playback_policies: ["public"],
-      new_asset_settings: {
-        playback_policies: ["signed"],
-        video_quality: "plus",
-        meta: { external_id: videoId },
-      },
-    });
-    expect(built.request.new_asset_settings).not.toHaveProperty("passthrough");
-  });
-
-  it("recognizes the Mux free-plan live gate without treating other 400s as it", () => {
-    expect(
-      isMuxLivePlanUnavailable({
-        status: 400,
-        error: {
-          type: "invalid_parameters",
-          messages: ["Live streams are unavailable on the free plan"],
-        },
-      }),
-    ).toBe(true);
-    expect(
-      isMuxLivePlanUnavailable(
-        new Error("Mux rejected an invalid playback policy"),
-      ),
-    ).toBe(false);
   });
 });

@@ -346,7 +346,7 @@ reports `review-required`.
 
 ## Duna Video delivery
 
-Live streaming uses tier-aware Cloudflare or Mux, adaptive native SRT/RTMPS
+Live streaming uses Cloudflare Stream for every plan, adaptive native SRT/RTMPS
 contribution, and signed/public playback. Native uploads use private Cloudflare
 R2 multipart uploads with short-lived presigned URLs. Provider variables,
 privacy boundaries, migration order, and the physical-device release checklist
@@ -514,8 +514,8 @@ still requires external approvals or account data:
 - Apple Developer and Google Play organization credentials and store review
 - Knock, Resend, Sent, Twilio 10DLC, Inngest, Upstash, R2, Sentry, Axiom, and PostHog
   production credentials
-- Cloudflare Stream and Mux account activation, API/signing keys, authenticated
-  webhooks, and physical-device SRT/RTMPS streaming checks
+- Cloudflare Stream account activation, API token, authenticated webhook, and
+  physical-device SRT/RTMPS streaming checks
 - An approved audio-isolation processor before music-removal requests can
   modify recordings
 - Provider authorization, retention terms, and credentials for player-data

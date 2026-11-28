@@ -104,17 +104,6 @@ export const providerRegistry = {
     ],
     features: ["website.workspace"],
   },
-  videoMux: {
-    label: "Mux (video upload and playback)",
-    productionNote:
-      "Production Mux environment token and a webhook pointing at Duna Web.",
-    requires: [
-      ["MUX_TOKEN_ID"],
-      ["MUX_TOKEN_SECRET", "MUX_SECRET_KEY"],
-      ["MUX_WEBHOOK_SECRET"],
-    ],
-    features: [],
-  },
   videoCloudflareStream: {
     label: "Cloudflare Stream (live video)",
     productionNote:
