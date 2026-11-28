@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./discovery-search": "./src/discovery-search.ts",
+    "./discovery-ranking": "./src/discovery-ranking.ts",
     "./workos-environment": "./src/workos-environment.ts",
     "./context": "./src/context.ts",
     "./observability": "./src/observability/index.ts",
@@ -16,6 +17,7 @@
     "./organization-setup": "./src/organization-setup.ts",
     "./system-workspace-service": "./src/system-workspace-service.ts",
     "./training-contracts": "./src/training-contracts.ts",
+    "./team-pay-compute": "./src/services/team-pay/compute.ts",
     "./webhooks": "./src/webhooks.ts",
     "./ask-duna-contracts": "./src/ask-duna-contracts.ts",
     "./sendblue-ingress": "./src/sendblue-ingress.ts",

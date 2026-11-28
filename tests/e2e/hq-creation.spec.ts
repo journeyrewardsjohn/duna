@@ -82,7 +82,6 @@ test("creation examples wait for explicit AI submission and preserve review", as
 
 for (const [path, heading, builder] of [
   ["/events/create", "Create event", ".event-builder"],
-  ["/offerings/create", "Create offer", ".guided-product-builder"],
   ["/setup/places/create", "Add venue", ".venue-create-studio"],
 ] as const) {
   test(`manual ${path} remains available with keyboard focus and dark containment`, async ({
@@ -123,19 +122,6 @@ for (const [path, heading, builder] of [
           .map((node) => node.getAttribute("name") ?? node.tagName),
       );
     expect(outside).toEqual([]);
-    if (path === "/offerings/create" && info.project.name === "mobile") {
-      const clearance = await page.evaluate(() => {
-        const footer = document.querySelector(".guided-product-footer")!;
-        const navigation = document.querySelector(".hq-sidebar")!;
-        return {
-          footerBottom: footer.getBoundingClientRect().bottom,
-          navigationTop: navigation.getBoundingClientRect().top,
-        };
-      });
-      expect(clearance.footerBottom).toBeLessThanOrEqual(
-        clearance.navigationTop,
-      );
-    }
     await page.evaluate(async () => {
       await document.fonts.ready;
       window.scrollTo(0, 0);
@@ -162,116 +148,4 @@ test("event prefills bypass AI and remain available in the manual builder", asyn
   await expect(
     page.getByRole("textbox", { name: "Event name", exact: true }),
   ).toHaveValue("QA junior league");
-});
-
-test("Team directory preserves filters, layouts, pagination and keyboard profile access", async ({
-  page,
-}, info) => {
-  // Demo mode has no staff. Supply list props on a client navigation so this
-  // exercises populated UI without changing production/demo data or hydration.
-  if (!["localhost", "127.0.0.1"].includes(new URL(base).hostname))
-    throw new Error("Staff fixture is local-only");
-  const staff = Array.from({ length: 30 }, (_, index) => ({
-    id: `70000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-    personId: `71000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-    displayName: `Staff ${String(index + 1).padStart(2, "0")}`,
-    handle: `staff-${index + 1}`,
-    email: `staff-${index + 1}@example.com`,
-    profileVisibility: "private",
-    role: index % 2 ? "coach" : "manager",
-    isOwner: index === 0,
-    workerClassification: "not-set",
-    compensationModel: "not-set",
-    currency: "USD",
-    addressComplete: false,
-    countryCode: "US",
-    availability: [],
-    sessionsRun30d: index,
-    upcomingSessions: index % 3,
-    active: index !== 29,
-  }));
-  await page.route(`${base}/team**`, async (route) => {
-    if (new URL(route.request().url()).pathname !== "/team")
-      return route.continue();
-    const response = await route.fetch();
-    const original = await response.text();
-    const body = original.replaceAll(
-      '"staff":[]',
-      `"staff":${JSON.stringify(staff)}`,
-    );
-    await route.fulfill({ response, body });
-  });
-  await page.goto(`${base}/activities`);
-  await page
-    .getByRole("navigation", { name: "Supporting activity tools" })
-    .getByRole("link", { name: "Staff", exact: true })
-    .click();
-  const table = page.getByRole("table", {
-    name: "Staff directory",
-    exact: true,
-  });
-  await expect(table).toBeVisible();
-  await expect(table.getByRole("columnheader")).toHaveCount(6);
-  await expect(table.getByRole("rowheader")).toHaveCount(25);
-  await contained(page);
-  expect(await page.evaluate(() => window.innerWidth)).toBeLessThanOrEqual(
-    page.viewportSize()!.width + 1,
-  );
-  await page
-    .getByRole("button", { name: "Next staff page", exact: true })
-    .click();
-  await expect(table.getByRole("rowheader")).toHaveCount(5);
-  await page
-    .getByRole("button", { name: "Previous staff page", exact: true })
-    .click();
-  await expect(table.getByRole("rowheader")).toHaveCount(25);
-  const search = page.getByRole("searchbox", {
-    name: "Search staff",
-    exact: true,
-  });
-  await search.fill("no-staff-matches-this-qa-query");
-  await expect(
-    page.getByText("No team members match this view.", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Next staff page" }),
-  ).toBeDisabled();
-  await search.clear();
-  const filters = page.getByRole("group", { name: "Filter team" });
-  for (const name of ["Coaches", "Active", "Needs setup", "Everyone"]) {
-    const button = filters.getByRole("button", { name, exact: true });
-    await button.click();
-    await expect(button).toHaveAttribute("aria-pressed", "true");
-  }
-  await page.getByRole("button", { name: "Cards", exact: true }).click();
-  await expect(table).toHaveCount(0);
-  await page.getByRole("button", { name: "Table", exact: true }).click();
-  await expect(table).toBeVisible();
-  await page
-    .getByRole("combobox", { name: "Staff rows per page" })
-    .selectOption("50");
-  await expect(
-    page.getByRole("button", { name: "Previous staff page" }),
-  ).toBeDisabled();
-  const region = page.getByRole("region", {
-    name: "Staff directory",
-    exact: true,
-  });
-  await region.focus();
-  await expect(region).toBeFocused();
-  await contained(page);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    window.scrollTo(0, 0);
-  });
-  await page.screenshot({
-    path: info.outputPath("team-directory.png"),
-    fullPage: true,
-  });
-  const profile = table.getByRole("rowheader").first().getByRole("link");
-  const href = await profile.getAttribute("href");
-  expect(href).toMatch(/^\/team\//);
-  await profile.focus();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(`${base}${href}`);
 });

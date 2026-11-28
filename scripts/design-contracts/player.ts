@@ -11,6 +11,9 @@ const root = "apps/player";
 const migrated: readonly string[] = [
   "apps/player/src/app",
   "apps/player/src/features/home",
+  "apps/player/src/features/score",
+  "apps/player/src/features/rating",
+  "apps/player/src/features/wallet",
 ];
 
 export const player: SurfaceContract = {

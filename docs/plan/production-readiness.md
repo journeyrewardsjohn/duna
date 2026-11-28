@@ -57,6 +57,15 @@ Conventions: Required-before-launch = RBL; Required-for-that-feature = RFF; Reco
 | Prod state | Docs: org `Journey`, project `duna` (`polished-sky-03515868`), production branch `duna-production`, database `duna`. HQ Vercel build runs `pnpm --filter @duna/db migrate` when `VERCEL_ENV=production` (`apps/hq/vercel.json`), i.e. production HQ build migrates the production DB BEFORE web deploys; web has no migrate step. Hosting needs `DUNA_SITES_*` "separate from the existing HQ/web database credentials" (`docs/operations/duna-websites.md`); none are set in web Production. |
 | Preview DB | Docs do not say. Facts from Vercel (names/scopes only): `DATABASE_URL` has a separate Preview-only entry (value not visible, so I cannot tell whether it is the production branch); `NEON_READ_ONLY_REPLICA` is ONE entry scoped "Preview, Production", so previews read from the same replica as production. `.env.example` says the replica "falls back to DATABASE_URL when omitted outside production". Treat previews as possibly sharing production data.                               |
 
+### 1.3a Search (B10)
+
+| Item        | What production needs                                                                                                                                                                                                         |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Database    | Nothing new: reads go to `NEON_READ_ONLY_REPLICA` (falls back to `DATABASE_URL`). Migration `0121_search_upcoming_sessions` adds one partial index on `catalog_session_occurrences (starts_at) WHERE status = 'scheduled'`.   |
+| Rehearsal   | Not rehearsed on a Neon branch by B10 (no branch was created); the in-memory Postgres tests apply every migration. The orchestrator rehearses 0121 as `docs/OPERATIONS.md` describes before the production HQ build migrates. |
+| Retry-After | The tRPC route (`apps/web/app/api/trpc/[trpc]/route.ts`) can send `Retry-After` from `cause.retryAfterSeconds` on `TOO_MANY_REQUESTS`; until then the seconds are in the error message.                                       |
+| Providers   | None. Search does not call a maps or search provider; the Where picker geocodes on the device and sends a point.                                                                                                              |
+
 ### 1.4 Vercel (hosting, crons, AI Gateway, Blob)
 
 | Field           | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -293,6 +302,16 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
   serves `/add-score`.
 - Owner decisions: an invisible bot challenge on claim (none exists in the repo); the promotion rule
   from candidate to public listing (spec: three confirmed matches or one staff approval) waits for B9.
+
+### Training programs, practice plans and the drill library (B4/B5, 28 November 2026)
+
+- Migration `0122_training_library_indexes` (additive: six indexes, two of them trigram) must run
+  before the deploy; it was not rehearsed on a Neon branch by B4/B5 (left to the orchestrator).
+- `TRAINING_MARKETPLACE_FEE_BPS` (basis points, e.g. `1500`): the owner's marketplace fee on paid
+  drill listings. Unset, paid listings answer "not configured"; free listings work.
+- Owner decisions: who records the "Duna review" decision on a drill (no admin procedure yet); how
+  a paid drill purchase reaches catalog checkout (listings carry no catalog item); scheduling a job
+  that marks ended programs `completed` (reads already report them as completed).
 
 ### WorkOS
 

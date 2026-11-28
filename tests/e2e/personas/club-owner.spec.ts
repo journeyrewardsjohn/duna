@@ -219,23 +219,44 @@ test.describe("CO-5 Publish a lesson and a program", () => {
 });
 
 test.describe("CO-6 Invite a coach", () => {
-  test("CO-6.1 Start a coach's invitation: name, role and how it is delivered", async ({
+  test("CO-6.1 Start a coach's invitation: name, contact, role and classification", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Team");
+    await page.getByRole("link", { name: "Invite someone" }).first().click();
+    await expectPageReady(page, "Invite someone");
+    await page.getByRole("textbox", { name: "Name" }).fill("Jordan Coach");
+    await expect(page.getByRole("radio", { name: /^Coach/ })).toBeChecked();
+    await expect(
+      page.getByRole("radio", { name: "Contractor (1099)" }),
+    ).toBeChecked();
+    await expect(page.getByText(/with your own adviser/).first()).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Review invitation" }),
+    ).toBeVisible();
+  });
+  test("CO-6.2 Review who, how and as what, then send once", async ({
     page,
   }) => {
     await page.goto(hq("/team/invite"));
-    await expectPageReady(page, "Invite the right teammate.");
-    await fillForm(page, { "Full name": "Jordan Coach" });
-    await expect(page.getByRole("combobox", { name: "Role" })).toBeVisible();
+    await expectPageReady(page, "Invite someone");
+    await page.getByRole("textbox", { name: "Name" }).fill("Jordan Coach");
+    await page
+      .getByRole("textbox", { name: /Email or mobile/ })
+      .fill("jordan@example.com");
+    await page.getByRole("button", { name: "Review invitation" }).click();
+    const review = page.getByRole("region", { name: "Check before it goes" });
+    await expect(review).toContainText("by email to jordan@example.com");
+    await expect(review).toContainText("Coach");
+    await review
+      .getByRole("button", { name: "Send invitation to Jordan" })
+      .click();
+    // Demo has no connected database or delivery provider: the honest state.
     await expect(
-      page.getByRole("combobox", { name: "How should they receive it?" }),
+      page
+        .getByText(/isn't configured yet|Invitation sent|Invitation created/)
+        .first(),
     ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Create private link" }),
-    ).toBeVisible();
-  });
-  test.fixme("CO-6.2 Create the link, or send it by email or text after a confirm [H5, B7]", async () => {
-    // Expected: tier 1 confirm naming the channel and the recipient; per-
-    // person delivery row; "not configured yet" without a channel provider.
   });
   test.fixme("CO-6.3 The coach accepts and shows as active in Team [H5]", async () => {});
 });
@@ -426,14 +447,124 @@ test.describe("CO-13 Identity chrome", () => {
 });
 
 test.describe("CO-14 Pay the team", () => {
-  test.fixme("CO-14.1 Run a pay period for coaches and export it [B3b, H5]", async () => {});
+  test("CO-14.1 Run a pay period for coaches and export it", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Team");
+    await page
+      .getByRole("navigation", { name: "Team" })
+      .getByRole("link", { name: "Pay" })
+      .click();
+    await expectPageReady(page, "Team pay");
+    await pressAndConfirm(
+      page,
+      page.getByRole("button", { name: "Work out pay" }).first(),
+      "confirm",
+      { confirmButton: "Work out pay" },
+    );
+    await expectPageReady(page, "Pay run");
+    await pressAndConfirm(
+      page,
+      page.getByRole("button", { name: "Approve the pay run" }),
+      "strong",
+      {
+        confirmButton: "Approve the pay run",
+        restates: ["Approval is final", "$", "Theo Park"],
+      },
+    );
+    await expect(
+      page.getByLabel("Totals").getByText("Approved", { exact: true }),
+    ).toBeVisible();
+    await pressAndConfirm(
+      page,
+      page.getByRole("button", { name: "Create the file" }),
+      "confirm",
+      { confirmButton: "Create the file" },
+    );
+    await expect(
+      page.getByRole("link", { name: /Download the file/ }),
+    ).toBeVisible();
+  });
 });
 
 test.describe("CO-15 Group sessions that fill up", () => {
-  test.fixme("CO-15.1 Sets the club booking rule as a sentence; offerings without their own rule show “Club default” [PART-6]", async () => {});
-  test.fixme("CO-15.2 Picks “Clinic” on an offering and enters a price ladder; sees the cliff warning and the live preview [PART-6]", async () => {});
+  test("CO-15.1 Sets the club booking rule as a sentence; offerings without their own rule show “Club default”", async ({
+    page,
+  }) => {
+    await page.goto(hq("/offerings/settings"));
+    await expectPageReady(page, "Booking rules");
+    const fewest = page.getByLabel("Fewest players it runs with");
+    await fewest.fill("4");
+    await fewest.press("Tab");
+    await expect(
+      page.getByText(
+        "That time is also the last moment players can cancel for free.",
+      ),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Save the club's rule" }).click();
+    await expectToast(page, "The club's booking rule saved");
+    await page.goto(hq("/offerings"));
+    await expect(
+      page
+        .getByRole("list", { name: "Offerings" })
+        .getByText(/club default/)
+        .first(),
+    ).toBeVisible();
+  });
+  test("CO-15.2 Picks “Clinic” on an offering and enters a price ladder; sees the cliff warning and the live preview", async ({
+    page,
+  }) => {
+    await page.goto(
+      hq("/offerings/d0130000-0000-4000-8000-000000000103/group-size"),
+    );
+    await expectPageReady(page, "Small group training");
+    await page
+      .getByRole("button", { name: "Change for this offering" })
+      .click();
+    await page.getByRole("radio", { name: /^Clinic/ }).check();
+    await expect(
+      page.getByRole("switch", { name: "Price by group size" }),
+    ).toBeChecked();
+    await page.getByLabel("Row 1: credits each").fill("3");
+    await page.getByRole("button", { name: "Add a group size" }).click();
+    await page.getByLabel("Row 2: from how many players").fill("8");
+    await page.getByLabel("Row 2: credits each").fill("1");
+    await page.getByLabel("Row 2: credits each").press("Tab");
+    await expect(
+      page.getByText(/8th player lowers your total from 21 to 8 credits/),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Show a fix" }),
+    ).toBeVisible();
+    const preview = page.getByRole("complementary", {
+      name: "What players see",
+    });
+    await expect(preview).toContainText("8 or more · 1 credit each");
+  });
   test.fixme("CO-15.3 Opens Today; “At risk this week” lists a session with “Needs 2 by Thu 6:00 PM” [PART-7]", async () => {});
-  test.fixme("CO-15.4 Cancels a thin session after a strong confirmation restating people and refunds; it shows “Cancelled” [PART-7]", async () => {});
+  test("CO-15.4 Cancels a thin session after a strong confirmation restating people and refunds; it shows “Cancelled”", async ({
+    page,
+  }) => {
+    await page.goto(
+      hq(
+        "/offerings/d0130000-0000-4000-8000-000000000101/schedule?session=d0130000-0000-4000-8000-000000000001",
+      ),
+    );
+    const panel = page.getByRole("dialog", { name: "Saturday semi-private" });
+    await panel.getByRole("button", { name: "Cancel and refund" }).click();
+    await panel
+      .getByRole("button", { name: "Review the cancellation" })
+      .click();
+    await expect(panel).toContainText("Mara Lewis");
+    await expect(panel).toContainText("4 credits back to wallets");
+    await panel
+      .getByRole("button", { name: "Cancel and refund 1 person" })
+      .click();
+    await expectToast(page, /Saturday semi-private cancelled/);
+    await expect(
+      page.getByRole("list", { name: "Sessions of Saturday semi-private" }),
+    ).toContainText("Cancelled by");
+  });
   test.fixme("CO-15.5 Asks Duna to make every clinic need 4 players; a proposal card shows before, after and affected sessions [PART-6]", async () => {});
 });
 

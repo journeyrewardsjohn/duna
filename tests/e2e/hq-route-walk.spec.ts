@@ -57,18 +57,17 @@ const missing = "00000000-0000-4000-8000-000000000001";
 const sale = "d0020000-0000-4000-8000-000000000103";
 const dispute = "d0020000-0000-4000-8000-000000000800";
 const payout = "93000000-0000-4000-8000-000000000001";
+// The demo coach Theo (@duna/core/demo) and the demo pay run awaiting
+// approval (@duna/core/demo/team-pay).
+const coach = "10000000-0000-4000-8000-000000000011";
+const payRun = "d0040000-0000-4000-8000-000000000201";
+// The demo club's weekly clinic (apps/hq/components/offerings/offerings-demo.ts).
+const offering = "d0130000-0000-4000-8000-000000000102";
 
 /** Concrete paths for every dynamic template (static ones walk as written). */
 const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
   [hqRoutes.ask]: ["/ask", "/ask/history"],
-  [hqRoutes.module]: [
-    "/schedule",
-    "/team",
-    "/events",
-    "/offerings",
-    "/marketing",
-    "/reports",
-  ],
+  [hqRoutes.module]: ["/schedule", "/events", "/marketing", "/reports"],
   // People (H-PEOPLE): Maya (adult, shares health) and Ava (a junior).
   [hqRoutes.member]: [`/people/${member}`, `/people/${junior}`],
   [hqRoutes.memberMemberships]: [`/people/${member}/memberships`],
@@ -84,7 +83,12 @@ const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
     `/people/${member}/health`,
     `/people/${junior}/health`,
   ],
-  [hqRoutes.teamMember]: [`/team/${member}`],
+  [hqRoutes.teamMember]: [`/team/${coach}`],
+  [hqRoutes.teamMemberAvailability]: [`/team/${coach}/availability`],
+  [hqRoutes.teamMemberSessions]: [`/team/${coach}/sessions`],
+  [hqRoutes.teamMemberPay]: [`/team/${coach}/pay`],
+  [hqRoutes.teamMemberAccess]: [`/team/${coach}/access`],
+  [hqRoutes.teamPayRun]: [`/team/pay/${payRun}`],
   [hqRoutes.trainingPracticePlan]: [`/training/practice-plans/${practicePlan}`],
   [hqRoutes.trainingPracticePlanPrint]: [
     `/training/practice-plans/${practicePlan}/print`,
@@ -101,9 +105,14 @@ const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
     "/events/types/open-play",
     "/events/types/pickup",
   ],
-  [hqRoutes.offering]: [`/offerings/${missing}`],
-  [hqRoutes.offeringBuilder]: [`/offerings/${missing}/builder`],
-  [hqRoutes.offeringDraftReady]: [`/offerings/${missing}/draft-ready`],
+  [hqRoutes.offering]: [`/offerings/${offering}`],
+  [hqRoutes.offeringSchedule]: [`/offerings/${offering}/schedule`],
+  [hqRoutes.offeringPrice]: [`/offerings/${offering}/price`],
+  [hqRoutes.offeringGroupSize]: [`/offerings/${offering}/group-size`],
+  [hqRoutes.offeringPeople]: [`/offerings/${offering}/people`],
+  [hqRoutes.offeringSettings]: [`/offerings/${offering}/settings`],
+  [hqRoutes.offeringBuilder]: [`/offerings/${offering}/builder`],
+  [hqRoutes.offeringDraftReady]: [`/offerings/${offering}/draft-ready`],
   [hqRoutes.offeringType]: [
     "/offerings/types/services",
     "/offerings/types/plans",
@@ -126,10 +135,6 @@ const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
 };
 
 const extraPaths = {
-  offering: `/offerings/${missing}`,
-  offeringBuilder: `/offerings/${missing}/builder`,
-  offeringDraftReady: `/offerings/${missing}/draft-ready`,
-  teamMember: `/team/${member}`,
   eventDivision: `/events/${tournament}/divisions/${missing}`,
   eventCourtBooking: `/events/court-bookings/${missing}`,
   eventMatch: `/events/matches/${missing}`,
@@ -144,13 +149,6 @@ const extraPaths = {
  * with the package that fixes it. Keyed by the concrete path walked.
  */
 const knownFailures: Readonly<Record<string, string>> = {
-  [extraPaths.offering]:
-    "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths.offeringBuilder]:
-    "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths.offeringDraftReady]:
-    "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths.teamMember]: "H5: the demo workspace has no staff records (404).",
   [extraPaths.eventDivision]: "H9: no demo event has an entry division (404).",
   [extraPaths.eventCourtBooking]:
     "H9: operator.activityDetail needs the connected database in demo mode.",

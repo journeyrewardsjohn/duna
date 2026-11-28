@@ -53,6 +53,11 @@ import {
   participationRunAnywaySchema,
   participationSetDefaultsInputSchema,
   participationSetDefaultsResultSchema,
+  participationCancelPreviewInputSchema,
+  participationCancelPreviewSchema,
+  participationResolveCancelRequestInputSchema,
+  participationResolveCancelRequestSchema,
+  participationShareLinkInputSchema,
   participationCreateInviteInputSchema,
   participationInviteInputSchema,
   participationInviteLinkSchema,
@@ -72,6 +77,7 @@ import {
   participationSetSubjectRuleInputSchema,
 } from "../contracts/participation";
 import {
+  createOperatorShareLink,
   createParticipationInvite,
   resolveParticipationInvite,
 } from "../services/participation/invites";
@@ -104,7 +110,9 @@ import {
   getParticipationDefaults,
   listParticipationCancelRequests,
   participationAtRisk,
+  previewParticipationCancel,
   previewParticipationRuleChange,
+  resolveParticipationCancelRequest,
   recordParticipationAttendance,
   requestParticipationCancel,
   runParticipationAnyway,
@@ -368,6 +376,106 @@ export const participationOperatorRouter = router({
           };
         },
       });
+    }),
+
+  /**
+   * PART-B: exactly what cancelling would return to whom, from the plan
+   * `cancelSession` runs. Read-only. Amounts need `payments:read`; without
+   * it, names and methods only.
+   */
+  cancelPreview: read
+    .input(participationCancelPreviewInputSchema)
+    .output(participationCancelPreviewSchema)
+    .query(({ ctx, input }) => {
+      const includeMoney = actorHasScope(ctx.actor, "payments:read");
+      if (usesDemoData()) {
+        const demo = participationDemo.cancelPreview;
+        if (includeMoney) return demo;
+        return {
+          ...demo,
+          bookings: demo.bookings.map((booking) => ({
+            bookingId: booking.bookingId,
+            displayName: booking.displayName,
+            isMinor: booking.isMinor,
+            quantity: booking.quantity,
+            method: booking.method,
+            outcome: booking.outcome,
+          })),
+          totals: {
+            bookings: demo.totals.bookings,
+            places: demo.totals.places,
+            released: demo.totals.released,
+            reviewRequired: demo.totals.reviewRequired,
+            cardRefunds: demo.totals.cardRefunds,
+          },
+        };
+      }
+      return guarded(() =>
+        previewParticipationCancel({
+          organizationId: ctx.organizationId,
+          subjectType: input.subjectType,
+          subjectId: input.subjectId,
+          includeMoney,
+          now: ctx.now,
+        }),
+      );
+    }),
+
+  /**
+   * PART-B: a director approves (the same cancellation as `cancelSession`,
+   * needs `payments:write`) or declines a coach's request to cancel.
+   */
+  resolveCancelRequest: write
+    .use(interventions)
+    .input(participationResolveCancelRequestInputSchema)
+    .output(participationResolveCancelRequestSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) {
+        return input.decision === "approve"
+          ? participationDemo.cancelRequestApproved
+          : participationDemo.cancelRequestDeclined;
+      }
+      return idempotent({
+        ctx,
+        procedure: "resolveCancelRequest",
+        key: input.idempotencyKey,
+        // The note is for Send review only: never stored or logged here.
+        request: { ...input, note: undefined },
+        execute: () =>
+          resolveParticipationCancelRequest({
+            actor: ctx.actor,
+            organizationId: ctx.organizationId,
+            cancelRequestId: input.requestId,
+            decision: input.decision,
+            requestId: ctx.requestId,
+            now: ctx.now,
+          }),
+      });
+    }),
+
+  /** PART-B: a share link for one of the club's sessions (same links as player invites). */
+  shareLink: read
+    .use(
+      rateLimitMiddleware({
+        id: "participation-share-link",
+        capacity: 20,
+        refillPerMinute: 10,
+      }),
+    )
+    .input(participationShareLinkInputSchema)
+    .output(participationInviteLinkSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.shareLink;
+      return guarded(() =>
+        createOperatorShareLink({
+          organizationId: ctx.organizationId,
+          actorPersonId: ctx.actor.personId,
+          subjectType: input.subjectType,
+          subjectId: input.subjectId,
+          requestId: ctx.requestId,
+          now: ctx.now,
+        }),
+      );
     }),
 
   /** A coach asks a director to cancel (the coach's own sessions). */

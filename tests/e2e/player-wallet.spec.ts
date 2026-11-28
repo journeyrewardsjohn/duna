@@ -102,7 +102,7 @@ test("no cards: the wallet sells the idea and links to find a club", async ({
   await expect(page.getByText("Your club cards live here")).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Find a club" }).first(),
-  ).toHaveAttribute("href", "/discover");
+  ).toHaveAttribute("href", "/app/discover");
   await expect(
     page.getByRole("heading", { name: "Your Duna balance" }),
   ).toBeVisible();

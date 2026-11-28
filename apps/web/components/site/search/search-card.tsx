@@ -135,7 +135,7 @@ function Panel({
  * (labels always visible), then Search. On desktop each row opens its
  * picker under the card; on a phone the search is a full-screen sheet with
  * the three stacked and a sticky Search. Submitting opens the discovery page
- * with the parameters it already reads. Without script the form still
+ * (`/discover`) with the parameters it reads. Without script the form still
  * submits and lands on discovery for this week, anywhere.
  */
 export function SearchCard() {
@@ -201,15 +201,13 @@ export function SearchCard() {
   return (
     <div className="site-search" id="search">
       <form
-        action="/discover/results"
+        action="/discover"
         aria-label="Find a game"
         method="get"
         onSubmit={submit}
         role="search"
       >
-        <input name="where" type="hidden" value="anywhere" />
-        <input name="when" type="hidden" value="next-7-days" />
-        <input name="what" type="hidden" value="for-you" />
+        <input name="when" type="hidden" value="week" />
         <div className="site-search__rows" ref={rows}>
           {FIELDS.map((field) => (
             <Row

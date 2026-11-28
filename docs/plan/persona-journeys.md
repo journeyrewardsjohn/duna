@@ -164,10 +164,10 @@ Added by PART-3 (28 November 2026) from [`participation.md`](participation.md) �
 
 | Step    | The person does → expected result                                                                                                     | Surface | Packages | Status  |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------- | ------- |
-| CO-15.1 | Sets the club's booking rule as a sentence → offerings without their own rule show "Club default"                                     | HQ      | PART-6   | Planned |
-| CO-15.2 | Picks "Clinic" on an offering and enters a price ladder → sees the cliff warning and the live preview                                 | HQ      | PART-6   | Planned |
+| CO-15.1 | Sets the club's booking rule as a sentence → offerings without their own rule show "Club default"                                     | HQ      | PART-6   | Main    |
+| CO-15.2 | Picks "Clinic" on an offering and enters a price ladder → sees the cliff warning and the live preview                                 | HQ      | PART-6   | Main    |
 | CO-15.3 | Opens Today → "At risk this week" lists a session with "Needs 2 by Thu 6:00 PM"                                                       | HQ      | PART-7   | Planned |
-| CO-15.4 | Cancels a thin session → strong confirmation restates people and refunds; the session shows "Cancelled"                               | HQ      | PART-7   | Planned |
+| CO-15.4 | Cancels a thin session → strong confirmation restates people and refunds; the session shows "Cancelled"                               | HQ      | PART-7   | Main    |
 | CO-15.5 | Asks Duna "make every clinic need 4 players" → a proposal card with before / after and affected sessions; nothing changes until saved | HQ      | PART-6   | Planned |
 
 ### CO-16 Look after the club's people
@@ -213,7 +213,7 @@ parents, gets paid. Mostly on the phone (Pro, Watch); plans in HQ.
 | CH-7.n | Runs coach mode and the 2D drill player on the phone or iPad                                                       | Pro        | M-R6            | Native  |
 | CH-8.1 | Opens Training on their programs                                                                                   | HQ         | H6              | Main    |
 | CH-8.2 | Opens a program's Roster and Schedule tabs (deep-linkable)                                                         | HQ         | H6, S3          | Planned |
-| CH-9.1 | Opens a session that needs players → Nudge opens a Send review with the share link (spec id CH-7.1; CH-7 is taken) | HQ, Pro    | PART-7, PART-12 | Planned |
+| CH-9.1 | Opens a session that needs players → Nudge opens a Send review with the share link (spec id CH-7.1; CH-7 is taken) | HQ, Pro    | PART-7, PART-12 | Main    |
 | CH-9.2 | Marks attendance with "Everyone's here" and one exception, offline → it sends when back online (spec id CH-7.2)    | Pro        | PART-12         | Native  |
 
 ### CH-10 The people I coach
@@ -263,7 +263,7 @@ watches the rating move, watches film, manages membership and wallet.
 | PL-1.1 | Opens Home → direct actions and Next up first, no layout jump                                      | Web           | P1              | Main    |
 | PL-1.2 | Searches by where, when and what (sheets open and close)                                           | Web           | P3, C6          | Main    |
 | PL-1.3 | Filters results to courts                                                                          | Web           | P3              | Main    |
-| PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                           | Web           | P3, C3          | Planned |
+| PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                           | Web           | SITE-4          | Main    |
 | PL-1.n | Finds play in the app: search sheet, list and map                                                  | Player        | M-P2            | Native  |
 | PL-2.1 | Opens a venue and picks day, time and duration (today: "Online rental details are coming soon.")   | Web           | P5              | Planned |
 | PL-2.2 | Adds friends to the booking                                                                        | Web           | P5              | Planned |

@@ -1,5 +1,11 @@
 import { expect, hq, test } from "./support/fixtures";
-import { expectPageReady, openHqArea } from "./support/moves";
+import {
+  expectPageReady,
+  expectToast,
+  openHqArea,
+  openObjectTab,
+  pressAndConfirm,
+} from "./support/moves";
 
 /**
  * Coach: journeys CH-1 … CH-8 of docs/plan/persona-journeys.md, on the web
@@ -9,10 +15,52 @@ import { expectPageReady, openHqArea } from "./support/moves";
 test.use({ persona: "coach" });
 
 test.describe("CH-1 Set availability", () => {
-  test.fixme("CH-1.1 Set weekly availability with effective dates [B3a, H5]", async () => {
-    // Expected: Team › me › Availability; autosaved draft; conflicts named.
+  async function openMyAvailability(page: Parameters<typeof openHqArea>[0]) {
+    await openHqArea(page, "Team");
+    await page
+      .getByRole("list", { name: "Team members" })
+      .getByRole("link", { name: /\(you\)/ })
+      .click();
+    await expectPageReady(page, "Mara Lewis");
+    await openObjectTab(page, "Availability");
+  }
+
+  test("CH-1.1 Set weekly availability with effective dates", async ({
+    page,
+  }) => {
+    await openMyAvailability(page);
+    await page.getByRole("button", { name: "New schedule" }).click();
+    await page.getByRole("textbox", { name: "Name" }).fill("Winter evenings");
+    await page.getByLabel("First day").first().fill("2026-12-01");
+    await page.getByRole("button", { name: "Add Tuesday evening" }).click();
+    await page.getByRole("button", { name: "Add Thursday evening" }).click();
+    await page.getByRole("button", { name: "Save as a draft" }).click();
+    await expect(
+      page.getByText("Winter evenings is saved as a draft"),
+    ).toBeVisible();
+    await pressAndConfirm(
+      page,
+      page.getByRole("button", { name: /^Use it from/ }),
+      "confirm",
+      { confirmButton: "Use Winter evenings" },
+    );
+    await expectToast(page, "Winter evenings is in use");
   });
-  test.fixme("CH-1.2 Add time off and a blackout, and see what it uncovers [B3a, H5]", async () => {});
+  test("CH-1.2 Add a blackout, and see what it uncovers", async ({ page }) => {
+    await openMyAvailability(page);
+    await expect(
+      page.getByRole("radio", { name: /I can't work/ }),
+    ).toBeChecked();
+    const form = page.getByRole("form", { name: "Add time away" });
+    await form.getByLabel("First day").fill("2026-12-20");
+    await pressAndConfirm(
+      page,
+      form.getByRole("button", { name: "Add the days" }),
+      "confirm",
+      { confirmButton: "Add the days" },
+    );
+    await expectToast(page, /booked sessions? needs? cover|No booked sessions/);
+  });
 });
 
 test.describe("CH-2 See today", () => {
@@ -67,7 +115,26 @@ test.describe("CH-5 Notes and messages", () => {
 });
 
 test.describe("CH-6 Get paid", () => {
-  test.fixme("CH-6.1 See my sessions, pay period and expected pay [H5, B3b]", async () => {});
+  test("CH-6.1 See my sessions, pay period and expected pay", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Team");
+    await page
+      .getByRole("navigation", { name: "Team" })
+      .getByRole("link", { name: "Your pay" })
+      .click();
+    await expectPageReady(page, "Mara Lewis");
+    await expect(
+      page.getByRole("heading", { name: "How you are paid" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "How you are paid" }),
+    ).toContainText("an hour for scheduled time");
+    await expect(page.getByText(/earned of/)).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Pay period" }),
+    ).toContainText("November");
+  });
   test.fixme("CH-6.2 Receive contractor payouts to my own account [B3c]", async () => {});
   test("CH-6.3 A coach who opens Money sees 'You need access', not an error page", async ({
     page,
@@ -109,7 +176,28 @@ test.describe("CH-8 Training programs", () => {
 });
 
 test.describe("CH-9 Group sessions that need players", () => {
-  test.fixme("CH-9.1 Opens a session that needs players; Nudge opens a Send review with the share link [PART-7, PART-12]", async () => {});
+  test("CH-9.1 Opens a session that needs players; Message the group opens a review with the share link (web step)", async ({
+    page,
+  }) => {
+    await page.goto(hq("/offerings/at-risk"));
+    await expectPageReady(page, "At risk this week");
+    await page
+      .getByRole("list", { name: "Sessions at risk this week" })
+      .getByRole("button", { name: /Saturday semi-private/ })
+      .click();
+    const panel = page.getByRole("dialog", { name: "Saturday semi-private" });
+    await panel.getByRole("button", { name: "Message the group" }).click();
+    await expect(panel.getByText("Nothing is sent from here")).toBeVisible();
+    await expect(
+      panel.getByRole("textbox", { name: "Message", exact: true }),
+    ).toHaveValue(/clubs\/.+\/products\/.+\?session=/);
+    await expect(
+      panel.getByRole("button", { name: "Copy the booking link" }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("link", { name: "Review in Inbox" }),
+    ).toHaveAttribute("href", /\/inbox\?compose=new/);
+  });
 });
 
 test.describe("CH-10 The people I coach", () => {

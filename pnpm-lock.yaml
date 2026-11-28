@@ -181,6 +181,9 @@ importers:
       '@duna/expo-device-posture':
         specifier: workspace:*
         version: link:../../packages/expo-device-posture
+      '@duna/league-engine':
+        specifier: workspace:*
+        version: link:../../packages/league-engine
       '@duna/messaging-client':
         specifier: workspace:*
         version: link:../../packages/messaging-client
@@ -553,6 +556,9 @@ importers:
       '@duna/pricing':
         specifier: workspace:*
         version: link:../../packages/pricing
+      '@duna/tideline-core':
+        specifier: workspace:*
+        version: link:../../packages/tideline-core
       '@duna/ui':
         specifier: workspace:*
         version: link:../../packages/ui

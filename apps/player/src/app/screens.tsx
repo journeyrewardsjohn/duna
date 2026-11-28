@@ -12,7 +12,6 @@ import type { ReactNode } from "react";
 import { HealthScreen } from "../../health-screen";
 import { PlayerMessagingScreen } from "../../messaging-screen";
 import { ProfileHubScreen } from "../../profile-hub";
-import { ScoreUploadScreen } from "../../score-upload";
 import { PlayerTrainingScreen } from "../../training-screen";
 import { PlansScreen } from "../features/calendar/PlansScreen";
 import { FindCoachScreen } from "../features/coaches/FindCoachScreen";
@@ -20,6 +19,9 @@ import { CourtTimesScreen } from "../features/find/CourtTimesScreen";
 import { SessionDetailScreen } from "../features/find/SessionDetailScreen";
 import { PredictionPortfolioScreen } from "../features/predictions/PredictionPortfolioScreen";
 import { PerformanceScreen } from "../features/profile/PerformanceScreen";
+import { RatingHomeScreen } from "../features/rating/RatingHomeScreen";
+import { AddResultScreen } from "../features/score/AddResultScreen";
+import { ResultScreen } from "../features/score/ResultScreen";
 import { WalletScreen } from "../features/wallet/WalletScreen";
 import { colors, rgba } from "../shared/palette";
 import { AccountScreen } from "./AccountScreen";
@@ -65,19 +67,20 @@ export const SCREENS = {
       onTraining={() => shell.open("training")}
     />
   ),
-  score: (_entry, shell) => (
-    <ScoreUploadScreen
-      initialPlayedAt={shell.watchScoreDraft?.capturedAt}
-      initialSets={shell.watchScoreDraft?.sets}
-      key={shell.watchScoreDraft?.draftId ?? "score-upload"}
-      onComplete={() => shell.open("performance")}
-      palette={colors}
+  score: (entry, shell) => (
+    <AddResultScreen
+      draft={shell.scoreDraft}
+      key={`${shell.scoreDraft?.id ?? "add-result"}-${entry.nonce}`}
     />
   ),
-  performance: (_entry, shell) => (
+  result: (entry) => <ResultScreen key={entry.targetId ?? "result"} />,
+  // The scorekeeper covers the window; `DunaApp` renders it.
+  live: () => null,
+  performance: () => <RatingHomeScreen />,
+  insights: (_entry, shell) => (
     <PerformanceScreen
       onArtwork={shell.openArtwork}
-      onBack={() => shell.back("improve")}
+      onBack={() => shell.open("performance")}
       onEditProfile={shell.editProfile}
       onHealth={() => shell.open("health")}
       onPredictions={() => shell.open("predictions")}
@@ -119,9 +122,7 @@ export const SCREENS = {
   // Ask Duna stays mounted for the whole session (its conversation survives);
   // `DunaApp` renders it over the window.
   ai: () => null,
-  wallet: (_entry, shell) => (
-    <WalletScreen onClose={() => shell.back("connect")} />
-  ),
+  wallet: () => <WalletScreen />,
   predictions: (_entry, shell) => (
     <PredictionPortfolioScreen onBack={() => shell.open("wallet")} />
   ),

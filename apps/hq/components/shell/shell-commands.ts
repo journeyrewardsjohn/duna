@@ -61,13 +61,6 @@ const create: readonly ShellCommand[] = [
     keywords: ["member", "player", "guardian", "invite"],
   },
   {
-    value: `go:${hqHref("teamInvite")}`,
-    label: "Invite a team member",
-    group: "Create",
-    icon: "partner",
-    keywords: ["coach", "staff"],
-  },
-  {
     value: `go:${hqHref("inboxCreate")}`,
     label: "Send an update",
     group: "Create",
@@ -157,6 +150,77 @@ const people: readonly ShellCommand[] = [
   },
 ];
 
+/** Team (H-TEAM): inviting, cover and pay, by the words people use. */
+const team: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("teamInvite")}`,
+    label: "Invite a coach",
+    group: "Team",
+    icon: "user-plus",
+    keywords: ["staff", "team member", "manager", "front desk", "invite"],
+  },
+  {
+    value: `go:${hqHref("teamCoverage")}?at=thu-18`,
+    label: "Who is free Thursday at 6?",
+    group: "Team",
+    icon: "schedule",
+    keywords: ["available", "free", "cover", "substitute", "coach"],
+  },
+  {
+    value: `go:${hqHref("teamCoverage")}`,
+    label: "Find cover for a session",
+    group: "Team",
+    icon: "coach",
+    keywords: ["coverage", "substitute", "sick", "time off", "gap"],
+  },
+  {
+    value: `go:${hqHref("teamPay")}`,
+    label: "Run team pay",
+    group: "Team",
+    icon: "wallet",
+    keywords: ["payroll", "pay run", "export", "coaches pay"],
+  },
+];
+
+/** Offerings (H-OFFER): group sessions and the club's booking rule by name. */
+const offerings: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("offeringsAtRisk")}`,
+    label: "Sessions at risk this week",
+    group: "Offerings",
+    icon: "users",
+    keywords: ["needs players", "minimum", "cancel", "merge", "clinic"],
+  },
+  {
+    value: `go:${hqHref("offeringsSettings")}`,
+    label: "Set the club's booking rule",
+    group: "Offerings",
+    icon: "policy",
+    keywords: ["minimum", "group size", "players", "decide", "default"],
+  },
+  {
+    value: `go:${hqHref("offeringCreate")}?kind=services&template=clinic`,
+    label: "New clinic",
+    group: "Offerings",
+    icon: "clinic",
+    keywords: ["group", "lesson", "class"],
+  },
+  {
+    value: `go:${hqHref("offeringCreate")}?kind=plans&template=membership`,
+    label: "New membership",
+    group: "Offerings",
+    icon: "member-card",
+    keywords: ["monthly", "plan", "subscription"],
+  },
+  {
+    value: `go:${hqHref("offeringCreate")}?kind=plans&template=credit-pack`,
+    label: "New credit pack",
+    group: "Offerings",
+    icon: "credit-pack",
+    keywords: ["credits", "pack", "bundle"],
+  },
+];
+
 /** Club setup (H-SETUP): Duna reading the club's website, and its identity. */
 const setup: readonly ShellCommand[] = [
   {
@@ -226,6 +290,8 @@ export const shellCommands: readonly ShellCommand[] = [
   ...create,
   ...money,
   ...people,
+  ...team,
+  ...offerings,
   ...setup,
   ...run,
 ];
