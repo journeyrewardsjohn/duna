@@ -616,8 +616,14 @@ export async function ensurePayObligationsForFund(input: {
     ),
   );
   const weights = items.map((item) => item.totalAmountMinor);
-  const applicationFeeMinor =
-    fund.consumerFeeMinor + fund.processingFeeMinor + fund.organizationFeeMinor;
+  // Proceeds never exceed what the processor view says the club netted
+  // (`net_minor`, after tax): when the fee estimate is lower than the actual
+  // deduction, the difference is treated as fee. This keeps every obligation
+  // at or below what the pre-obligation rail would have paid for this charge.
+  const applicationFeeMinor = Math.max(
+    fund.consumerFeeMinor + fund.processingFeeMinor + fund.organizationFeeMinor,
+    fund.grossMinor - fund.taxMinor - fund.netMinor,
+  );
   const grossShares = proportional(fund.grossMinor, weights);
   const feeShares = proportional(
     Math.min(applicationFeeMinor, fund.grossMinor),

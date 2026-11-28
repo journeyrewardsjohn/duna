@@ -504,15 +504,11 @@ export async function loadObligationPlan(
         )
       : 0;
   const refundedGrossMinor = fund ? share(fund.refundedMinor) : 0;
-  // A processor refund before funding records exist: the proceeds share,
-  // rounded up so the organisation is never paid a refunded cent.
-  const refundedFromFund =
-    obligation.grossMinor > 0
-      ? Math.ceil(
-          (refundedGrossMinor * obligation.proceedsMinor) /
-            obligation.grossMinor,
-        )
-      : 0;
+  // A processor refund before funding records exist (pull request 2 adds
+  // them): the whole refunded amount comes off the club's proceeds, as the
+  // pre-obligation rail did (net − refunded). Conservative: the club is
+  // never paid a refunded cent, and never more than the old rail paid.
+  const refundedFromFund = refundedGrossMinor;
   const refundedProceedsMinor = Math.min(
     obligation.proceedsMinor,
     Math.max(refundedFromFund, Number(fundedRefunds[0]?.total ?? 0)),

@@ -289,8 +289,9 @@ describe("Duna Pay release job", () => {
     await processAutomaticOrganizationPayouts(
       new Date("2026-12-11T09:00:00.000Z"),
     );
-    // 1075 of 4300 gross refunded → 960 of 3840 proceeds (rounded up).
-    expect(state.payoutCalls[0]!.amountMinor).toBe(2880);
+    // Until refund funding records exist (PR 2) the whole refund comes off
+    // the proceeds, exactly as the old rail did: 3840 − 1075.
+    expect(state.payoutCalls[0]!.amountMinor).toBe(2765);
   });
 
   it("a failed payout returns its tranches and reverses the journal, once", async () => {
@@ -313,6 +314,120 @@ describe("Duna Pay release job", () => {
       `select count(*)::int as count from ledger_journals where source_type = 'payout'`,
     );
     expect(journals[0]!.count).toBe(2);
+    expect(await ledgerImbalance()).toBe(0);
+  });
+});
+
+describe("first run after deploy: legacy fund schedules", () => {
+  /** A sale made under the old rail: a fund schedule and no obligation. */
+  async function legacySale(
+    n: number,
+    sale: {
+      readonly sessionStatus?: string;
+      readonly endsAt: string;
+      readonly fundStatus: string;
+      readonly netMinor: number;
+      readonly refundedMinor?: number;
+      readonly balanceTransaction?: boolean;
+    },
+  ) {
+    const hex = n.toString(16).padStart(4, "0");
+    const id = (prefix: string) =>
+      `${prefix}000000-0000-4000-8000-00000000${hex}`;
+    const startsAt = new Date(
+      new Date(sale.endsAt).getTime() - 2 * 3_600_000,
+    ).toISOString();
+    const txn =
+      sale.balanceTransaction === false ? "NULL" : `'txn_legacy_${n}'`;
+    await pg.exec(`
+      INSERT INTO sessions (id, title, slug, starts_at, ends_at, timezone, status, capacity)
+        VALUES ('${id("a1")}', 'Legacy ${n}', 'legacy-${n}', '${startsAt}', '${sale.endsAt}', 'UTC', '${sale.sessionStatus ?? "published"}', 8);
+      INSERT INTO orders (id, organization_id, buyer_person_id, status, currency, subtotal_minor, total_minor, idempotency_key, created_at)
+        VALUES ('${id("a2")}', '${ids.org}', '${ids.buyer}', 'paid', 'USD', 4000, 4000, 'legacy-${n}', '${paidAt}');
+      INSERT INTO order_items (id, order_id, kind, reference_id, description, quantity, unit_amount_minor, total_amount_minor)
+        VALUES ('${id("a3")}', '${id("a2")}', 'registration', '${id("a1")}', 'Legacy ${n}', 1, 4000, 4000);
+      INSERT INTO registrations (session_id, person_id, status, eligibility_decision, order_id)
+        VALUES ('${id("a1")}', '${ids.buyer}', 'confirmed', '{}'::jsonb, '${id("a2")}');
+      INSERT INTO payments (id, order_id, method, amount_minor, currency, status, stripe_charge_id, created_at)
+        VALUES ('${id("a4")}', '${id("a2")}', 'online-card', 4000, 'USD', 'succeeded', 'ch_legacy_${n}', '${paidAt}');
+      INSERT INTO payment_fund_schedules (organization_id, order_id, payment_id, stripe_balance_transaction_id, policy_name, policy_mode, refund_before_minutes, processor_available_at, available_at, gross_minor, consumer_fee_minor, net_minor, refunded_minor, currency, status, created_at)
+        VALUES ('${ids.org}', '${id("a2")}', '${id("a4")}', ${txn}, 'Flexible · 24 hours', 'refundable', 1440, '${settledAt}', '${settledAt}', 4000, 100, ${sale.netMinor}, ${sale.refundedMinor ?? 0}, 'USD', '${sale.fundStatus}', '${paidAt}');
+    `);
+  }
+
+  it("creates obligations on first sight; delivered sales pay, others wait, cancelled pay nothing, never more than the old rail", async () => {
+    await pg.exec(
+      `DELETE FROM payment_fund_schedules; DELETE FROM payments; DELETE FROM registrations; DELETE FROM order_items; DELETE FROM orders; DELETE FROM sessions;`,
+    );
+    const now = new Date("2026-12-11T09:00:00.000Z");
+    const delivered = "2026-12-05T19:00:00.000Z";
+    const future = "2026-12-20T19:00:00.000Z";
+    const sales = [
+      { endsAt: delivered, fundStatus: "available", netMinor: 3_700 }, // pays 3700
+      { endsAt: delivered, fundStatus: "available", netMinor: 3_500 }, // fee estimate (100) lower than actual: capped at net 3500
+      {
+        endsAt: delivered,
+        fundStatus: "available",
+        netMinor: 3_700,
+        refundedMinor: 1_000,
+      }, // pays 2700
+      { endsAt: future, fundStatus: "available", netMinor: 3_700 }, // waits (old rail would have paid)
+      {
+        endsAt: delivered,
+        sessionStatus: "cancelled",
+        fundStatus: "available",
+        netMinor: 3_700,
+      }, // nothing
+      {
+        endsAt: delivered,
+        fundStatus: "available",
+        netMinor: 3_700,
+        balanceTransaction: false,
+      }, // unsettled: waits, as before
+      { endsAt: delivered, fundStatus: "paid-out", netMinor: 3_700 }, // already paid: never touched
+      { endsAt: delivered, fundStatus: "payout-pending", netMinor: 3_700 }, // already paid: never touched
+      { endsAt: delivered, fundStatus: "available", netMinor: 3_700 }, // pays 3700
+      { endsAt: delivered, fundStatus: "available", netMinor: 3_700 }, // pays 3700
+    ];
+    for (const [index, sale] of sales.entries())
+      await legacySale(index + 1, sale);
+    // The old rail's payout: every available fund with a balance transaction, net − refunded.
+    const [old] = await rows<{ total: number }>(`
+      select coalesce(sum(net_minor - refunded_minor - disputed_minor), 0)::int as total
+      from payment_fund_schedules where status = 'available' and stripe_balance_transaction_id is not null`);
+
+    const result = await processAutomaticOrganizationPayouts(now);
+    expect(result.release.obligationsCreated).toBe(8);
+    expect(result.release.failures).toBe(0);
+    expect(state.payoutCalls).toHaveLength(1);
+    expect(state.payoutCalls[0]!.amountMinor).toBe(
+      3_700 + 3_500 + 2_700 + 3_700 + 3_700,
+    );
+    expect(state.payoutCalls[0]!.amountMinor).toBeLessThanOrEqual(old!.total);
+    const statuses = await rows<{ status: string; count: number }>(
+      `select status, count(*)::int as count from pay_obligations group by status order by status`,
+    );
+    expect(statuses).toEqual([
+      { status: "awaiting-delivery", count: 1 },
+      { status: "cancelled", count: 1 },
+      { status: "partially-refunded", count: 1 },
+      { status: "pending-settlement", count: 1 },
+      { status: "released", count: 4 },
+    ]);
+    const [untouched] = await rows<{ count: number }>(`
+      select count(*)::int as count from payment_fund_schedules f
+      where f.status in ('paid-out') and exists (select 1 from pay_obligations o where o.fund_schedule_id = f.id)`);
+    expect(untouched!.count).toBe(0);
+
+    // Running again (next hour, next day) creates and pays nothing more.
+    await processAutomaticOrganizationPayouts(
+      new Date("2026-12-11T10:00:00.000Z"),
+    );
+    const again = await processAutomaticOrganizationPayouts(
+      new Date("2026-12-12T09:00:00.000Z"),
+    );
+    expect(again.release.obligationsCreated).toBe(0);
+    expect(state.payoutCalls).toHaveLength(1);
     expect(await ledgerImbalance()).toBe(0);
   });
 });
