@@ -29,6 +29,33 @@ export class PlacesNotConfiguredError extends Error {
   }
 }
 
+/** Over the visitor's search budget (HTTP 429): wait a few seconds. */
+export class PlacesRateLimitedError extends Error {
+  readonly retryAfterSeconds: number;
+  constructor(retryAfterSeconds: number) {
+    super("Lots of searches just now. Try again in a few seconds.");
+    this.name = "PlacesRateLimitedError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+function rateLimited(response: Response): PlacesRateLimitedError {
+  const retryAfter = Number(response.headers.get("retry-after"));
+  return new PlacesRateLimitedError(
+    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 5,
+  );
+}
+
+/**
+ * One provider session per open picker: every keystroke and the place chosen
+ * are billed together. Start a new one after a place is chosen.
+ */
+export function newPlacesSession(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+}
+
 /** A request failed; `reference` is the request id support can look up. */
 export class SearchRequestError extends Error {
   readonly reference?: string;
@@ -45,13 +72,18 @@ export const PLACES_MIN_LENGTH = 3;
 export async function fetchPlaceSuggestions(
   query: string,
   signal: AbortSignal,
+  session?: string,
 ): Promise<PlaceSuggestion[]> {
   if (query.trim().length < PLACES_MIN_LENGTH) return [];
+  const sessionParameter = session
+    ? `&session=${encodeURIComponent(session)}`
+    : "";
   const response = await fetch(
-    `/api/places/autocomplete?q=${encodeURIComponent(query.trim())}`,
+    `/api/places/autocomplete?q=${encodeURIComponent(query.trim())}${sessionParameter}`,
     { signal },
   );
   if (response.status === 503) throw new PlacesNotConfiguredError();
+  if (response.status === 429) throw rateLimited(response);
   if (!response.ok) {
     throw new SearchRequestError(
       "Place search didn’t answer.",
@@ -67,11 +99,16 @@ export async function fetchPlaceSuggestions(
 /** Turns a chosen suggestion into a point to search around. */
 export async function fetchPlaceDetails(
   suggestion: PlaceSuggestion,
+  session?: string,
 ): Promise<Extract<WhereChoice, { kind: "place" }>> {
+  const sessionParameter = session
+    ? `&session=${encodeURIComponent(session)}`
+    : "";
   const response = await fetch(
-    `/api/places/details?placeId=${encodeURIComponent(suggestion.placeId)}`,
+    `/api/places/details?placeId=${encodeURIComponent(suggestion.placeId)}${sessionParameter}`,
   );
   if (response.status === 503) throw new PlacesNotConfiguredError();
+  if (response.status === 429) throw rateLimited(response);
   const payload = (await response.json().catch(() => ({}))) as {
     readonly name?: string;
     readonly address?: string;
@@ -95,6 +132,7 @@ export async function fetchPlaceDetails(
     latitude: payload.latitude,
     longitude: payload.longitude,
     source: "places",
+    placeId: suggestion.placeId,
   };
 }
 
