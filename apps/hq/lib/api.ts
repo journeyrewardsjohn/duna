@@ -5,6 +5,7 @@ import {
   createCaller,
   isWorkOSAuthKitConfigured,
 } from "@duna/api";
+import { requestIdFromHeaders } from "@duna/observability";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { headers } from "next/headers";
 import { cache } from "react";
@@ -27,7 +28,7 @@ export const getServerContext = cache(async () => {
     headers: requestHeaders,
   });
   const contextInput = {
-    requestId: requestHeaders.get("x-request-id") ?? crypto.randomUUID(),
+    requestId: requestIdFromHeaders(requestHeaders),
     ipAddress: forwardedFor?.split(",")[0]?.trim(),
     userAgent: requestHeaders.get("user-agent") ?? undefined,
   };

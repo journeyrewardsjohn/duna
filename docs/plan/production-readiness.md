@@ -180,9 +180,21 @@ EAS org `journey-rewards-inc`, projects `duna-player` (id 87615942-8a2d-47e3-9dc
 
 Repo `journeyrewardsjohn/duna`. Workflows `verify.yml` (web gate + native export) and `sand-sync.yml` (cron calls to HQ). Secret `DUNA_CRON_SECRET` is the only workflow secret referenced.
 
-### 1.29 Observability (declared, not wired)
+### 1.29 Observability
 
-`SENTRY_AUTH_TOKEN`, `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_POSTHOG_KEY`, `AXIOM_TOKEN` appear in `.env.example` / `turbo.json` / docs, but no `@sentry/*`, `posthog-js` or Axiom package or call exists in `apps/` or `packages/`. Docs list them as production credentials; today there is no error tracking or analytics at all (finding).
+Updated by O1 (`docs/OBSERVABILITY.md`). Structured JSON logging with enforced redaction and request ids is always on (Duna Hosting collects stdout/stderr; no provider needed). PostHog and Axiom remain declared only (`NEXT_PUBLIC_POSTHOG_KEY`, `AXIOM_TOKEN`): no code reads them.
+
+### 1.30 Sentry (error reporting)
+
+| Field                  | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Used for               | Error reporting for Web and HQ (browser, server, edge) through `@sentry/nextjs` 11.18.0 and the `@duna/observability` reporter; mobile later (see `docs/OBSERVABILITY.md`, Mobile). Registry key `sentry` in `packages/core/src/providers.ts`; `admin.readiness.providers` shows `not-configured` until a DSN is set. Errors are logged either way.                                                                                                     |
+| Env names              | Runtime: `NEXT_PUBLIC_SENTRY_DSN` (client and server; the server also accepts `SENTRY_DSN`), optional `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_SAMPLE_RATE` (default 1), `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` (default 0). Build time (source maps): `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` (upload runs only when all three are set). Logging: `DUNA_LOG_LEVEL`, `DUNA_LOG_FORMAT` (optional). Read by apps/web, apps/hq. |
+| Test vs live           | None in code. Use separate Sentry environments (the hosting environment name is sent) or separate projects for Preview.                                                                                                                                                                                                                                                                                                                                 |
+| Callbacks to register  | None. Optional: allowed domains `duna.coach`, `hq.duna.coach` on each Sentry project.                                                                                                                                                                                                                                                                                                                                                                   |
+| Other provider setup   | Sentry organisation; projects for Web and HQ (Next.js); an organisation auth token for source maps; Sentry DPA signed; data scrubber on, IP storage off, retention set; alert rules (see `docs/OBSERVABILITY.md`, Alerting).                                                                                                                                                                                                                            |
+| Privacy posture (code) | `sendDefaultPii: false`, no session replay, no local variables, no console or click breadcrumbs, request bodies/cookies/query strings/headers stripped, user = internal person id only, same redaction as the logs in `beforeSend` / `beforeSendSpan` / `beforeBreadcrumb`, Sentry build telemetry off.                                                                                                                                                 |
+| Production state       | Not configured (no DSN in either Vercel project as far as the repo shows). `SENTRY_AUTH_TOKEN` and `NEXT_PUBLIC_SENTRY_DSN` were already in `.env.example`; `SENTRY_DSN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `DUNA_LOG_LEVEL`, `DUNA_LOG_FORMAT` were added to `turbo.json` pass-through; add them to `docs/ENVIRONMENT_VARIABLES.md` and `.env.example` through their owner.                                                                              |
 
 ---
 
@@ -231,7 +243,7 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
 2. `RESEND_FROM_EMAIL` is missing in web Production, so transactional email (invites, waivers, receipts) is not sent even though `RESEND_API_KEY` exists.
 3. Sendblue/iMessage was never provisioned and its four env names are not in `.env.example`; WhatsApp has no code.
 4. WorkOS client id is committed in `eas.json` for every profile; moving to WorkOS production means a commit plus new builds. Production Vercel is on WorkOS staging per the docs.
-5. Sentry, PostHog, Axiom, Knock are listed as launch credentials but have no code behind them. Twilio has no sender.
+5. PostHog, Axiom, Knock are listed as launch credentials but have no code behind them (Sentry is wired since O1 and waits for a DSN). Twilio has no sender.
 6. Universal links, privacy manifest, Sign in with Apple, and `submit.production` ascAppId are all absent.
 7. Stripe webhook is single-endpoint, single-secret, v1 snapshot events only; Accounts v2 thin events and several Connect events (`capability.updated`, deauthorize, `transfer.*`) are unhandled.
 8. `.env.example` ships `SENT_DM_SANDBOX=true`, `DUNA_WALLET_CASH_ENABLED=false`, `NEXT_PUBLIC_DEMO_MODE=true`; copying it to production silently keeps sandbox/demo behaviour. `NEXT_PUBLIC_DEMO_MODE` and `DUNA_DATA_SOURCE` are set in web Production (values unknown): confirm `false` and `database`.
@@ -322,7 +334,11 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
 
 ### Observability
 
-53. [RBL] Decide on error tracking: nothing is wired. Create Sentry/PostHog/Axiom projects only after engineering adds the SDKs; set `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `NEXT_PUBLIC_POSTHOG_KEY`, `AXIOM_TOKEN` then.
+53. [RBL] Sentry is wired (O1): create a Sentry organisation and projects for Web and HQ, sign the DPA, then set `NEXT_PUBLIC_SENTRY_DSN` in `duna-web` and `duna-hq` (Production, and Preview if wanted) and redeploy; confirm `admin.readiness.providers` shows `sentry` configured.
+    53a. [REC] Readable stack traces: set `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` in both Vercel projects (build time).
+    53b. [REC] In Sentry: data scrubber on, IP storage off, retention matching the privacy policy, and the alert rules in `docs/OBSERVABILITY.md`.
+    53c. [REC] A log drain (or Vercel log alerts) on `"level":"error"`, `provider.call.failed` and `client.crash.fatal`.
+    53d. [RFF] PostHog and Axiom have no code; decide whether they are needed before creating accounts.
 
 ### Apple (App Store Connect, Developer portal, EAS)
 

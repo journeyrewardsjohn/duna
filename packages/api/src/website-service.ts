@@ -12,7 +12,9 @@ import {
 } from "@duna/db";
 import { and, desc, eq, inArray, lt, or, sql, isNull } from "drizzle-orm";
 import { z } from "zod";
+import { report } from "@duna/observability";
 import type { ApiActor } from "./context";
+import { withProviderCall } from "./observability";
 import { loadOperatorWorkspace } from "./operator-service";
 import {
   assertWebsiteActor,
@@ -334,11 +336,13 @@ async function websiteSources(site: typeof websiteSites.$inferSelect) {
   const crawler = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY });
   return Promise.all(
     urls.map(async (url, index) => {
-      const result = await crawler.scrape(validateWebsiteSource(url), {
-        formats: ["markdown"],
-        onlyMainContent: true,
-        timeout: 20000,
-      });
+      const result = await withProviderCall("siteReader", "scrape", () =>
+        crawler.scrape(validateWebsiteSource(url), {
+          formats: ["markdown"],
+          onlyMainContent: true,
+          timeout: 20000,
+        }),
+      );
       return {
         url,
         purpose:
@@ -484,9 +488,9 @@ export async function processWebsiteRevision(revisionId: string) {
   } catch (error) {
     await finishWebsiteRevision(revision, undefined);
 
-    console.error("Website generation failed", {
-      revisionId: revision.id,
-      errorType: error instanceof Error ? error.name : "UnknownError",
+    report(error, {
+      event: "website.revision.failed",
+      fields: { revisionId: revision.id },
     });
   }
 }

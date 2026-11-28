@@ -1,5 +1,9 @@
 import { TRPCError, initTRPC } from "@trpc/server";
 import type { ApiContext } from "./context";
+import {
+  formatObservedErrorShape,
+  observeProcedure,
+} from "./observability/trpc";
 import { consumeRateLimit } from "./rate-limit";
 
 export interface ProcedurePolicy {
@@ -11,7 +15,10 @@ export const t = initTRPC
   .context<ApiContext>()
   .meta<ProcedurePolicy>()
   .create({
-    errorFormatter({ shape, error }) {
+    errorFormatter({ shape, error, ctx }) {
+      // Every error carries `data.requestId`; unexpected failures get a safe
+      // message with the reference (observability/trpc.ts).
+      const observed = formatObservedErrorShape(shape, error, ctx);
       // Duna Health refusals carry a typed reason the app can render
       // (services/health/policy.ts HealthRefusalReason). Nothing else is added.
       const cause = error.cause as { healthReason?: unknown } | undefined;
@@ -20,13 +27,20 @@ export const t = initTRPC
           ? cause.healthReason
           : undefined;
       return healthReason
-        ? { ...shape, data: { ...shape.data, healthReason } }
-        : shape;
+        ? { ...observed, data: { ...observed.data, healthReason } }
+        : observed;
     },
   });
 
 export const router = t.router;
 export const createCallerFactory = t.createCallerFactory;
+
+/**
+ * Every procedure starts here: one log line per call with path, type,
+ * duration, result code, request / actor / organisation ids (never input),
+ * and unexpected failures reported once.
+ */
+const observedProcedure = t.procedure.use((opts) => observeProcedure(opts));
 
 export interface RateLimitPolicy {
   readonly id: string;
@@ -61,7 +75,7 @@ export function rateLimitMiddleware(policy: RateLimitPolicy) {
   });
 }
 
-export const publicProcedure = t.procedure.use(
+export const publicProcedure = observedProcedure.use(
   rateLimitMiddleware({
     id: "public",
     capacity: 300,
@@ -77,7 +91,7 @@ const requireActor = t.middleware(({ ctx, next }) => {
   return next({ ctx: { ...ctx, actor: ctx.actor } });
 });
 
-export const protectedProcedure = t.procedure.use(requireActor).use(
+export const protectedProcedure = observedProcedure.use(requireActor).use(
   rateLimitMiddleware({
     id: "authenticated",
     capacity: 180,
