@@ -194,6 +194,68 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Component gallery (docs/OPERATIONS.md, "Component gallery end-to-end"):
+  # builds HQ once and runs only the Tideline specs against /tideline, which
+  # exists only with TIDELINE_GALLERY=1 (read per request, so the build is the
+  # normal production build). Those specs skip themselves in build-and-e2e.
+  gallery-e2e:
+    name: gallery-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_HQ_URL: http://127.0.0.1:3001
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo/cache
+            node_modules/.cache/turbo
+            apps/hq/.next/cache
+          key: turbo-gallery-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-gallery-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install test browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build HQ agent
+        run: pnpm --filter @duna/hq build:agent
+
+      - name: Build HQ
+        run: pnpm --filter @duna/hq build
+
+      - name: Gallery browser tests
+        run: pnpm test:e2e:gallery
+
+      - name: Save browser QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gallery-qa
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Stable required check: succeeds only when every split job succeeded.
   release-gate:
     name: release-gate
@@ -202,6 +264,7 @@ jobs:
       - static-checks
       - unit-tests
       - build-and-e2e
+      - gallery-e2e
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -210,9 +273,10 @@ jobs:
           STATIC_CHECKS: ${{ needs.static-checks.result }}
           UNIT_TESTS: ${{ needs.unit-tests.result }}
           BUILD_AND_E2E: ${{ needs.build-and-e2e.result }}
+          GALLERY_E2E: ${{ needs.gallery-e2e.result }}
         run: |
-          echo "static-checks=$STATIC_CHECKS unit-tests=$UNIT_TESTS build-and-e2e=$BUILD_AND_E2E"
-          if [ "$STATIC_CHECKS" != "success" ] || [ "$UNIT_TESTS" != "success" ] || [ "$BUILD_AND_E2E" != "success" ]; then
+          echo "static-checks=$STATIC_CHECKS unit-tests=$UNIT_TESTS build-and-e2e=$BUILD_AND_E2E gallery-e2e=$GALLERY_E2E"
+          if [ "$STATIC_CHECKS" != "success" ] || [ "$UNIT_TESTS" != "success" ] || [ "$BUILD_AND_E2E" != "success" ] || [ "$GALLERY_E2E" != "success" ]; then
             echo "::error::A verification job did not succeed."
             exit 1
           fi
