@@ -1222,7 +1222,7 @@ export async function cancelCatalogSessionBooking(input: {
         kind: "late-cancel-final-price",
         credits: 0,
         amountMinor: 0,
-        createdAt: input.now,
+        // Database time, like the bookings that may refill the place.
       })
       .onConflictDoNothing();
   }

@@ -81,6 +81,10 @@ import {
   legalPublicRouter,
 } from "./routers/legal";
 import {
+  participationOperatorRouter,
+  participationPlayerRouter,
+} from "./routers/participation";
+import {
   accountDeletionReadinessSchema,
   adminOrganizationDetailSchema,
   adminOverviewSchema,
@@ -8539,6 +8543,7 @@ const playerRouter = router({
   fees: feesPlayerRouter,
   households: householdsPlayerRouter,
   legal: legalPlayerRouter,
+  participation: participationPlayerRouter,
 });
 
 const operatorRouter = router({
@@ -14073,6 +14078,7 @@ const operatorRouter = router({
   // W3-0 seams (schema steward): platform fees, organisation terms.
   fees: feesOperatorRouter,
   legal: legalOperatorRouter,
+  participation: participationOperatorRouter,
 });
 
 const agentConfirmationSchema = z.object({

@@ -10,6 +10,7 @@ import {
   ledgerJournals,
   orders,
   organizationCreditApplications,
+  participationAttendance,
   participationDecisions,
   organizationCreditGrants,
   organizationWallets,
@@ -42,6 +43,7 @@ import { refundOrganizationOrder } from "./catalog-service";
 import type { ApiActor } from "./context";
 import {
   bookerNotices,
+  catalogSessionPicture,
   decisionRule,
   effectiveLockAt,
   ensureCatalogDecision,
@@ -889,7 +891,7 @@ export async function evaluateCatalogSessionParticipation(input: {
       decidedLate || forcedRun ? "run-under-minimum" : decided;
     // Claiming the decision in one statement means two concurrent runs cannot
     // both decide; the loser re-reads what the winner recorded.
-    await database
+    const claimed = await database
       .update(participationDecisions)
       .set({
         outcome,
@@ -905,15 +907,15 @@ export async function evaluateCatalogSessionParticipation(input: {
           eq(participationDecisions.id, decision.id),
           isNull(participationDecisions.outcome),
         ),
-      );
+      )
+      .returning({ id: participationDecisions.id });
     decision = (await loadDecision(occurrence.id)) ?? decision;
     if (!decision.outcome || decision.outcome === "cancelled-by-club") {
       return { occurrenceId: occurrence.id, status: "no-rules", ...empty };
     }
-    const won =
-      decision.decidedAt?.getTime() === input.now.getTime() &&
-      decision.outcome === outcome &&
-      decision.decidedGroupSize === headcount;
+    // Only the run whose conditional update claimed the decision audits,
+    // notifies and logs it.
+    const won = claimed.length > 0;
     // The payments model reads the occurrence columns: mirror the decision.
     await database
       .update(catalogSessionOccurrences)
@@ -1338,6 +1340,9 @@ export interface OperatorCatalogSessionOccurrence {
     readonly settlementBasis: "cutoff" | "attendance";
     readonly decidedAt?: string;
     readonly settledAt?: string;
+    /** PART: with `payments:read` only. */
+    readonly atStakeCredits?: number;
+    readonly atStakeMinor?: number;
   };
   readonly bookings: readonly {
     readonly fulfillmentId: string;
@@ -1405,10 +1410,31 @@ export async function loadOperatorCatalogSessionOccurrences(input: {
     const confirmedCount = bookings
       .filter((booking) => booking.confirmed)
       .reduce((total, booking) => total + booking.quantity, 0);
-    const rules = catalogItemParticipationRules(
-      item.configuration,
-      occurrence.capacity,
+    // The snapshot rule, the engine's lock and the same confirmed count as
+    // capacity (participation.md §15).
+    const picture = await catalogSessionPicture({
+      occurrence,
+      item,
+      now: input.now,
+    });
+    const attendance = await database
+      .select()
+      .from(participationAttendance)
+      .where(
+        inArray(
+          participationAttendance.bookingId,
+          bookings.length > 0
+            ? bookings.map((booking) => booking.fulfillment.id)
+            : ["00000000-0000-4000-8000-000000000000"],
+        ),
+      );
+    const attendanceById = new Map(
+      attendance.map((row) => [row.bookingId, row.status]),
     );
+    const seesMoney =
+      input.actor.scopes.includes("*") ||
+      input.actor.scopes.includes("payments:read");
+    const confirmedBookings = bookings.filter((booking) => booking.confirmed);
     results.push({
       id: occurrence.id,
       catalogItemId: item.id,
@@ -1422,22 +1448,25 @@ export async function loadOperatorCatalogSessionOccurrences(input: {
           : "scheduled",
       capacity: occurrence.capacity,
       confirmedCount,
-      participation: rules
+      participation: picture
         ? {
-            ...occurrenceParticipationState({
-              rules,
-              occurrence,
-              bookedCount: confirmedCount,
-              openedAt: participationOpenedAt({
-                occurrenceCreatedAt: occurrence.createdAt,
-                itemPublishedAt: item.publishedAt,
-                configuration: item.configuration,
-              }),
-            }),
-            minimumPolicy: rules.minimumPolicy,
-            settlementBasis: rules.settlementBasis,
+            ...picture.state,
+            minimumPolicy: picture.rule.minimumPolicy,
+            settlementBasis: picture.rule.legacySettlementBasis ?? "cutoff",
             decidedAt: occurrence.participationDecidedAt?.toISOString(),
             settledAt: occurrence.participationSettledAt?.toISOString(),
+            ...(seesMoney
+              ? {
+                  atStakeCredits: confirmedBookings.reduce(
+                    (total, booking) => total + booking.reservedCredits,
+                    0,
+                  ),
+                  atStakeMinor: confirmedBookings.reduce(
+                    (total, booking) => total + booking.order.totalMinor,
+                    0,
+                  ),
+                }
+              : {}),
           }
         : undefined,
       bookings: bookings.map((booking) => ({
@@ -1460,10 +1489,14 @@ export async function loadOperatorCatalogSessionOccurrences(input: {
             ? booking.fulfillment.details.creditsReturned
             : undefined,
         attendance:
-          booking.fulfillment.details.attendance === "attended" ||
-          booking.fulfillment.details.attendance === "no-show"
-            ? booking.fulfillment.details.attendance
-            : undefined,
+          attendanceById.get(booking.fulfillment.id) === "attended"
+            ? "attended"
+            : attendanceById.get(booking.fulfillment.id) === "absent"
+              ? "no-show"
+              : booking.fulfillment.details.attendance === "attended" ||
+                  booking.fulfillment.details.attendance === "no-show"
+                ? booking.fulfillment.details.attendance
+                : undefined,
       })),
     });
   }
