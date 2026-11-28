@@ -27,15 +27,9 @@ const hqServerCommand = process.env.CI
 // (packages/api/src/demo-persona.ts).
 const personaSwitch = { DUNA_DEMO_PERSONAS: "enabled" };
 const personaSuite = "**/personas/**";
-// HQ visual baselines and CSS coverage have their own config. A project-level
-// testIgnore replaces the top-level one, so projects repeat it.
-const hqVisualSuite = "**/hq-visual/**";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  // Visual baselines and CSS coverage have their own config and are not part
-  // of the release gate: playwright.hq-visual.config.ts.
-  testIgnore: hqVisualSuite,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
@@ -71,7 +65,7 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      testIgnore: [personaSuite, hqVisualSuite],
+      testIgnore: personaSuite,
       use: {
         ...devices["Desktop Chrome"],
         extraHTTPHeaders: clientHeaders(2),
@@ -79,7 +73,7 @@ export default defineConfig({
     },
     {
       name: "tablet",
-      testIgnore: [personaSuite, hqVisualSuite],
+      testIgnore: personaSuite,
       use: {
         ...devices["iPad (gen 7)"],
         browserName: "chromium",
@@ -88,7 +82,7 @@ export default defineConfig({
     },
     {
       name: "mobile",
-      testIgnore: [personaSuite, hqVisualSuite],
+      testIgnore: personaSuite,
       use: {
         ...devices["iPhone 15"],
         browserName: "chromium",

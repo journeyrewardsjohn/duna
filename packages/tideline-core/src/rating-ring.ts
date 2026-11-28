@@ -257,3 +257,79 @@ export function ratingRingLayout(size: number): RatingRingLayout {
     arcStroke: 14,
   };
 }
+
+/** A point on a circle, `deg` clockwise from 12 o'clock, in the 220-unit box. */
+function pointAt(deg: number, radius: number, center: number): string {
+  const rad = (deg * Math.PI) / 180;
+  const x = center + radius * Math.sin(rad);
+  const y = center - radius * Math.cos(rad);
+  return `${Math.round(x * 100) / 100} ${Math.round(y * 100) / 100}`;
+}
+
+/**
+ * The SVG path for an arc of the ring, clockwise from `startDeg` to
+ * `endDeg` (degrees from 12 o'clock) on a circle of `radius` centred in the
+ * 220-unit box. An empty arc gives an empty string; a full turn is drawn as
+ * two half arcs so it closes. Web and native draw the same path.
+ */
+export function ratingRingArcPath(
+  startDeg: number,
+  endDeg: number,
+  radius: number,
+  center: number = RATING_RING_GEOMETRY.viewBox / 2,
+): string {
+  const sweep = clamp(endDeg - startDeg, 0, 360);
+  if (sweep <= 0) return "";
+  if (sweep >= 360) {
+    const mid = startDeg + 180;
+    return `M ${pointAt(startDeg, radius, center)} A ${radius} ${radius} 0 1 1 ${pointAt(mid, radius, center)} A ${radius} ${radius} 0 1 1 ${pointAt(startDeg, radius, center)}`;
+  }
+  const large = sweep > 180 ? 1 : 0;
+  return `M ${pointAt(startDeg, radius, center)} A ${radius} ${radius} 0 ${large} 1 ${pointAt(startDeg + sweep, radius, center)}`;
+}
+
+export interface RatingRingLabelOptions {
+  /** What the number is; "Sand Rating" (always two words). */
+  readonly label?: string;
+  readonly locale: string;
+}
+
+/**
+ * The ring's text alternative: everything the drawing says, in words, so
+ * the Dune reliability band (1.5:1 on Salt) never carries meaning alone.
+ * "Sand Rating 3.42, up 0.08. 84% of the way to 3.50. Reliability 3 of 3."
+ */
+export function ratingRingLabel(
+  model: RatingRingModel,
+  options: RatingRingLabelOptions,
+): string {
+  const label = options.label ?? "Sand Rating";
+  const reliability = `Reliability ${model.band.filter((s) => s.filled).length} of ${model.band.length}.`;
+  if (model.state === "provisional") {
+    const chip = model.label.chip;
+    const left =
+      chip?.kind === "matches-left"
+        ? ` ${chip.count} more ${chip.count === 1 ? "match" : "matches"} to a rating.`
+        : "";
+    return `${label} provisional.${left} ${reliability}`;
+  }
+  const chip = model.label.chip;
+  const change =
+    chip?.kind === "delta"
+      ? `, ${chip.direction} ${chip.amount}`
+      : chip?.kind === "reached"
+        ? `, reached ${chip.goalText}`
+        : "";
+  const percent = new Intl.NumberFormat(options.locale, {
+    style: "percent",
+    maximumFractionDigits: 0,
+  }).format(model.progressFraction);
+  const goal =
+    model.goal !== null && model.state !== "reached"
+      ? ` ${percent} of the way to ${new Intl.NumberFormat(options.locale, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(model.goal)}.`
+      : "";
+  return `${label} ${model.label.number}${change}.${goal} ${reliability}`;
+}

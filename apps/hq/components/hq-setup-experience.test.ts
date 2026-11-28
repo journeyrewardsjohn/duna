@@ -8,8 +8,7 @@ import {
 } from "./navigation";
 
 // Setup on Home, the dedicated guide, mobile navigation, and the shared
-// readiness steps in Settings are checked in the browser:
-// tests/e2e/hq-ui-contracts.spec.ts.
+// readiness steps in Settings are checked in the browser journeys.
 describe("HQ navigation (docs/design/tideline-4.1.1/ia-hq.md)", () => {
   it("lists the owner's groups and items in order", () => {
     const groups = operatorNavigationGroups.map((group) => [

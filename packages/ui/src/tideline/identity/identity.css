@@ -1,0 +1,360 @@
+/* Tideline club identity: ClubMark, ClubLockup, MembershipCard, WalletStack. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- ClubMark: brand owns the fill, Duna owns the frame ---------- */
+
+    .td-clubmark {
+      position: relative;
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: var(--td-clubmark-size);
+      height: var(--td-clubmark-size);
+      overflow: hidden;
+      border-radius: var(--td-clubmark-radius);
+      background: var(--td-clubmark-bg);
+      color: var(--td-clubmark-fg);
+      user-select: none;
+    }
+
+    /* On a photograph: a soft shadow and a faint inner hairline, never a white ring. */
+    .td-clubmark--photo {
+      box-shadow:
+        var(--td-shadow-photo),
+        inset 0 0 0 1px var(--td-photo-hairline);
+    }
+
+    .td-clubmark__image {
+      position: absolute;
+      inset: 18%;
+      width: 64%;
+      height: 64%;
+      object-fit: contain;
+    }
+
+    .td-clubmark__image--tile {
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .td-clubmark__monogram {
+      display: grid;
+      width: 100%;
+      height: 100%;
+      place-items: center;
+    }
+
+    /* Two characters in Jost Medium, optically centred; digits in Geist (Jost never sets numerals). */
+    .td-clubmark__letters {
+      font-family: var(--td-font-brand);
+      font-size: calc(var(--td-clubmark-size) * 0.42);
+      font-weight: var(--td-type-brand-weight);
+      line-height: 1;
+      letter-spacing: var(--td-type-brand-tracking);
+      transform: translateY(-0.02em);
+    }
+
+    .td-clubmark__letters--numeral {
+      font-family: var(--td-font-ui);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .td-clubmark__crest {
+      width: 46%;
+      height: 46%;
+      fill: currentColor;
+    }
+
+    /* ---------- ClubLockup ---------- */
+
+    .td-clublockup {
+      display: inline-flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .td-clublockup__text {
+      display: grid;
+      min-width: 0;
+    }
+
+    .td-clublockup__name {
+      overflow: hidden;
+      font: var(--td-type-label);
+      font-weight: 600;
+      color: var(--td-text);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .td-clublockup__detail {
+      overflow: hidden;
+      font: var(--td-type-meta);
+      color: var(--td-text-2);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .td-clublockup__state {
+      flex: none;
+    }
+
+    /* ---------- MembershipCard: on Salt in light, on Dune in dark ---------- */
+
+    .td-mcard {
+      --td-mcard-face: var(--td-brand-salt);
+      --td-mcard-ink: var(--td-brand-night-court);
+      --td-mcard-ink-2: color-mix(
+        in srgb,
+        var(--td-brand-night-court) 78%,
+        var(--td-mcard-face)
+      );
+      display: grid;
+      width: 100%;
+      max-width: 420px;
+      overflow: hidden;
+      border-radius: var(--td-radius-xl);
+      background: var(--td-mcard-face);
+      box-shadow:
+        var(--td-shadow-raised),
+        inset 0 0 0 1px var(--td-line);
+      color: var(--td-mcard-ink);
+    }
+
+    &[data-theme="dark"] .td-mcard,
+    .td[data-theme="dark"] .td-mcard {
+      --td-mcard-face: var(--td-brand-dune);
+      box-shadow: var(--td-shadow-raised);
+    }
+
+    .td-mcard__band {
+      position: relative;
+      display: flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      min-height: 88px;
+      padding: var(--td-space-4);
+      overflow: hidden;
+      background: var(--td-mcard-club);
+      color: var(--td-mcard-on-club);
+      isolation: isolate;
+    }
+
+    .td-mcard__photo {
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Protection: the club's colour over its photo, so its name always reads. */
+    .td-mcard__band[data-photo]::before {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--td-brand-night-court) 82%, transparent),
+        color-mix(in srgb, var(--td-mcard-club) 40%, transparent)
+      );
+      content: "";
+    }
+
+    .td-mcard__bandtext {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .td-mcard__club {
+      overflow: hidden;
+      font: var(--td-type-label);
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .td-mcard__kind {
+      overflow: hidden;
+      font: var(--td-type-meta);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      opacity: 0.88;
+    }
+
+    .td-mcard__duna {
+      flex: none;
+      align-self: flex-start;
+      width: 12px;
+      height: 15px;
+      fill: currentColor;
+    }
+
+    .td-mcard__face {
+      display: grid;
+      gap: var(--td-space-2);
+      padding: var(--td-space-4);
+    }
+
+    .td-mcard__who {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--td-space-2);
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .td-mcard__member {
+      min-width: 0;
+      font-family: var(--td-font-ui);
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 24px;
+      overflow-wrap: anywhere;
+    }
+
+    .td-mcard__plan,
+    .td-mcard__line {
+      margin: 0;
+      font: var(--td-type-meta);
+      color: var(--td-mcard-ink-2);
+    }
+
+    .td-mcard .td-mcard__chip {
+      flex: none;
+    }
+
+    .td-mcard__pass {
+      display: flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      margin-top: var(--td-space-2);
+      padding: var(--td-space-3);
+      border-radius: var(--td-radius-md);
+      background: var(--td-surface);
+      color: var(--td-text);
+      box-shadow: inset 0 0 0 1px var(--td-line);
+    }
+
+    .td-mcard__pass--none {
+      font: var(--td-type-meta);
+      color: var(--td-text-2);
+    }
+
+    .td-mcard__qr {
+      display: grid;
+      flex: none;
+      place-items: center;
+    }
+
+    .td-mcard__code {
+      display: grid;
+      gap: 2px;
+    }
+
+    .td-mcard__codelabel {
+      font: var(--td-type-micro);
+      font-family: var(--td-font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--td-text-2);
+    }
+
+    .td-mcard__codevalue {
+      font: var(--td-type-code);
+      font-size: 16px;
+      letter-spacing: 0.06em;
+      overflow-wrap: anywhere;
+    }
+
+    /* The 64 px strip (compact card and wallet strips). */
+    .td-mcard--compact,
+    .td-wallet__strip {
+      display: flex;
+      gap: var(--td-space-3);
+      align-items: center;
+      width: 100%;
+      min-height: 64px;
+      padding: var(--td-space-3);
+      border: 0;
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 1px var(--td-line);
+      color: var(--td-text);
+      font: inherit;
+      text-align: start;
+    }
+
+    .td-mcard__striptext {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+
+      .td-mcard__plan {
+        overflow: hidden;
+        color: var(--td-text-2);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    /* ---------- WalletStack ---------- */
+
+    .td-wallet {
+      display: grid;
+      gap: var(--td-space-3);
+      max-width: 420px;
+    }
+
+    .td-wallet__strips {
+      display: grid;
+      gap: var(--td-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .td-wallet__strip {
+      cursor: pointer;
+      transition: box-shadow var(--td-duration-hover) var(--td-ease-ui);
+
+      &:hover {
+        box-shadow:
+          var(--td-shadow-raised),
+          inset 0 0 0 1px var(--td-line-strong);
+      }
+
+      &:active {
+        transform: scale(0.98);
+      }
+
+      > .td-icon {
+        flex: none;
+        color: var(--td-text-3);
+      }
+    }
+
+    .td-wallet__empty {
+      margin: 0;
+      font: var(--td-type-body);
+      color: var(--td-text-2);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .td-wallet__strip {
+        transition: none;
+
+        &:active {
+          transform: none;
+        }
+      }
+    }
+  }
+}

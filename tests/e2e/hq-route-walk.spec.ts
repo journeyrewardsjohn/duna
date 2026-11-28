@@ -4,7 +4,6 @@ import {
   hqRoutes,
   isHqDevOnlyRoute,
 } from "../../packages/core/src/hq-routes";
-import { visualRoutes } from "./hq-visual/routes";
 import { knownIssues } from "./personas/support/known-issues";
 import { formatIssues, QualityMonitor } from "./personas/support/quality";
 
@@ -40,28 +39,83 @@ const sidebar = [
   ["Reports", "/reports"],
 ] as const;
 
-/** Demo-adapter ids for templates the visual matrix cannot open. */
-const extraPaths: Readonly<Record<string, string>> = {
-  [hqRoutes.offering]: "/offerings/10000000-0000-4000-8000-000000000401",
-  [hqRoutes.offeringBuilder]:
-    "/offerings/10000000-0000-4000-8000-000000000401/builder",
-  [hqRoutes.offeringDraftReady]:
-    "/offerings/10000000-0000-4000-8000-000000000401/draft-ready",
-  [hqRoutes.teamMember]: "/team/10000000-0000-4000-8000-000000000201",
-  [hqRoutes.eventDivision]:
-    "/events/10000000-0000-4000-8000-000000000303/divisions/00000000-0000-4000-8000-000000000001",
-  [hqRoutes.eventCourtBooking]:
-    "/events/court-bookings/00000000-0000-4000-8000-000000000001",
-  [hqRoutes.eventMatch]: "/events/matches/00000000-0000-4000-8000-000000000001",
-  [hqRoutes.memberHealth]:
-    "/people/10000000-0000-4000-8000-000000000201/health",
-  [hqRoutes.marketingPromoCodes]: "/marketing/promo-codes",
-  [hqRoutes.stripeReturn]: "/stripe/return?result=return",
-  [hqRoutes.adminMessagingSafety]: "/admin/messaging-safety",
-  [hqRoutes.adminSupport]: "/admin/support",
-  [hqRoutes.adminOrganization]:
-    "/admin/organizations/00000000-0000-4000-8000-000000000001",
+// Fixed demo-adapter identifiers (not secrets; they exist in no connected
+// environment).
+const venue = "10000000-0000-4000-8000-000000000101";
+const court = "10000000-0000-4000-8000-000000000103";
+const clinic = "10000000-0000-4000-8000-000000000301";
+const tournament = "10000000-0000-4000-8000-000000000303";
+const member = "10000000-0000-4000-8000-000000000201";
+const audience = "00000000-0000-4000-8000-000000000091";
+const transaction = "00000000-0000-4000-8000-000000000093";
+const practicePlan = "33000000-0000-4000-8000-000000000300";
+const practice = "33000000-0000-4000-8000-000000000600";
+const program = "33000000-0000-4000-8000-000000000400";
+const missing = "00000000-0000-4000-8000-000000000001";
+
+/** Concrete paths for every dynamic template (static ones walk as written). */
+const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
+  [hqRoutes.ask]: ["/ask", "/ask/history"],
+  [hqRoutes.module]: [
+    "/schedule",
+    "/people",
+    "/team",
+    "/events",
+    "/offerings",
+    "/marketing",
+    "/reports",
+  ],
+  [hqRoutes.member]: [`/people/${member}`],
+  [hqRoutes.memberHealth]: [`/people/${member}/health`],
+  [hqRoutes.teamMember]: [`/team/${member}`],
+  [hqRoutes.trainingPracticePlan]: [`/training/practice-plans/${practicePlan}`],
+  [hqRoutes.trainingPracticePlanPrint]: [
+    `/training/practice-plans/${practicePlan}/print`,
+  ],
+  [hqRoutes.trainingPractice]: [`/training/practices/${practice}`],
+  [hqRoutes.trainingProgram]: [`/training/programs/${program}`],
+  [hqRoutes.event]: [`/events/${clinic}`, `/events/${tournament}`],
+  [hqRoutes.eventDivision]: [`/events/${tournament}/divisions/${missing}`],
+  [hqRoutes.eventCourtBooking]: [`/events/court-bookings/${missing}`],
+  [hqRoutes.eventMatch]: [`/events/matches/${missing}`],
+  [hqRoutes.eventType]: [
+    "/events/types/tournaments",
+    "/events/types/clinics",
+    "/events/types/open-play",
+    "/events/types/pickup",
+  ],
+  [hqRoutes.offering]: [`/offerings/${missing}`],
+  [hqRoutes.offeringBuilder]: [`/offerings/${missing}/builder`],
+  [hqRoutes.offeringDraftReady]: [`/offerings/${missing}/draft-ready`],
+  [hqRoutes.offeringType]: [
+    "/offerings/types/services",
+    "/offerings/types/plans",
+    "/offerings/types/goods",
+  ],
+  [hqRoutes.moneyTransaction]: [`/money/transactions/${transaction}`],
+  [hqRoutes.place]: [`/setup/places/${venue}`],
+  [hqRoutes.placeLayout]: [`/setup/places/${venue}/layout`],
+  [hqRoutes.placeCourtCreate]: [`/setup/places/${venue}/courts/create`],
+  [hqRoutes.placeCourt]: [`/setup/places/${venue}/courts/${court}`],
+  [hqRoutes.marketingAudience]: [`/marketing/audiences/${audience}`],
+  [hqRoutes.adminOrganization]: [`/admin/organizations/${missing}`],
+  [hqRoutes.adminModule]: ["/admin/organizations"],
 };
+
+const extraPaths = {
+  offering: `/offerings/${missing}`,
+  offeringBuilder: `/offerings/${missing}/builder`,
+  offeringDraftReady: `/offerings/${missing}/draft-ready`,
+  teamMember: `/team/${member}`,
+  eventDivision: `/events/${tournament}/divisions/${missing}`,
+  eventCourtBooking: `/events/court-bookings/${missing}`,
+  eventMatch: `/events/matches/${missing}`,
+  memberHealth: `/people/${member}/health`,
+  stripeReturn: hqRoutes.stripeReturn,
+  adminMessagingSafety: hqRoutes.adminMessagingSafety,
+  adminSupport: hqRoutes.adminSupport,
+  adminOrganization: `/admin/organizations/${missing}`,
+} as const;
 
 /**
  * Pages that fail one of the checks in demo mode on `main` before S2, each
@@ -73,47 +127,39 @@ const knownFailures: Readonly<Record<string, string>> = {
     "S1: /account renders without a main landmark (persona known issue).",
   "/marketing/promo-codes":
     "Q1: promo codes throw in demo mode (persona-journeys.md, H13).",
-  [extraPaths[hqRoutes.offering]!]:
+  [extraPaths.offering]:
     "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths[hqRoutes.offeringBuilder]!]:
+  [extraPaths.offeringBuilder]:
     "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths[hqRoutes.offeringDraftReady]!]:
+  [extraPaths.offeringDraftReady]:
     "H9: the demo catalog is empty, so no offering record resolves (404).",
-  [extraPaths[hqRoutes.teamMember]!]:
-    "H5: the demo workspace has no staff records (404).",
-  [extraPaths[hqRoutes.eventDivision]!]:
-    "H9: no demo event has an entry division (404).",
-  [extraPaths[hqRoutes.eventCourtBooking]!]:
+  [extraPaths.teamMember]: "H5: the demo workspace has no staff records (404).",
+  [extraPaths.eventDivision]: "H9: no demo event has an entry division (404).",
+  [extraPaths.eventCourtBooking]:
     "H9: operator.activityDetail needs the connected database in demo mode.",
-  [extraPaths[hqRoutes.eventMatch]!]:
+  [extraPaths.eventMatch]:
     "H9: operator.activityDetail needs the connected database in demo mode.",
-  [extraPaths[hqRoutes.memberHealth]!]:
+  [extraPaths.memberHealth]:
     "H4: operator.memberHealthProfile needs the connected database in demo mode.",
-  [extraPaths[hqRoutes.stripeReturn]!]:
+  [extraPaths.stripeReturn]:
     "H10: Duna Pay return calls WorkOS withAuth, which is not configured in demo mode.",
-  [extraPaths[hqRoutes.adminMessagingSafety]!]:
+  [extraPaths.adminMessagingSafety]:
     "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
-  [extraPaths[hqRoutes.adminSupport]!]:
+  [extraPaths.adminSupport]:
     "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
-  [extraPaths[hqRoutes.adminOrganization]!]:
+  [extraPaths.adminOrganization]:
     "Unassigned (Super Admin; no package yet): needs a platform role and a connected organization record.",
 };
 
-/** One concrete path per page template, plus the league filter of Events. */
+/** One or more concrete paths per page template, plus the league filter. */
 function walkPaths(): string[] {
   const templates = [...new Set(Object.values(hqRoutes) as string[])].filter(
     (template) => !isHqDevOnlyRoute(template),
   );
   const paths = templates.flatMap((template) => {
-    const covered = visualRoutes
-      .filter((route) => route.page === template)
-      .map((route) => route.path)
-      // The visual matrix opens a missing module on purpose (its 404 state).
-      .filter((path) => path !== "/overview");
-    if (covered.length > 0) return covered;
-    const extra = extraPaths[template];
-    if (!extra) throw new Error(`No walk path for ${template}`);
-    return [extra];
+    if (template in dynamicPaths) return [...dynamicPaths[template]!];
+    if (template.includes("[")) throw new Error(`No walk path for ${template}`);
+    return [template];
   });
   return [...new Set([...paths, hqLeaguesPath])];
 }
@@ -145,7 +191,7 @@ test.describe("HQ route walk (demo mode)", () => {
   test.beforeEach(({}, testInfo) => {
     test.skip(
       testInfo.project.name !== "desktop",
-      "Route health does not depend on the viewport; the sidebar is checked at every width by hq-ui-contracts.",
+      "Route health does not depend on the viewport; one width is enough here.",
     );
   });
 
