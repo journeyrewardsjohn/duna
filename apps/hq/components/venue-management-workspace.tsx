@@ -591,7 +591,7 @@ function VenueCourts({
           </div>
           <Link
             className="hq-button hq-button--primary"
-            href={`/locations/${venue.id}/courts/create`}
+            href={`/setup/places/${venue.id}/courts/create`}
           >
             <Plus aria-hidden size={16} /> Add court
           </Link>
@@ -604,7 +604,7 @@ function VenueCourts({
             return (
               <Link
                 className="venue-court-row"
-                href={`/locations/${venue.id}/courts/${court.id}`}
+                href={`/setup/places/${venue.id}/courts/${court.id}`}
                 key={court.id}
               >
                 <span
@@ -654,7 +654,7 @@ function VenueCourts({
               <p>Add the first playable or bookable resource at this venue.</p>
               <Link
                 className="hq-button hq-button--primary"
-                href={`/locations/${venue.id}/courts/create`}
+                href={`/setup/places/${venue.id}/courts/create`}
               >
                 Add the first court
               </Link>
@@ -729,7 +729,7 @@ export function VenueManagementWorkspace({
         <Link
           aria-label="Back to venues"
           className="venue-workspace-back"
-          href="/locations"
+          href="/setup/places"
         >
           <ArrowLeft aria-hidden size={19} />
         </Link>
@@ -749,7 +749,7 @@ export function VenueManagementWorkspace({
         </div>
         <Link
           className="hq-button hq-button--primary"
-          href={`/locations/${venue.id}/courts/create`}
+          href={`/setup/places/${venue.id}/courts/create`}
         >
           <Plus aria-hidden size={16} /> Add court
         </Link>
@@ -773,7 +773,7 @@ export function VenueManagementWorkspace({
             <Icon aria-hidden size={16} /> {label}
           </button>
         ))}
-        <Link href={`/locations/${venue.id}/layout`}>
+        <Link href={`/setup/places/${venue.id}/layout`}>
           <Layers3 aria-hidden size={16} /> Venue layout
         </Link>
       </nav>

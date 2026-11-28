@@ -23,12 +23,12 @@ test("Ask Duna opens product links within HQ and still reviews external links", 
 }) => {
   await installAskDunaFixture(page, {
     assistantReply:
-      "Open the [Theme Kit](/settings/theme), or review an [external reference](https://example.com/reference).",
+      "Open the [Theme Kit](/setup/identity), or review an [external reference](https://example.com/reference).",
   });
   await page.goto(`${hqBaseUrl}/ask/${askConversationId}`);
   const initialTabs = context.pages().length;
   await page.getByRole("link", { name: "Theme Kit", exact: true }).click();
-  await expect(page).toHaveURL(`${hqBaseUrl}/settings/theme`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/setup/identity`);
   expect(context.pages()).toHaveLength(initialTabs);
   await expect(
     page.getByText("Open external link?", { exact: true }),
@@ -45,41 +45,35 @@ test("Ask Duna opens product links within HQ and still reviews external links", 
   expect(context.pages()).toHaveLength(initialTabs);
 });
 
-test("HQ assistant deep links and launchers open the floating Ask Duna surface", async ({
+test("HQ assistant deep links open Ask Duna in the new shell and the floating surface on older pages", async ({
   page,
 }) => {
   await installAskDunaFixture(page);
+  // Today is on the new shell: ?duna=ask opens the docked panel.
   await page.goto(`${hqBaseUrl}/?duna=ask`);
   await expect(page).toHaveURL(`${hqBaseUrl}/?duna=ask`);
+  const docked = page.getByRole("complementary", { name: "Ask Duna" });
+  await expect(docked).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Floating Ask Duna" }),
+    docked.getByRole("textbox", { name: "Ask Duna anything" }),
   ).toBeVisible();
-  await page.goto(`${hqBaseUrl}/members`);
+  // People is not rebuilt yet: the legacy floating surface still opens there.
+  await page.goto(`${hqBaseUrl}/people`);
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeHidden();
-  const launcher = page.getByRole("button", {
-    name: "Open Ask Duna",
-    exact: true,
-  });
-  if ((page.viewportSize()?.width ?? 1440) > 1100)
-    await expect(launcher).toBeHidden();
-  else await expect(launcher).toBeVisible();
   if ((page.viewportSize()?.width ?? 1440) > 1100) {
     await page.getByRole("button", { name: "Duna AI", exact: true }).click();
   } else {
     await page.keyboard.press("Control+j");
   }
-  await expect(page).toHaveURL(`${hqBaseUrl}/members`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/people`);
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Ask Duna anything" }),
   ).toBeFocused();
-  await expect(
-    page.getByRole("region", { name: "Duna AI assistant" }),
-  ).toHaveCount(0);
 });
 
 test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ pages", async ({
@@ -88,7 +82,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   const { writes, turns } = await installAskDunaFixture(page);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(`${hqBaseUrl}/members`);
+  await page.goto(`${hqBaseUrl}/people`);
   const floating = page.getByRole("region", { name: "Floating Ask Duna" });
   const input = floating.getByRole("textbox", { name: "Ask Duna anything" });
   await expect(floating).toBeHidden();
@@ -105,7 +99,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
     .getByRole("link", { name: "Schedule", exact: true })
     .first()
     .click();
-  await expect(page).toHaveURL(`${hqBaseUrl}/calendar`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/schedule`);
   await expect(input).toHaveValue("Help plan next week");
   await expect(floating.getByText("courts.txt", { exact: true })).toBeVisible();
   await expect(floating.locator(".ask-duna-context")).toContainText("Schedule");
@@ -121,10 +115,10 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   await expect(
     floating.getByText("Ready for your review", { exact: true }),
   ).toBeVisible();
-  await expect(page).toHaveURL(`${hqBaseUrl}/calendar`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/schedule`);
   expect(writes.filter((row) => row.path === "conversations")).toHaveLength(1);
   expect(writes.find((row) => row.path === "conversations")?.body.page).toBe(
-    "/calendar",
+    "/schedule",
   );
   expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
   await floating.getByRole("button", { name: "Minimize Ask Duna" }).click();
@@ -139,7 +133,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
     .getByRole("link", { name: "People", exact: true })
     .filter({ visible: true })
     .click();
-  await expect(page).toHaveURL(`${hqBaseUrl}/members`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/people`);
   await openFloating(page);
   await expect(input).toBeEnabled();
   await input.fill("Use the people on this page");
@@ -147,7 +141,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   await expect
     .poll(() =>
       turns.some((turn) =>
-        JSON.stringify(turn.message).includes("Current Duna page: /members"),
+        JSON.stringify(turn.message).includes("Current Duna page: /people"),
       ),
     )
     .toBe(true);
@@ -194,7 +188,7 @@ test("Floating Ask Duna respects protected pages and its menus dismiss accessibl
   page,
 }) => {
   await installAskDunaFixture(page);
-  await page.goto(`${hqBaseUrl}/members`);
+  await page.goto(`${hqBaseUrl}/people`);
   const floating = page.getByRole("region", { name: "Floating Ask Duna" });
   await expect(floating).toBeHidden();
   await openFloating(page);

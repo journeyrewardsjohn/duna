@@ -1,5 +1,8 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { hqRoutes } from "../../../../packages/core/src/hq-routes";
+import {
+  hqModuleHref,
+  hqRoutes,
+} from "../../../../packages/core/src/hq-routes";
 import { hq } from "./fixtures";
 
 /**
@@ -10,23 +13,23 @@ import { hq } from "./fixtures";
 
 /**
  * HQ areas in the order of docs/design/tideline-4.1.1/ia-hq.md, mapped to
- * TODAY's routes through packages/core/src/hq-routes.ts. When S2 renames a
- * route it changes hq-routes.ts and, if the area moved, this one table.
+ * their routes through packages/core/src/hq-routes.ts (the single source of
+ * truth since S2; old-to-new table in docs/plan/s2-route-map.md).
  */
 export const hqAreas = {
   Today: hqRoutes.home,
-  Schedule: "/calendar",
-  Inbox: hqRoutes.messages,
-  People: "/members",
-  Team: "/team",
+  Schedule: hqModuleHref("schedule"),
+  Inbox: hqRoutes.inbox,
+  People: hqModuleHref("people"),
+  Team: hqModuleHref("team"),
   Training: hqRoutes.training,
-  Events: "/events",
-  Offerings: "/products",
-  Money: hqRoutes.payments,
+  Events: hqModuleHref("events"),
+  Offerings: hqModuleHref("offerings"),
+  Money: hqRoutes.money,
   "Club setup": hqRoutes.setup,
   Website: hqRoutes.website,
-  Marketing: "/marketing",
-  Reports: "/reports",
+  Marketing: hqModuleHref("marketing"),
+  Reports: hqModuleHref("reports"),
   Settings: hqRoutes.settings,
   Account: hqRoutes.account,
 } as const;

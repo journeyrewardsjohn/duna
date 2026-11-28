@@ -445,7 +445,7 @@ export function loadDemoCommerceWorkspace(): Pick<
         detail:
           "Add a private lesson, clinic, membership, credit pack, or piece of gear. Keep it in draft until pricing and tax setup are ready.",
         action: "Create a product",
-        href: "/products",
+        href: "/offerings",
         tone: "setup",
       },
     ],
@@ -1743,7 +1743,7 @@ export async function loadOperatorCommerceWorkspace(
       detail:
         "Create a private lesson, clinic, membership, credit pack, or piece of gear. Duna will keep the setup in draft.",
       action: "Create a product",
-      href: "/products",
+      href: "/offerings",
       tone: "setup",
     });
   }
@@ -1758,7 +1758,7 @@ export async function loadOperatorCommerceWorkspace(
       detail:
         "Offer a modest member price on the sessions players already attend. You can require membership only where it adds real value.",
       action: "Add membership",
-      href: "/products?create=membership",
+      href: "/offerings?create=membership",
       tone: "growth",
     });
   }
@@ -1773,7 +1773,7 @@ export async function loadOperatorCommerceWorkspace(
       detail:
         "A 5- or 10-credit pack can reward commitment without forcing a recurring membership.",
       action: "Add credit pack",
-      href: "/products?create=credit-pack",
+      href: "/offerings?create=credit-pack",
       tone: "growth",
     });
   }

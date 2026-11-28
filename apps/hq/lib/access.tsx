@@ -1,8 +1,8 @@
-import { log } from "@duna/observability";
-import { PermissionDenied, buttonClassName } from "@duna/ui/tideline";
+import { buttonClassName } from "@duna/ui/tideline";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ThemedTideline } from "@/components/themed-tideline";
+import { AccessDeniedState } from "@/lib/access-state";
 import { isPermissionDenied } from "@/lib/permission-denied";
 
 export interface AccessDeniedProps {
@@ -23,7 +23,6 @@ export function AccessDenied({
   backHref = "/",
   backLabel = "Back to HQ",
 }: AccessDeniedProps) {
-  log.info("hq.access.denied", { area, reason: "missing-scope" });
   return (
     <main
       className="hq-page module-page"
@@ -35,7 +34,7 @@ export function AccessDenied({
         </div>
       </header>
       <ThemedTideline>
-        <PermissionDenied
+        <AccessDeniedState
           action={
             <Link
               className={buttonClassName({ variant: "secondary" })}

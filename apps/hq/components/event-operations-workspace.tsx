@@ -1664,7 +1664,7 @@ export function EventOperationsWorkspace({
                   ) : (
                     <Link
                       className="event-roster-list__person"
-                      href={`/members/${attendee.personId}`}
+                      href={`/people/${attendee.personId}`}
                     >
                       <span className="event-roster-list__avatar">
                         {attendee.avatarUrl ? (
@@ -1747,7 +1747,7 @@ export function EventOperationsWorkspace({
                   ) : (
                     <Link
                       className="event-roster-list__open"
-                      href={`/members/${attendee.personId}`}
+                      href={`/people/${attendee.personId}`}
                     >
                       Open <ArrowRight aria-hidden size={14} />
                     </Link>

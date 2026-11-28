@@ -30,7 +30,7 @@ import {
   deactivatePromoCodeAction,
   duplicatePromoCodeAction,
   type PromoActionState,
-} from "@/app/promo-codes/actions";
+} from "@/app/(legacy)/marketing/promo-codes/actions";
 
 const initialState: PromoActionState = { status: "idle", message: "" };
 const creationSteps = [

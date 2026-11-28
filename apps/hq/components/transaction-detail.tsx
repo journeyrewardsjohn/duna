@@ -190,7 +190,7 @@ export function TransactionDetail({
 
   return (
     <article className="transaction-detail">
-      <Link className="transaction-back" href="/payments/transactions">
+      <Link className="transaction-back" href="/money/transactions">
         <ArrowLeft size={16} /> Back to all transactions
       </Link>
 

@@ -33,7 +33,7 @@ test.describe("CO-1 Sign up and open the club's workspace", () => {
   test("CO-1.3 HQ's first run opens for the new organisation", async ({
     page,
   }) => {
-    await page.goto(hq("/onboarding"));
+    await page.goto(hq("/setup/start"));
     await expectPageReady(page, "Start your Duna workspace.");
     await expectNoLayoutShift(page);
   });
@@ -63,7 +63,7 @@ test.describe("CO-2 Set up the club from its website", () => {
 
 test.describe("CO-3 Connect payments (Duna Pay)", () => {
   test("CO-3.1 Money leads to Duna Pay setup", async ({ page }) => {
-    await page.goto(hq("/payments/setup"));
+    await page.goto(hq("/money/setup"));
     await expectPageReady(page, "Configure money once.");
     await expect(
       page.getByRole("button", { name: "Prepare secure Stripe link" }),
@@ -83,7 +83,7 @@ test.describe("CO-4 Add places and courts", () => {
   test("CO-4.1 Start adding a venue by describing it or by hand", async ({
     page,
   }) => {
-    await page.goto(hq("/locations/create"));
+    await page.goto(hq("/setup/places/create"));
     await expectPageReady(page, "Add venue");
     await expect(
       page.getByRole("textbox", { name: "What would you like to create?" }),
@@ -144,11 +144,16 @@ test.describe("CO-7 See a booking arrive", () => {
     page,
   }) => {
     await openHqArea(page, "Today");
-    const session = page.getByRole("link", {
-      name: /Sunset doubles training.*open session operations/,
-    });
-    await expect(session).toBeVisible();
-    await expect(session.getByText(/\d+ of \d+ joined/)).toBeVisible();
+    const row = page
+      .getByRole("region", { name: "Schedule" })
+      .locator("li.today-row")
+      .filter({ hasText: "Sunset doubles training" });
+    await expect(
+      row.getByRole("link", { name: "Sunset doubles training", exact: true }),
+    ).toBeVisible();
+    await expect(
+      row.getByRole("progressbar", { name: /\d+ of \d+ joined/ }),
+    ).toBeVisible();
   });
   test("CO-7.2 Schedule shows the day by court and by coach", async ({
     page,
@@ -182,7 +187,7 @@ test.describe("CO-9 Refund a booking", () => {
   test("CO-9.1 Find the booking's payment in Money › Transactions", async ({
     page,
   }) => {
-    await page.goto(hq("/payments/transactions"));
+    await page.goto(hq("/money/transactions"));
     await expectPageReady(page, "Transactions");
     await expect(
       page.getByRole("searchbox", { name: "Search transactions" }),
@@ -194,12 +199,12 @@ test.describe("CO-9 Refund a booking", () => {
     ).toBeVisible();
   });
   test("CO-9.2 Open the transaction", async ({ page }) => {
-    await page.goto(hq("/payments/transactions"));
+    await page.goto(hq("/money/transactions"));
     await page
       .getByRole("link", { name: /^Open .* transaction$/ })
       .first()
       .click();
-    await expect(page).toHaveURL(/\/payments\/transactions\/[^/]+$/);
+    await expect(page).toHaveURL(/\/money\/transactions\/[^/]+$/);
     await expectPageReady(page);
   });
   test.fixme("CO-9.3 Refund it with a strong confirm that restates amount, person and consequence [H10, B2]", async () => {
@@ -231,7 +236,20 @@ test.describe("CO-11 Ask Duna to do it", () => {
       page.getByRole("textbox", { name: "What would you like Duna to do?" }),
     ).toBeVisible();
   });
-  test.fixme("CO-11.2 Ask Duna opens as a docked panel from the top bar or Cmd+J [S1]", async () => {});
+  test("CO-11.2 Ask Duna opens as a docked panel from the top bar or Cmd+J", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Today");
+    const panel = page.getByRole("complementary", { name: "Ask Duna" });
+    await page.getByRole("button", { name: "Ask Duna" }).first().click();
+    await expect(panel).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await page.keyboard.press("ControlOrMeta+j");
+    await expect(panel).toBeVisible();
+    // Demo mode: the honest state instead of a request that would fail.
+    await expect(panel.getByText("Ask Duna isn't set up yet")).toBeVisible();
+  });
   test.fixme("CO-11.3 Ask Duna fills the same form a person uses and applies only after a confirm [S4]", async () => {});
 });
 
@@ -244,10 +262,37 @@ test.describe("CO-12 Grow: reports, marketing and the website", () => {
 });
 
 test.describe("CO-13 Identity chrome", () => {
-  test.fixme("CO-13.1 Switch organisation and create a new one from the switcher [S1]", async () => {});
-  // CH-6.3 (coach.spec.ts) and regressions.spec.ts cover a coach opening
-  // Money and a player opening HQ; the other owner pages are S1's.
-  test.fixme("CO-13.2 A coach or player who opens an owner page sees 'You need access', not an error page [S1]", async () => {});
+  test("CO-13.1 Switch organisation and create a new one from the switcher", async ({
+    page,
+  }) => {
+    await openHqArea(page, "Today");
+    await page.getByRole("button", { name: /Switch club\. Current:/ }).click();
+    const menu = page.getByRole("menu");
+    await expect(
+      menu.getByRole("menuitem", { name: /Current organisation/ }),
+    ).toBeVisible();
+    await menu
+      .getByRole("menuitem", { name: "Create new organisation" })
+      .click();
+    await expect(page).toHaveURL(/\/setup\/start\?mode=create$/);
+    await expectPageReady(page);
+  });
+
+  test.describe("as a player", () => {
+    test.use({ persona: "player" });
+    test("CO-13.2 A coach or player who opens an owner page sees 'You need access', not an error page", async ({
+      page,
+    }) => {
+      await page.goto(hq("/"));
+      await expect(
+        page.getByText("You don't have access to Duna HQ"),
+      ).toBeVisible();
+      await expect(
+        page.getByText(/This page didn.t load|couldn.t load/),
+      ).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Open Duna" })).toBeVisible();
+    });
+  });
 });
 
 test.describe("CO-14 Pay the team", () => {

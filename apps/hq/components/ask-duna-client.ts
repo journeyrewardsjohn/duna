@@ -18,6 +18,15 @@ export interface AskAction {
   expiresAt: string;
   result: Record<string, unknown> | null;
 }
+/** What a custom proposal renderer can do (see AskDunaThread's renderAction). */
+export interface AskActionControls {
+  /** Saves the person's decision, then continues the conversation. */
+  review: (decision: "approve" | "decline") => Promise<void>;
+  /** True while another review, a response or a reconnect is running. */
+  disabled: boolean;
+  /** True while this action's review is being saved. */
+  reviewing: boolean;
+}
 export async function askDunaFetch<T>(
   path: string,
   init?: RequestInit,

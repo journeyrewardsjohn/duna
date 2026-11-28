@@ -255,7 +255,7 @@ function entryDetailHref(entry: CalendarEntry): string {
   if (entry.sourceType === "booking")
     return `/events/court-bookings/${entry.id}`;
   if (entry.sourceType === "pickup") return `/events/matches/${entry.id}`;
-  return "/calendar";
+  return "/schedule";
 }
 
 function initials(name: string): string {
@@ -1302,7 +1302,7 @@ export function ScheduleCalendar({
                       </button>
                     </form>
                   ) : (
-                    <Link className="schedule-text-link" href="/members/invite">
+                    <Link className="schedule-text-link" href="/people/invite">
                       Invite another player <ExternalLink size={14} />
                     </Link>
                   )}

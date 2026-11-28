@@ -9,18 +9,20 @@ import {
   Menu,
   MessageCircle,
   Search,
+  Settings2,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
+import { hqHref } from "@duna/core/hq-routes";
+import { Icon } from "@duna/ui/icons";
 import { loadWorkspaceOptions } from "@/lib/workspace-options";
 import {
+  operatorModuleHref,
   operatorModules,
-  operatorNavigationChildren,
-  type EventNavigationSlug,
+  operatorNavigationItems,
   type OperatorModule,
-  type ProductNavigationSlug,
 } from "./navigation";
 import { AuthControls } from "./auth-controls";
 import { DunaActionCenter } from "./duna-action-center";
@@ -28,12 +30,8 @@ import { OrganizationSwitcher } from "./organization-switcher";
 import { AskDunaSidebar } from "./ask-duna-sidebar";
 import { getServerContext } from "@/lib/api";
 
-const mobilePrimaryModules = [
-  "overview",
-  "calendar",
-  "activities",
-  "messages",
-] as const;
+/** The four areas kept in the phone tab bar; the rest open from "More". */
+const mobilePrimaryModules = ["today", "schedule", "inbox", "people"] as const;
 
 export async function OperatorShell({
   active,
@@ -43,7 +41,6 @@ export async function OperatorShell({
   organization,
   messageDraftCount = 0,
   messageUnreadCount = 0,
-  activeChild,
 }: {
   readonly active: OperatorModule;
   readonly children: ReactNode;
@@ -53,40 +50,14 @@ export async function OperatorShell({
   readonly organization: Pick<OrganizationSummary, "id" | "name" | "plan">;
   readonly messageDraftCount?: number;
   readonly messageUnreadCount?: number;
-  readonly activeChild?: ProductNavigationSlug | EventNavigationSlug;
 }) {
   const workspaces = await loadWorkspaceOptions();
   const { actor } = await getServerContext();
   const askScopeKey = `${actor?.personId ?? "anonymous"}:${organization.id}`;
-  const navigableModules = operatorModules.filter(
-    (item) => !("hiddenFromNavigation" in item && item.hiddenFromNavigation),
-  );
-  const focusedModules = new Set([
-    "overview",
-    "calendar",
-    "activities",
-    "members",
-    "website",
-    "messages",
-    "payments",
-  ]);
-  const primaryOrder = [
-    "overview",
-    "calendar",
-    "activities",
-    "members",
-    "messages",
-    "payments",
-    "website",
-  ];
-  const primaryModules = navigableModules
-    .filter((item) => focusedModules.has(item.slug))
-    .sort(
-      (a, b) => primaryOrder.indexOf(a.slug) - primaryOrder.indexOf(b.slug),
-    );
+  const navigableModules = operatorNavigationItems;
   return (
     <div
-      className={`hq-shell hq-shell--focused${active === "ai" ? " hq-shell--ask" : ""}${active === "overview" ? " hq-shell--home" : ""}${immersive ? " hq-shell--immersive" : ""}${immersiveScrollable ? " hq-shell--immersive-scrollable" : ""}`}
+      className={`hq-shell hq-shell--focused${active === "ask" ? " hq-shell--ask" : ""}${active === "today" ? " hq-shell--home" : ""}${immersive ? " hq-shell--immersive" : ""}${immersiveScrollable ? " hq-shell--immersive-scrollable" : ""}`}
     >
       <aside className="hq-sidebar">
         <Link aria-label="Duna HQ home" className="hq-sidebar__brand" href="/">
@@ -94,12 +65,9 @@ export async function OperatorShell({
           <small>HQ</small>
         </Link>
         <nav aria-label="Operator modules">
-          {primaryModules.map((item) => {
-            const Icon = item.icon;
-            const index = navigableModules.indexOf(item);
+          {navigableModules.map((item, index) => {
             const startsGroup =
               navigableModules[index - 1]?.group !== item.group;
-            const children = operatorNavigationChildren[item.slug] ?? [];
             return (
               <Fragment key={item.slug}>
                 {startsGroup && (
@@ -114,102 +82,28 @@ export async function OperatorShell({
                       ? "true"
                       : undefined
                   }
+                  data-nav-id={item.slug}
                 >
                   <Link
                     className={active === item.slug ? "active" : undefined}
-                    href={item.slug === "overview" ? "/" : `/${item.slug}`}
+                    href={item.href}
                     aria-current={active === item.slug ? "page" : undefined}
                     title={item.label}
                   >
-                    <Icon aria-hidden size={18} />
+                    <Icon name={item.icon} />
                     <span>{item.label}</span>
-                    {item.slug === "messages" && messageUnreadCount > 0 && (
+                    {item.slug === "inbox" && messageUnreadCount > 0 && (
                       <i>{messageUnreadCount}</i>
                     )}
                     {item.slug === "marketing" && messageDraftCount > 0 && (
                       <i>{messageDraftCount}</i>
                     )}
                   </Link>
-                  {children.length > 0 && (
-                    <div className="hq-sidebar__subnav">
-                      {children.map((child) => (
-                        <Link
-                          className={
-                            activeChild === child.slug ? "active" : undefined
-                          }
-                          href={child.href}
-                          key={child.slug}
-                        >
-                          <em aria-hidden />
-                          <span>{child.label}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </Fragment>
             );
           })}
           <AskDunaSidebar key={askScopeKey} scopeKey={askScopeKey} />
-          {
-            <details
-              className="hq-work-navigation-more"
-              open={!focusedModules.has(active) && active !== "ai"}
-            >
-              <summary>
-                <Menu size={18} aria-hidden />
-                More tools
-              </summary>
-              <div>
-                {navigableModules
-                  .filter(
-                    (item) =>
-                      !focusedModules.has(item.slug) && item.slug !== "ai",
-                  )
-                  .map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <div className="hq-sidebar__module" key={item.slug}>
-                        <Link
-                          href={`/${item.slug}`}
-                          className={
-                            active === item.slug ? "active" : undefined
-                          }
-                          aria-current={
-                            active === item.slug ? "page" : undefined
-                          }
-                        >
-                          <Icon size={18} aria-hidden />
-                          <span>{item.label}</span>
-                        </Link>
-                        {active === item.slug &&
-                          (operatorNavigationChildren[item.slug] ?? []).length >
-                            0 && (
-                            <div className="hq-sidebar__subnav">
-                              {(
-                                operatorNavigationChildren[item.slug] ?? []
-                              ).map((child) => (
-                                <Link
-                                  key={child.slug}
-                                  href={child.href}
-                                  className={
-                                    activeChild === child.slug
-                                      ? "active"
-                                      : undefined
-                                  }
-                                >
-                                  <em aria-hidden />
-                                  <span>{child.label}</span>
-                                </Link>
-                              ))}
-                            </div>
-                          )}
-                      </div>
-                    );
-                  })}
-              </div>
-            </details>
-          }
           <details
             className={`hq-mobile-navigation-more${
               (mobilePrimaryModules as readonly string[]).includes(active)
@@ -227,13 +121,13 @@ export async function OperatorShell({
                 <small>Choose where you want to work.</small>
               </header>
               <Link
-                href="/ask"
-                className={active === "ai" ? "active" : undefined}
+                href={operatorModuleHref("ask")}
+                className={active === "ask" ? "active" : undefined}
               >
                 <MessageCircle aria-hidden size={18} />
                 <span>Ask Duna</span>
               </Link>
-              <Link href="/ask/history">
+              <Link href={hqHref("ask", { conversation: "history" })}>
                 <History aria-hidden size={18} />
                 <span>Conversation history</span>
               </Link>
@@ -244,23 +138,35 @@ export async function OperatorShell({
                       item.slug,
                     ),
                 )
-                .map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      className={active === item.slug ? "active" : undefined}
-                      href={item.slug === "overview" ? "/" : `/${item.slug}`}
-                      key={item.slug}
-                    >
-                      <Icon aria-hidden size={18} />
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
+                .map((item) => (
+                  <Link
+                    className={active === item.slug ? "active" : undefined}
+                    href={item.href}
+                    key={item.slug}
+                  >
+                    <Icon name={item.icon} />
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              <Link
+                className={active === "settings" ? "active" : undefined}
+                href={operatorModuleHref("settings")}
+              >
+                <Settings2 aria-hidden size={18} />
+                <span>Settings</span>
+              </Link>
             </div>
           </details>
         </nav>
         <div className="hq-sidebar__meta">
+          <Link
+            aria-current={active === "settings" ? "page" : undefined}
+            href={operatorModuleHref("settings")}
+            title="Settings"
+          >
+            <Settings2 aria-hidden size={18} />
+            <span>Settings</span>
+          </Link>
           <Link aria-label="Open Duna Admin" href="/admin" title="Duna Admin">
             <ShieldCheck aria-hidden size={18} />
             <span>Admin</span>
@@ -308,8 +214,8 @@ export async function OperatorShell({
         </header>
         <div className="hq-content">
           {children}
-          {active !== "overview" &&
-            active !== "ai" &&
+          {active !== "today" &&
+            active !== "ask" &&
             active !== "website" &&
             !immersive && (
               <details className="hq-context-assistant">

@@ -542,13 +542,13 @@ async function getOrderDetail(actor: ApiActor, orderId: string) {
   const items = itemRows.map((item) => {
     const fulfillment = fulfillmentByItem.get(item.id);
     const href = fulfillment
-      ? `/products/${fulfillment.catalogItemId}`
+      ? `/offerings/${fulfillment.catalogItemId}`
       : booking
         ? `/events/court-bookings/${booking.id}`
         : eventSession
           ? `/events/${eventSession.id}`
           : membership
-            ? `/products/${membership.catalogItemId}`
+            ? `/offerings/${membership.catalogItemId}`
             : fund?.sessionId
               ? `/events/${fund.sessionId}`
               : undefined;
@@ -660,7 +660,7 @@ async function getOrderDetail(actor: ApiActor, orderId: string) {
         name: orderRow.buyer.displayName,
         email: orderRow.buyer.email ?? undefined,
         role: purchasedFor ? "Parent or purchaser" : "Purchaser",
-        profileHref: `/members/${orderRow.buyer.id}`,
+        profileHref: `/people/${orderRow.buyer.id}`,
       },
       ...(purchasedFor
         ? [
@@ -669,7 +669,7 @@ async function getOrderDetail(actor: ApiActor, orderId: string) {
               name: purchasedFor.displayName,
               email: purchasedFor.email ?? undefined,
               role: "Purchased for",
-              profileHref: `/members/${purchasedFor.id}`,
+              profileHref: `/people/${purchasedFor.id}`,
             },
           ]
         : []),
@@ -732,7 +732,7 @@ export async function getTransaction(actor: ApiActor, id: string) {
           personId: demoTransaction.buyerPersonId!,
           name: demoTransaction.buyerName,
           role: "Purchaser",
-          profileHref: `/members/${demoTransaction.buyerPersonId}`,
+          profileHref: `/people/${demoTransaction.buyerPersonId}`,
         },
       ],
       items: [
@@ -852,7 +852,7 @@ export async function getTransaction(actor: ApiActor, id: string) {
             personId: summary.buyerPersonId,
             name: summary.buyerName,
             role: "Member",
-            profileHref: `/members/${summary.buyerPersonId}`,
+            profileHref: `/people/${summary.buyerPersonId}`,
           },
         ]
       : [],

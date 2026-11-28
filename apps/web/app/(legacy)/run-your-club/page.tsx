@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 };
 
 function signupHref(planId: string, interval: "month" | "year"): string {
-  const returnTo = `/onboarding?plan=${planId}&interval=${interval}&source=run-your-club`;
+  const returnTo = `/setup/start?plan=${planId}&interval=${interval}&source=run-your-club`;
   return `${DUNA_HQ_URL}/sign-up?returnTo=${encodeURIComponent(returnTo)}`;
 }
 

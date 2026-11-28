@@ -1,112 +1,211 @@
 import {
   Activity,
-  Globe,
   BadgeDollarSign,
   Bot,
   BrainCircuit,
   Building2,
-  CalendarDays,
-  CircleGauge,
-  ClipboardCheck,
   Coins,
-  CreditCard,
   DatabaseZap,
-  Dumbbell,
   Flag,
   FlaskConical,
   HeartHandshake,
   Headphones,
-  LayoutDashboard,
-  ListChecks,
-  Mail,
-  MapPinned,
-  MessageSquareText,
-  Network,
-  PackageOpen,
   Radio,
-  ShoppingBag,
   ScrollText,
-  Settings2,
   ShieldCheck,
   ShieldAlert,
   Sparkles,
   Trophy,
-  TicketPercent,
   UserRoundSearch,
   UsersRound,
   Waves,
 } from "lucide-react";
+import {
+  hqHref,
+  hqLeaguesPath,
+  hqModuleHref,
+  hqRoutes,
+} from "@duna/core/hq-routes";
+import type { IconName } from "@duna/ui/icons";
 import type { LucideIcon } from "lucide-react";
+
+/**
+ * The operator sidebar, in the order of docs/design/tideline-4.1.1/ia-hq.md.
+ * Groups are separated by hairlines; there is no "More tools" entry and no
+ * sidebar children. Every address comes from `@duna/core/hq-routes`.
+ */
+export const operatorNavigationGroups = [
+  "Run the day",
+  "People and play",
+  "Money and setup",
+  "Grow",
+] as const;
+export type OperatorNavigationGroup = (typeof operatorNavigationGroups)[number];
 
 export const operatorModules = [
   {
-    slug: "overview",
+    slug: "today",
     label: "Today",
-    icon: LayoutDashboard,
-    group: "Today",
+    href: hqRoutes.home,
+    icon: "home",
+    group: "Run the day",
+  },
+  {
+    slug: "schedule",
+    label: "Schedule",
+    href: hqModuleHref("schedule"),
+    icon: "schedule",
+    group: "Run the day",
+  },
+  {
+    slug: "inbox",
+    label: "Inbox",
+    href: hqRoutes.inbox,
+    icon: "message",
+    group: "Run the day",
+  },
+  {
+    slug: "people",
+    label: "People",
+    href: hqModuleHref("people"),
+    icon: "users",
+    group: "People and play",
+  },
+  {
+    slug: "team",
+    label: "Team",
+    href: hqModuleHref("team"),
+    icon: "partner",
+    group: "People and play",
+  },
+  {
+    slug: "training",
+    label: "Training",
+    href: hqRoutes.training,
+    icon: "coach",
+    group: "People and play",
+  },
+  {
+    slug: "events",
+    label: "Events",
+    href: hqModuleHref("events"),
+    icon: "trophy",
+    group: "People and play",
+  },
+  {
+    slug: "offerings",
+    label: "Offerings",
+    href: hqModuleHref("offerings"),
+    icon: "pass",
+    group: "People and play",
+  },
+  {
+    slug: "money",
+    label: "Money",
+    href: hqRoutes.money,
+    icon: "pay",
+    group: "Money and setup",
   },
   {
     slug: "setup",
-    label: "Get started",
-    icon: ClipboardCheck,
-    group: "Today",
+    label: "Club setup",
+    href: hqRoutes.setup,
+    icon: "venue",
+    group: "Money and setup",
   },
-  { slug: "calendar", label: "Schedule", icon: CalendarDays, group: "Today" },
-  { slug: "activities", label: "Activities", icon: Trophy, group: "Today" },
-  { slug: "website", label: "Website", icon: Globe, group: "Grow" },
-  { slug: "locations", label: "Venues", icon: MapPinned, group: "Run" },
-  { slug: "members", label: "People", icon: UsersRound, group: "Run" },
-  { slug: "team", label: "Staff", icon: UserRoundSearch, group: "Run" },
-  { slug: "training", label: "Training", icon: Dumbbell, group: "Run" },
-  { slug: "products", label: "Products", icon: ShoppingBag, group: "Run" },
-  { slug: "events", label: "Events", icon: Trophy, group: "Run" },
   {
-    slug: "leagues",
-    label: "Leagues",
-    icon: Network,
-    group: "Run",
+    slug: "website",
+    label: "Website",
+    href: hqRoutes.website,
+    icon: "connect",
+    group: "Grow",
+  },
+  {
+    slug: "marketing",
+    label: "Marketing",
+    href: hqModuleHref("marketing"),
+    icon: "send",
+    group: "Grow",
+  },
+  {
+    slug: "reports",
+    label: "Reports",
+    href: hqModuleHref("reports"),
+    icon: "signal-line",
+    group: "Grow",
+  },
+  // Not sidebar items: Ask Duna lives in the shell, Settings in the account
+  // menu. Pages under them still name an area for the shell and Ask Duna.
+  {
+    slug: "ask",
+    label: "Ask Duna",
+    href: hqHref("ask"),
+    icon: "find",
+    group: "Shell",
     hiddenFromNavigation: true,
   },
   {
-    slug: "messages",
-    label: "Inbox",
-    icon: MessageSquareText,
-    group: "Run",
-  },
-  { slug: "audiences", label: "Audiences", icon: UsersRound, group: "Run" },
-  { slug: "payments", label: "Money", icon: CreditCard, group: "Grow" },
-  {
-    slug: "promo-codes",
-    label: "Promo codes",
-    icon: TicketPercent,
-    group: "Grow",
-  },
-  { slug: "marketing", label: "Marketing", icon: Mail, group: "Grow" },
-  { slug: "reports", label: "Reports", icon: CircleGauge, group: "Grow" },
-  {
-    slug: "ai",
-    label: "Duna AI",
-    icon: Bot,
-    group: "Grow",
+    slug: "settings",
+    label: "Settings",
+    href: hqRoutes.settings,
+    icon: "key",
+    group: "Shell",
     hiddenFromNavigation: true,
   },
-  { slug: "settings", label: "Settings", icon: Settings2, group: "Configure" },
 ] as const satisfies readonly {
   readonly slug: string;
   readonly label: string;
-  readonly icon: LucideIcon;
-  readonly group: string;
+  readonly href: string;
+  readonly icon: IconName;
+  readonly group: OperatorNavigationGroup | "Shell";
   readonly hiddenFromNavigation?: boolean;
 }[];
 
 export type OperatorModule = (typeof operatorModules)[number]["slug"];
 
+/** The sidebar items, in order (hidden areas excluded). */
+export const operatorNavigationItems = operatorModules.filter(
+  (item) => !("hiddenFromNavigation" in item && item.hiddenFromNavigation),
+);
+
+export function operatorModuleHref(module: OperatorModule): string {
+  return operatorModules.find((item) => item.slug === module)?.href ?? "/";
+}
+
+/**
+ * Work surfaces that are not sidebar areas of their own: the venues panel
+ * lives under Club setup and leagues are an event type.
+ */
+export type OperatorPanel = OperatorModule | "places" | "leagues";
+
+/** The sidebar area a panel belongs to. */
+export function operatorPanelArea(panel: OperatorPanel): OperatorModule {
+  if (panel === "places") return "setup";
+  if (panel === "leagues") return "events";
+  return panel;
+}
+
+/** The address of a panel's list page. */
+export function operatorPanelHref(panel: OperatorPanel): string {
+  if (panel === "places") return hqRoutes.places;
+  if (panel === "leagues") return hqLeaguesPath;
+  return operatorModuleHref(panel);
+}
+
+/**
+ * Offering types, shown as links inside the Offerings list page until H9
+ * turns them into in-page filters.
+ */
 export const productNavigationItems = [
-  { slug: "all-products", label: "All products", href: "/products" },
+  {
+    slug: "all-products",
+    label: "All offerings",
+    href: hqModuleHref("offerings"),
+  },
   {
     slug: "services",
     label: "Services",
-    href: "/products/types/services",
+    href: hqHref("offeringType", { productType: "services" }),
     productType: "service",
     title: "Services",
     description: "Lessons, coaching, programs, and bookable services.",
@@ -114,7 +213,7 @@ export const productNavigationItems = [
   {
     slug: "plans",
     label: "Memberships + packs",
-    href: "/products/types/plans",
+    href: hqHref("offeringType", { productType: "plans" }),
     productType: "plan",
     title: "Memberships + packs",
     description: "Memberships, credit packs, and recurring offers.",
@@ -122,7 +221,7 @@ export const productNavigationItems = [
   {
     slug: "goods",
     label: "Goods + equipment",
-    href: "/products/types/goods",
+    href: hqHref("offeringType", { productType: "goods" }),
     productType: "good",
     title: "Goods + equipment",
     description: "Inventory-backed goods, rentals, and equipment.",
@@ -132,12 +231,16 @@ export const productNavigationItems = [
 export type ProductNavigationItem = (typeof productNavigationItems)[number];
 export type ProductNavigationSlug = ProductNavigationItem["slug"];
 
+/**
+ * Event types, shown as links inside the Events list page until H9 turns them
+ * into in-page filters. A league is an event type (`/events?type=league`).
+ */
 export const eventNavigationItems = [
-  { slug: "all-events", label: "All events", href: "/events" },
+  { slug: "all-events", label: "All events", href: hqModuleHref("events") },
   {
     slug: "tournaments",
     label: "Tournaments",
-    href: "/events/types/tournaments",
+    href: hqHref("eventType", { eventType: "tournaments" }),
     eventKinds: ["tournament"],
     title: "Tournaments",
     description:
@@ -146,7 +249,7 @@ export const eventNavigationItems = [
   {
     slug: "clinics",
     label: "Clinics",
-    href: "/events/types/clinics",
+    href: hqHref("eventType", { eventType: "clinics" }),
     eventKinds: ["clinic"],
     title: "Clinics",
     description:
@@ -155,7 +258,7 @@ export const eventNavigationItems = [
   {
     slug: "open-play",
     label: "Open play",
-    href: "/events/types/open-play",
+    href: hqHref("eventType", { eventType: "open-play" }),
     eventKinds: ["open-play"],
     title: "Open play",
     description:
@@ -164,7 +267,7 @@ export const eventNavigationItems = [
   {
     slug: "pickup",
     label: "Pickup",
-    href: "/events/types/pickup",
+    href: hqHref("eventType", { eventType: "pickup" }),
     eventKinds: ["pickup"],
     title: "Pickup",
     description:
@@ -173,7 +276,7 @@ export const eventNavigationItems = [
   {
     slug: "leagues",
     label: "Leagues",
-    href: "/leagues",
+    href: hqLeaguesPath,
     eventKinds: ["league"],
     title: "Leagues",
     description:
@@ -183,16 +286,6 @@ export const eventNavigationItems = [
 
 export type EventNavigationItem = (typeof eventNavigationItems)[number];
 export type EventNavigationSlug = EventNavigationItem["slug"];
-
-export type OperatorNavigationChild =
-  ProductNavigationItem | EventNavigationItem;
-
-export const operatorNavigationChildren: Partial<
-  Record<OperatorModule, readonly OperatorNavigationChild[]>
-> = {
-  products: productNavigationItems,
-  events: eventNavigationItems,
-};
 
 export const adminModules = [
   { slug: "ask-duna", label: "Ask Duna", icon: Bot, group: "Platform" },
@@ -288,12 +381,3 @@ export const adminModules = [
 }[];
 
 export type AdminModule = (typeof adminModules)[number]["slug"];
-
-export const quickActions = [
-  { label: "New session", icon: CalendarDays },
-  { label: "Add person", icon: UsersRound },
-  { label: "Create product", icon: PackageOpen },
-  { label: "Send update", icon: Mail },
-  { label: "Run check-in", icon: ClipboardCheck },
-  { label: "Reconcile", icon: ListChecks },
-] as const;

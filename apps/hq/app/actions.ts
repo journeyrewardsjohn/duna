@@ -260,18 +260,17 @@ function errorState(error: unknown): OperatorActionState {
 
 function revalidateOperator() {
   revalidatePath("/");
-  revalidatePath("/calendar");
+  revalidatePath("/schedule");
   revalidatePath("/programs");
-  revalidatePath("/products");
+  revalidatePath("/offerings");
   revalidatePath("/events");
-  revalidatePath("/leagues");
-  revalidatePath("/payments");
-  revalidatePath("/messages");
+  revalidatePath("/money");
+  revalidatePath("/inbox");
   revalidatePath("/team");
-  revalidatePath("/members");
+  revalidatePath("/people");
   revalidatePath("/settings");
-  revalidatePath("/locations");
-  revalidatePath("/locations", "layout");
+  revalidatePath("/setup/places");
+  revalidatePath("/setup/places", "layout");
 }
 
 export async function createCatalogItemAction(
@@ -423,7 +422,7 @@ export async function createWaiverAction(
       idempotencyKey: crypto.randomUUID(),
     });
     revalidatePath("/settings");
-    revalidatePath("/products");
+    revalidatePath("/offerings");
     return result(
       "success",
       "Waiver saved in the club library.",
@@ -508,7 +507,7 @@ export async function replaceCatalogItemAction(
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
-    revalidatePath(`/products/${saved.id}`);
+    revalidatePath(`/offerings/${saved.id}`);
     return result(
       "success",
       "Saved as a new private product version. Publish it when the revision is ready.",
@@ -534,7 +533,7 @@ export async function revertCatalogItemVersionAction(
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
-    revalidatePath(`/products/${catalogItemId}`);
+    revalidatePath(`/offerings/${catalogItemId}`);
     return result(
       "success",
       "That version is now a new private draft. Publish it when it is ready.",
@@ -670,7 +669,7 @@ export async function updateCatalogItemAction(
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
-    revalidatePath(`/products/${field(formData, "catalogItemId")}`);
+    revalidatePath(`/offerings/${field(formData, "catalogItemId")}`);
     return result("success", "Product and coach availability settings saved.");
   } catch (error) {
     return errorState(error);
@@ -694,7 +693,7 @@ export async function enableInventoryGoodSalesAction(
       idempotencyKey: crypto.randomUUID(),
     });
     revalidateOperator();
-    revalidatePath(`/products/${catalogItemId}`);
+    revalidatePath(`/offerings/${catalogItemId}`);
     return result(
       "success",
       "Sales are ready for review. The inventory history and cost layers were preserved.",
@@ -3215,8 +3214,8 @@ export async function updateMoneySettingsAction(
       ),
       idempotencyKey: crypto.randomUUID(),
     });
-    revalidatePath("/payments");
-    revalidatePath("/payments/setup");
+    revalidatePath("/money");
+    revalidatePath("/money/setup");
     return result(
       "success",
       "Money settings saved. Stripe remains on manual rail payouts so Duna can enforce every refund hold before following your selected schedule.",
@@ -3253,7 +3252,7 @@ export async function createRefundPolicyAction(
       makeDefault: field(formData, "makeDefault") === "on",
       idempotencyKey: crypto.randomUUID(),
     });
-    revalidatePath("/payments");
+    revalidatePath("/money");
     revalidatePath("/events/create");
     return result(
       "success",
@@ -3275,7 +3274,7 @@ export async function createManualPayoutAction(
       confirmed: confirmed(formData),
       idempotencyKey: crypto.randomUUID(),
     });
-    revalidatePath("/payments");
+    revalidatePath("/money");
     return result(
       "success",
       "Payout submitted to the organization’s connected bank. Refund-held funds were excluded.",

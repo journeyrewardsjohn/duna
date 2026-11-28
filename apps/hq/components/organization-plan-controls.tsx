@@ -18,7 +18,7 @@ import { useActionState, useState } from "react";
 import {
   updateOrganizationPlanPolicyAction,
   type OrganizationPlanActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: OrganizationPlanActionState = {
   status: "idle",

@@ -18,7 +18,7 @@ import {
   restoreTrainingPracticePlanVersionAction,
   restoreTrainingProgramArchiveAction,
   restoreTrainingProgramVersionAction,
-} from "@/app/training/actions";
+} from "@/app/(legacy)/training/actions";
 
 type ContentKind = "program" | "practice-plan";
 

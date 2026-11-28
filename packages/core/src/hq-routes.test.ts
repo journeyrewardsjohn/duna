@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   hqAdminModuleSlugs,
   hqHref,
+  hqLeaguesPath,
   hqModuleHref,
   hqOperatorModuleSlugs,
   hqRoutes,
@@ -11,6 +12,11 @@ import {
 } from "./hq-routes";
 
 const hqApp = resolve(import.meta.dirname, "../../../apps/hq/app");
+// HQ has two root layouts (docs/design/hq-shell.md): rebuilt pages live in
+// (next), pages not yet rebuilt in (legacy). Neither group is in the URL.
+const hqRootGroups = ["(legacy)", "(next)"] as const;
+const servedBy = (...path: string[]) =>
+  hqRootGroups.some((group) => existsSync(join(hqApp, group, ...path)));
 
 function pageTemplates(directory: string): string[] {
   return readdirSync(directory).flatMap((name) => {
@@ -47,20 +53,58 @@ describe("HQ route map", () => {
   it("only lists module slugs that HQ still serves and that have no page of their own", () => {
     const sources = [
       readFileSync(join(hqApp, "../components/navigation.ts"), "utf8"),
-      readFileSync(join(hqApp, "[module]/page.tsx"), "utf8"),
-      readFileSync(join(hqApp, "admin/[module]/page.tsx"), "utf8"),
+      readFileSync(join(hqApp, "(legacy)/[module]/page.tsx"), "utf8"),
+      readFileSync(join(hqApp, "(legacy)/admin/[module]/page.tsx"), "utf8"),
     ].join("\n");
     for (const slug of [...hqOperatorModuleSlugs, ...hqAdminModuleSlugs]) {
       expect(sources, slug).toContain(`"${slug}"`);
     }
     for (const slug of hqOperatorModuleSlugs) {
-      expect(existsSync(join(hqApp, slug, "page.tsx")), slug).toBe(false);
+      expect(servedBy(slug, "page.tsx"), slug).toBe(false);
     }
     for (const slug of hqAdminModuleSlugs) {
-      expect(existsSync(join(hqApp, "admin", slug, "page.tsx")), slug).toBe(
-        false,
-      );
+      expect(servedBy("admin", slug, "page.tsx"), slug).toBe(false);
     }
+  });
+
+  it("fails for an entry whose page.tsx does not exist", () => {
+    // The first check above is what keeps entries honest; prove it bites.
+    const withGhost = [...templates, "/no-such-hq-page"];
+    expect(withGhost.filter((template) => !filesystem.has(template))).toEqual([
+      "/no-such-hq-page",
+    ]);
+  });
+
+  it("keeps no address the IA retired (docs/plan/s2-route-map.md)", () => {
+    // Old prefixes moved without aliases. /activities and /programs stay
+    // until package B4 removes them; /stripe/return is a provider address.
+    const retired = [
+      "/audiences",
+      "/calendar",
+      "/leagues",
+      "/locations",
+      "/members",
+      "/messages",
+      "/onboarding",
+      "/payments",
+      "/products",
+      "/promo-codes",
+      "/settings/theme",
+    ];
+    const concrete = [
+      ...templates,
+      ...hqOperatorModuleSlugs.map((slug) => hqModuleHref(slug)),
+      hqLeaguesPath,
+    ];
+    for (const path of concrete) {
+      for (const prefix of retired) {
+        expect(
+          path === prefix || path.startsWith(`${prefix}/`),
+          `${path} uses the retired ${prefix}`,
+        ).toBe(false);
+      }
+    }
+    expect(hqLeaguesPath.split("?")[0]).toBe(hqModuleHref("events"));
   });
 
   it("treats only the gallery as development-only", () => {
@@ -73,13 +117,14 @@ describe("HQ route map", () => {
 
   it("builds encoded concrete paths", () => {
     expect(hqHref("home")).toBe("/");
-    expect(hqHref("payments")).toBe("/payments");
+    expect(hqHref("money")).toBe("/money");
     expect(
       hqHref("eventDivision", { sessionId: "s 1", divisionId: "d/2" }),
     ).toBe("/events/s%201/divisions/d%2F2");
     expect(hqHref("ask")).toBe("/ask");
     expect(hqHref("ask", { conversation: "abc" })).toBe("/ask/abc");
-    expect(hqModuleHref("calendar")).toBe("/calendar");
+    expect(hqModuleHref("schedule")).toBe("/schedule");
+    expect(hqHref("place", { venueId: "v1" })).toBe("/setup/places/v1");
     expect(() =>
       hqHref("member", { personId: "" } as { personId: string }),
     ).toThrow(TypeError);

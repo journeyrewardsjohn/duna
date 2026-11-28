@@ -272,7 +272,7 @@ function publishBlockers(
     blockers.push({
       code: "location",
       message: "Publish the connected venue before opening registration.",
-      href: "/locations",
+      href: "/setup/places",
       linkLabel: "Review venue",
     });
   }
@@ -280,7 +280,7 @@ function publishBlockers(
     blockers.push({
       code: "payments",
       message: "Finish Money setup before publishing this paid event.",
-      href: "/payments/setup",
+      href: "/money/setup",
       linkLabel: "Configure Money",
     });
   }

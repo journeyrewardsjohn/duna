@@ -25,7 +25,7 @@ import {
   prepareSuperAdminRefundAction,
   setPersonSuperAdminAction,
   type PeopleAdminActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: PeopleAdminActionState = { status: "idle", message: "" };
 

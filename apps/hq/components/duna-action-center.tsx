@@ -18,25 +18,25 @@ const quickActions = [
   {
     label: "Add person",
     detail: "Invite a player, member, guardian, or customer",
-    href: "/members/invite",
+    href: "/people/invite",
     kind: "person" as const,
   },
   {
     label: "Send update",
     detail: "Message the right audience with review controls",
-    href: "/messages",
+    href: "/inbox",
     kind: "message" as const,
   },
   {
     label: "Open calendar",
     detail: "Run today and shape the upcoming schedule",
-    href: "/calendar",
+    href: "/schedule",
     kind: "calendar" as const,
   },
   {
     label: "Review money",
     detail: "Transactions, balances, payouts, and reconciliation",
-    href: "/payments",
+    href: "/money",
     kind: "money" as const,
   },
 ] as const;

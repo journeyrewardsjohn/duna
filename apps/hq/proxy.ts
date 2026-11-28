@@ -7,7 +7,7 @@ import {
 } from "@workos-inc/authkit-nextjs";
 import { REQUEST_ID_HEADER, resolveEdgeRequestId } from "@duna/observability";
 import { NextRequest, NextResponse } from "next/server";
-import { isHiddenTidelineGalleryRoute } from "./app/tideline/gallery-guard";
+import { isHiddenTidelineGalleryRoute } from "./app/(next)/tideline/gallery-guard";
 import { isPublicHqRoute, routeMatches } from "./lib/public-routes";
 
 async function routeProxy(request: NextRequest): Promise<NextResponse> {
@@ -62,11 +62,11 @@ async function routeProxy(request: NextRequest): Promise<NextResponse> {
   if (
     result.session.user &&
     !result.session.organizationId &&
-    !routeMatches(pathname, "/onboarding") &&
+    !routeMatches(pathname, "/setup/start") &&
     !isPublicHqRoute(pathname)
   ) {
     return handleAuthkitProxy(request, result.headers, {
-      redirect: new URL("/onboarding", request.url),
+      redirect: new URL("/setup/start", request.url),
     });
   }
   return handleAuthkitProxy(request, result.headers);

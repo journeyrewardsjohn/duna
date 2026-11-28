@@ -203,7 +203,7 @@ export function PeopleWorkspace({
                       <th scope="row">
                         <Link
                           className="hq-person-link"
-                          href={`/members/${person.personId}`}
+                          href={`/people/${person.personId}`}
                         >
                           <span className="people-directory__avatar">
                             {person.avatarUrl ? (
@@ -305,10 +305,7 @@ export function PeopleWorkspace({
             </header>
             <div>
               {needsAttention.slice(0, 4).map((person) => (
-                <Link
-                  href={`/members/${person.personId}`}
-                  key={person.personId}
-                >
+                <Link href={`/people/${person.personId}`} key={person.personId}>
                   <span>{initials(person.displayName)}</span>
                   <span>
                     <strong>{person.displayName}</strong>
@@ -337,7 +334,7 @@ export function PeopleWorkspace({
             <div>
               {recentPurchases.map((purchase) => (
                 <Link
-                  href={`/members/${purchase.personId}`}
+                  href={`/people/${purchase.personId}`}
                   key={purchase.orderId}
                 >
                   <span>

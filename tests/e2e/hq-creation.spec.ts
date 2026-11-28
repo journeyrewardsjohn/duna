@@ -82,8 +82,8 @@ test("creation examples wait for explicit AI submission and preserve review", as
 
 for (const [path, heading, builder] of [
   ["/events/create", "Create event", ".event-builder"],
-  ["/products/create", "Create offer", ".guided-product-builder"],
-  ["/locations/create", "Add venue", ".venue-create-studio"],
+  ["/offerings/create", "Create offer", ".guided-product-builder"],
+  ["/setup/places/create", "Add venue", ".venue-create-studio"],
 ] as const) {
   test(`manual ${path} remains available with keyboard focus and dark containment`, async ({
     page,
@@ -123,7 +123,7 @@ for (const [path, heading, builder] of [
           .map((node) => node.getAttribute("name") ?? node.tagName),
       );
     expect(outside).toEqual([]);
-    if (path === "/products/create" && info.project.name === "mobile") {
+    if (path === "/offerings/create" && info.project.name === "mobile") {
       const clearance = await page.evaluate(() => {
         const footer = document.querySelector(".guided-product-footer")!;
         const navigation = document.querySelector(".hq-sidebar")!;

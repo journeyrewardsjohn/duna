@@ -77,7 +77,7 @@ import {
   createVenueMediaPath,
   optimizeImageUpload,
 } from "@/lib/media-storage";
-import type { OperatorModule } from "./navigation";
+import type { OperatorPanel } from "./navigation";
 import {
   CommerceSettingsControls,
   PeopleRefundControls,
@@ -1359,7 +1359,7 @@ export function CourtComposer({
   useEffect(() => {
     if (state.status === "success" && state.entityId && redirectVenueId) {
       router.push(
-        `/locations/${redirectVenueId}/courts/${state.entityId}?created=true`,
+        `/setup/places/${redirectVenueId}/courts/${state.entityId}?created=true`,
       );
     }
   }, [redirectVenueId, router, state.entityId, state.status]);
@@ -3403,7 +3403,7 @@ export function OperatorControls({
   workspace,
 }: {
   readonly focusedCreate?: boolean;
-  readonly module: OperatorModule;
+  readonly module: OperatorPanel;
   readonly waivers?: WaiverWorkspace;
   readonly workspace: OperatorWorkspace;
 }) {
@@ -3419,7 +3419,7 @@ export function OperatorControls({
   if (module === "team") {
     return <TeamMemberComposer workspace={workspace} />;
   }
-  if (module === "members") {
+  if (module === "people") {
     return (
       <div className="commerce-controls">
         <div className="operator-controls-grid">
@@ -3430,7 +3430,7 @@ export function OperatorControls({
       </div>
     );
   }
-  if (module === "products") {
+  if (module === "offerings") {
     return (
       <ProductCatalogControls
         focused={focusedCreate}
@@ -3439,7 +3439,7 @@ export function OperatorControls({
       />
     );
   }
-  if (module === "payments") {
+  if (module === "money") {
     return <StripeOnboarding workspace={workspace} />;
   }
   if (module === "settings") {
@@ -3450,7 +3450,7 @@ export function OperatorControls({
       </>
     );
   }
-  if (module === "locations") {
+  if (module === "places") {
     return <FacilitiesControls workspace={workspace} />;
   }
   if (module === "events" || module === "leagues") {
@@ -3480,7 +3480,7 @@ export function OperatorControls({
       </>
     );
   }
-  if (module === "calendar") {
+  if (module === "schedule") {
     return (
       <>
         <SessionDraftManager workspace={workspace} />
