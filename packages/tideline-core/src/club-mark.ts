@@ -140,3 +140,219 @@ export function foregroundFor(
     validBackground: parsed !== null,
   };
 }
+
+/** `#rrggbb` from channels (clamped, rounded). */
+export function toHexColor(rgb: Rgb): string {
+  const part = (value: number): string =>
+    Math.round(Math.min(255, Math.max(0, value)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${part(rgb.r)}${part(rgb.g)}${part(rgb.b)}`.toUpperCase();
+}
+
+/** HSL (degrees, 0-1, 0-1) to channels. */
+export function hslToRgb(
+  hue: number,
+  saturation: number,
+  lightness: number,
+): Rgb {
+  const h = (((hue % 360) + 360) % 360) / 360;
+  const s = Math.min(1, Math.max(0, saturation));
+  const l = Math.min(1, Math.max(0, lightness));
+  if (s === 0) return { r: l * 255, g: l * 255, b: l * 255 };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const channelOf = (t0: number): number => {
+    let t = t0;
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return {
+    r: channelOf(h + 1 / 3) * 255,
+    g: channelOf(h) * 255,
+    b: channelOf(h - 1 / 3) * 255,
+  };
+}
+
+/** A stable hue (0-359) for a name: FNV-1a over its UTF-16 code units. */
+export function hueFor(name: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < name.length; index += 1) {
+    hash ^= name.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % 360;
+}
+
+/**
+ * A monogram ground for a club that has not chosen a colour yet, generated
+ * from its name: a deep, quiet tone of a stable hue that always passes 4.5:1
+ * with Salt. The club's own colour always wins over this; it is never used to
+ * recolour a brand.
+ */
+export function generatedClubColor(nameOrHue: string | number): string {
+  const hue = typeof nameOrHue === "number" ? nameOrHue : hueFor(nameOrHue);
+  let lightness = 0.32;
+  // Darken until Salt reads at 4.5:1 (a handful of steps at most).
+  while (lightness > 0.1) {
+    const hex = toHexColor(hslToRgb(hue, 0.42, lightness));
+    if (foregroundFor(hex).passesText) return hex;
+    lightness -= 0.02;
+  }
+  return toHexColor(hslToRgb(hue, 0.42, 0.1));
+}
+
+export type ClubMarkSource = "logo" | "tile" | "monogram";
+
+export interface ClubMarkInput {
+  readonly name: string | null | undefined;
+  /** The colour the club chose for its mark's ground. */
+  readonly color?: string | null;
+  /** A logo mark (SVG or transparent PNG) drawn on the colour. */
+  readonly logo?: string | null;
+  /** A logo variant drawn for dark grounds (a light logo). */
+  readonly logoLight?: string | null;
+  /** A logo variant drawn for light grounds (a dark logo). */
+  readonly logoDark?: string | null;
+  /** An uploaded square tile, shown edge to edge. */
+  readonly tile?: string | null;
+  /** Force one form; otherwise logo, then tile, then monogram. */
+  readonly source?: ClubMarkSource;
+  /** Size in px. Below 28 a logo or tile becomes the monogram unless it works small. */
+  readonly size: number;
+  /** The club marked its logo or tile as legible at small sizes. */
+  readonly worksSmall?: boolean;
+  readonly locale?: string;
+}
+
+export interface ClubMarkModel {
+  readonly form: ClubMarkSource;
+  /** The image to draw (logo or tile); `null` for the monogram. */
+  readonly src: string | null;
+  /** The ground: the club's colour, or a generated one when it has none. */
+  readonly background: string;
+  /** True when the ground was generated (the club has not chosen a colour). */
+  readonly generatedBackground: boolean;
+  /** Night Court or Salt, contrast-checked on `background`. */
+  readonly foreground: ForegroundChoice["foreground"];
+  readonly contrast: ForegroundChoice;
+  /** Two characters; `null` when the name has nothing usable (draw the Duna micro mark). */
+  readonly monogram: string | null;
+  /** The monogram has a digit: Jost never sets numerals, so the renderer uses Geist. */
+  readonly monogramHasNumeral: boolean;
+  /** Corner radius in px: 26% of the size. */
+  readonly radius: number;
+}
+
+/** The smallest size a logo or tile shows at unless the club says it works small. */
+export const CLUB_MARK_SMALL_LIMIT = 28;
+
+/**
+ * What a club mark draws (contract R13): the club's logo on its colour, its
+ * uploaded tile, or its two-character monogram on its colour, with a
+ * legible, contrast-checked foreground. Never a white border; never a
+ * desaturated or faded state (state is said in a chip beside it).
+ */
+export function clubMarkModel(input: ClubMarkInput): ClubMarkModel {
+  const chosen = input.color ? parseHexColor(input.color) : null;
+  const background = chosen
+    ? toHexColor(chosen)
+    : generatedClubColor(input.name ?? "");
+  const contrast = foregroundFor(background);
+  const onDarkGround = contrast.foreground === SALT;
+  const logo =
+    (onDarkGround ? input.logoLight : input.logoDark) ?? input.logo ?? null;
+  const small = input.size < CLUB_MARK_SMALL_LIMIT && !input.worksSmall;
+
+  let form: ClubMarkSource;
+  if (input.source === "monogram" || small) form = "monogram";
+  else if (input.source === "tile") form = input.tile ? "tile" : "monogram";
+  else if (input.source === "logo") form = logo ? "logo" : "monogram";
+  else if (logo) form = "logo";
+  else if (input.tile) form = "tile";
+  else form = "monogram";
+
+  const monogram = monogramFor(input.name, input.locale).text;
+  return {
+    form,
+    src: form === "logo" ? logo : form === "tile" ? (input.tile ?? null) : null,
+    background,
+    generatedBackground: chosen === null,
+    foreground: contrast.foreground,
+    contrast,
+    monogram,
+    monogramHasNumeral: monogram !== null && /\p{N}/u.test(monogram),
+    radius: Math.round(input.size * 0.26 * 10) / 10,
+  };
+}
+
+export type MembershipStatus = "active" | "paused" | "expired" | "pending";
+
+export interface MembershipPassInput {
+  readonly status: MembershipStatus;
+  /** The pass code from the server; never invented on the client. */
+  readonly code?: string | null;
+  /** When it ended or ends, already formatted ("Nov 30, 2026"). */
+  readonly validThrough?: string | null;
+}
+
+export type MembershipPassModel =
+  | { readonly kind: "code"; readonly code: string }
+  | {
+      readonly kind: "message";
+      readonly reason: "pending" | "paused" | "expired" | "no-pass";
+      readonly text: string;
+    };
+
+/**
+ * What the card's code area can honestly show. A code shows only for an
+ * active membership that has one; otherwise a sentence says why not.
+ */
+export function membershipPassModel(
+  input: MembershipPassInput,
+): MembershipPassModel {
+  switch (input.status) {
+    case "pending":
+      return {
+        kind: "message",
+        reason: "pending",
+        text: "Your pass appears when the club approves you.",
+      };
+    case "paused":
+      return {
+        kind: "message",
+        reason: "paused",
+        text: "Your membership is paused, so there is no pass to scan. The club can resume it.",
+      };
+    case "expired":
+      return {
+        kind: "message",
+        reason: "expired",
+        text: input.validThrough
+          ? `This membership ended ${input.validThrough}. Renew it with the club to get a pass.`
+          : "This membership has ended. Renew it with the club to get a pass.",
+      };
+    case "active":
+      return input.code
+        ? { kind: "code", code: input.code }
+        : {
+            kind: "message",
+            reason: "no-pass",
+            text: "No pass to scan yet. The desk can find you by name.",
+          };
+  }
+}
+
+/** Words for each membership state, for its chip. */
+export const MEMBERSHIP_STATUS_TEXT: Readonly<
+  Record<MembershipStatus, string>
+> = {
+  active: "Active",
+  paused: "Paused",
+  expired: "Expired",
+  pending: "Pending",
+};

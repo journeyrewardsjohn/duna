@@ -29,3 +29,5 @@ export { default as confirm } from "./confirm";
 export { default as states } from "./states";
 export { default as form } from "./form";
 export { default as document } from "./document";
+export { default as score } from "./score";
+export { default as identity } from "./identity";

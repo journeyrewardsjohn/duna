@@ -91,15 +91,6 @@ function currency(value: string): CurrencyCode {
   return "USD";
 }
 
-function muxThumbnail(
-  playbackId: string | null,
-  policy: string | null,
-): string | undefined {
-  return playbackId && policy === "public"
-    ? `https://image.mux.com/${playbackId}/thumbnail.jpg?time=0`
-    : undefined;
-}
-
 export function summarizeSessionTranscript(value: string): string {
   const transcript = value.replace(/\s+/g, " ").trim();
   if (!transcript) return "";
@@ -530,8 +521,6 @@ export async function loadOperatorMemberProfile(input: {
         status: videos.status,
         eventId: videos.eventId,
         durationSeconds: videos.durationSeconds,
-        muxAssetPlaybackId: videos.muxAssetPlaybackId,
-        muxAssetPlaybackPolicy: videos.muxAssetPlaybackPolicy,
         createdAt: videos.createdAt,
       })
       .from(videos)
@@ -673,10 +662,6 @@ export async function loadOperatorMemberProfile(input: {
     sessionId: video.eventId ?? undefined,
     sessionTitle: video.eventId ? sessionTitles.get(video.eventId) : undefined,
     durationSeconds: video.durationSeconds ?? undefined,
-    thumbnailUrl: muxThumbnail(
-      video.muxAssetPlaybackId,
-      video.muxAssetPlaybackPolicy,
-    ),
     createdAt: video.createdAt.toISOString(),
   }));
   const timeline: OperatorMemberProfile["timeline"] = [
@@ -1216,8 +1201,6 @@ export async function loadOperatorSessionDetail(
         title: videos.title,
         status: videos.status,
         durationSeconds: videos.durationSeconds,
-        muxAssetPlaybackId: videos.muxAssetPlaybackId,
-        muxAssetPlaybackPolicy: videos.muxAssetPlaybackPolicy,
         createdAt: videos.createdAt,
       })
       .from(videos)
@@ -1515,10 +1498,6 @@ export async function loadOperatorSessionDetail(
       title: video.title,
       status: video.status,
       durationSeconds: video.durationSeconds ?? undefined,
-      thumbnailUrl: muxThumbnail(
-        video.muxAssetPlaybackId,
-        video.muxAssetPlaybackPolicy,
-      ),
       createdAt: video.createdAt.toISOString(),
     })),
   };

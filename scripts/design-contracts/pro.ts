@@ -36,20 +36,5 @@ export const pro: SurfaceContract = {
       "apps/pro/assets/icon-tinted.png",
       "apps/pro/assets/monochrome-icon.png",
     ].map((path) => ({ kind: "exists", path }) as const),
-    {
-      kind: "includes",
-      file: "apps/pro/satoshi-text.tsx",
-      when: "apps/pro/satoshi-text.tsx",
-      values: [
-        "./assets/fonts/Satoshi-Light.ttf",
-        "./assets/fonts/Satoshi-Regular.ttf",
-        "./assets/fonts/Satoshi-Medium.ttf",
-        "./assets/fonts/Satoshi-Bold.ttf",
-        "./assets/fonts/Satoshi-Black.ttf",
-      ],
-      message: "apps/pro/satoshi-text.tsx must load every local Satoshi face",
-      legacy:
-        "legacy: delete when Pro text moves to @duna/ui/native (M-F1/M-R0)",
-    },
   ],
 };

@@ -4,9 +4,7 @@ import {
   cloudflareSignedPlaybackUrl,
   createCloudflareLiveOutput,
   createCloudflareLiveVideo,
-  createMuxLiveOutput,
   isCloudflareStreamConfigured,
-  muxLiveVideoQuality,
 } from "./video-providers";
 import { preferredLiveVideoProvider, videoShareUrl } from "./video-service";
 import {
@@ -56,34 +54,21 @@ describe("live provider routing", () => {
     expect(isCloudflareStreamConfigured()).toBe(false);
   });
 
-  it("routes everyday streams to Cloudflare and top Duna tiers to Mux", () => {
-    configureCloudflare();
-    vi.stubEnv("MUX_TOKEN_ID", "mux-id");
-    vi.stubEnv("MUX_TOKEN_SECRET", "mux-secret");
+  it("uses Cloudflare Stream for every live stream, or none at all", () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "");
+    vi.stubEnv("CF_ACCOUNT_ID", "");
+    vi.stubEnv("cloudflare_account_id", "");
+    vi.stubEnv("CLOUDFLARE_STREAM_API_TOKEN", "");
+    expect(preferredLiveVideoProvider()).toBeUndefined();
 
-    expect(preferredLiveVideoProvider({ membershipPlan: "premium" })).toBe(
-      "cloudflare",
-    );
-    expect(preferredLiveVideoProvider({ membershipPlan: "premium-plus" })).toBe(
-      "mux",
-    );
-    expect(preferredLiveVideoProvider({ organizationPlan: "small-club" })).toBe(
-      "cloudflare",
-    );
-    expect(preferredLiveVideoProvider({ organizationPlan: "club" })).toBe(
-      "mux",
-    );
-    vi.stubEnv("DUNA_LIVE_PROVIDER", "cloudflare");
-    expect(preferredLiveVideoProvider({ membershipPlan: "premium-plus" })).toBe(
-      "cloudflare",
-    );
-    vi.stubEnv("DUNA_LIVE_PROVIDER", "mux");
-    expect(preferredLiveVideoProvider({ membershipPlan: "premium" })).toBe(
-      "mux",
-    );
-    expect(muxLiveVideoQuality()).toBe("plus");
-    vi.stubEnv("MUX_LIVE_VIDEO_QUALITY", "premium");
-    expect(muxLiveVideoQuality()).toBe("premium");
+    configureCloudflare();
+    expect(preferredLiveVideoProvider()).toBe("cloudflare");
+
+    // The retired provider-selection variable no longer changes routing.
+    vi.stubEnv("DUNA_LIVE_PROVIDER", "auto");
+    expect(preferredLiveVideoProvider()).toBe("cloudflare");
+    vi.stubEnv("CLOUDFLARE_STREAM_API_TOKEN", "");
+    expect(preferredLiveVideoProvider()).toBeUndefined();
   });
 
   it("returns both RTMPS and SRT without persisting credentials", async () => {
@@ -165,39 +150,6 @@ describe("live provider routing", () => {
       expect.stringContaining("/live_inputs/input-123/outputs"),
       expect.objectContaining({ method: "POST" }),
     );
-  });
-
-  it("creates a Mux simulcast target without retaining the YouTube key", async () => {
-    vi.stubEnv("MUX_TOKEN_ID", "mux-id");
-    vi.stubEnv("MUX_TOKEN_SECRET", "mux-secret");
-    const fetchMock = vi.fn().mockResolvedValue(
-      Response.json({
-        data: {
-          id: "mux-target-123",
-          status: "idle",
-          url: "rtmps://a.rtmp.youtube.com/live2",
-        },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(
-      createMuxLiveOutput({
-        liveInputId: "mux-live-123",
-        url: "rtmps://a.rtmp.youtube.com/live2",
-        streamKey: "youtube-secret-key",
-        passthrough: "destination-123",
-      }),
-    ).resolves.toEqual({ outputId: "mux-target-123" });
-    const request = fetchMock.mock.calls[0];
-    expect(String(request?.[0])).toContain(
-      "/video/v1/live-streams/mux-live-123/simulcast-targets",
-    );
-    expect(JSON.parse(String((request?.[1] as RequestInit)?.body))).toEqual({
-      passthrough: "destination-123",
-      stream_key: "youtube-secret-key",
-      url: "rtmps://a.rtmp.youtube.com/live2",
-    });
   });
 
   it("builds public and signed Cloudflare player URLs", () => {

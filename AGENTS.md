@@ -130,10 +130,13 @@ are checkable; the essentials:
   `50% / 50%`, or podium treatment before competition has begun.
 - “Sand Rating” is always two words in user-facing copy.
 - `pnpm verify:design-system` enforces the contract through per-surface files
-  in `scripts/design-contracts/`. A check marked `legacy` pins pre-Tideline
-  code and is deleted by the surface's own work package when it migrates; add
-  migrated paths to that file's `migrated` list so the Tideline guard protects
-  them.
+  in `scripts/design-contracts/`. Add the paths of a rebuilt screen to that
+  file's `migrated` list so the Tideline guard protects them. Legacy styles
+  are replaced, never preserved: nothing guards, measures or pins an old
+  screen's styling, and nothing is added to a legacy sheet. A rebuilt screen
+  moves to the `(next)` route group and deletes the old page's code, styles and
+  tests in the same pull request; the rule and the checks that remain are in
+  `docs/plan/legacy-styles.md`.
 
 ## Interaction and accessibility
 

@@ -6358,11 +6358,7 @@ export function VideoPlayerModal({
     [client, playback, video.id],
   );
 
-  const uri = playback
-    ? playback.provider === "mux" && playback.playbackId
-      ? `https://stream.mux.com/${playback.playbackId}.m3u8${playback.playbackToken ? `?token=${encodeURIComponent(playback.playbackToken)}` : ""}`
-      : playback.sourceUrl
-    : undefined;
+  const uri = playback?.sourceUrl;
   const handlePlaybackProgress = useCallback(
     (seconds: number) => {
       setPlaybackSeconds(seconds);
@@ -6619,10 +6615,8 @@ function VideoCard({
         ) : (
           <Text style={styles.videoPrivacy}>
             {video.recordingVisibility === "public" ? "Public" : "Private"} ·{" "}
-            {video.source === "live"
-              ? video.liveProvider === "cloudflare"
-                ? "Cloudflare Stream"
-                : "Mux"
+            {video.source === "live" && video.liveProvider === "cloudflare"
+              ? "Cloudflare Stream"
               : video.source === "upload"
                 ? "Duna Cloud"
                 : "Duna archive"}

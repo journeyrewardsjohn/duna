@@ -36,3 +36,5 @@ export * from "./confirm";
 export * from "./states";
 export * from "./form";
 export * from "./document";
+export * from "./score";
+export * from "./identity";
