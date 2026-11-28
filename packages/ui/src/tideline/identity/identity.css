@@ -1,4 +1,4 @@
-/* Tideline club identity: ClubMark, ClubLockup, MembershipCard, WalletStack. Rules: see styles.css and docs/design/tideline-components.md. */
+/* Tideline club identity: ClubMark, ClubLockup, the membership card, its pass and the wallet (docs/design/wallet.md). Rules: see styles.css and docs/design/tideline-components.md. */
 @layer tideline {
   .td {
     /* ---------- ClubMark: brand owns the fill, Duna owns the frame ---------- */
@@ -104,241 +104,708 @@
       flex: none;
     }
 
-    /* ---------- MembershipCard: on Salt in light, on Dune in dark ---------- */
+    /* ---------- MembershipCard: an ID-1 object with full-bleed club art ---------- */
 
+    /* Sizes inside the card use the card's own width (cqi), so a 300 px
+       card and a 420 px card are the same object. */
     .td-mcard {
-      --td-mcard-face: var(--td-brand-salt);
-      --td-mcard-ink: var(--td-brand-night-court);
-      --td-mcard-ink-2: color-mix(
-        in srgb,
-        var(--td-brand-night-court) 78%,
-        var(--td-mcard-face)
-      );
-      display: grid;
-      width: 100%;
-      max-width: 420px;
-      overflow: hidden;
-      border-radius: var(--td-radius-xl);
-      background: var(--td-mcard-face);
-      box-shadow:
-        var(--td-shadow-raised),
-        inset 0 0 0 1px var(--td-line);
-      color: var(--td-mcard-ink);
-    }
-
-    &[data-theme="dark"] .td-mcard,
-    .td[data-theme="dark"] .td-mcard {
-      --td-mcard-face: var(--td-brand-dune);
-      box-shadow: var(--td-shadow-raised);
-    }
-
-    .td-mcard__band {
+      --td-mcard-on: var(--td-brand-salt);
+      --td-mcard-max: 372px;
       position: relative;
-      display: flex;
-      gap: var(--td-space-3);
-      align-items: center;
-      min-height: 88px;
-      padding: var(--td-space-4);
-      overflow: hidden;
-      background: var(--td-mcard-club);
-      color: var(--td-mcard-on-club);
-      isolation: isolate;
+      display: block;
+      width: 100%;
+      max-width: var(--td-mcard-max);
+      container-type: inline-size;
+      color: var(--td-mcard-on);
+      text-align: start;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    .td-mcard__photo {
+    .td-mcard[data-text="night"] {
+      --td-mcard-on: var(--td-brand-night-court);
+    }
+
+    .td-mcard[data-size="hero"] {
+      --td-mcard-max: 420px;
+    }
+
+    /* The strip: the top 36 % of the card (mark, name, chip), art and all. */
+    .td-mcard[data-size="strip"] {
+      aspect-ratio: 4.406;
+      overflow: hidden;
+      border-radius: var(--td-radius-lg);
+    }
+
+    .td-mcard[role="button"] {
+      cursor: pointer;
+    }
+
+    .td-mcard[role="button"]:focus-visible {
+      outline: 2px solid var(--td-focus);
+      outline-offset: 3px;
+      border-radius: var(--td-radius-xl);
+    }
+
+    .td-mcard__face {
+      position: relative;
+      display: block;
+      overflow: hidden;
+      border-radius: 5.2cqi;
+      isolation: isolate;
+      backface-visibility: hidden;
+    }
+
+    .td-mcard[data-size="strip"] .td-mcard__face {
+      position: absolute;
+      inset: 0 0 auto;
+      height: calc(100cqi / 1.586);
+      border-radius: 0;
+    }
+
+    /* Depth: contact, lift, and a glow in the art's own tone on the ground.
+       The front is always the ID-1 object; the pass behind it may grow taller
+       so nothing on it is ever cut off (larger text, long names). */
+    .td-mcard__front {
+      aspect-ratio: 1.586;
+      background: var(--td-brand-night-court);
+      box-shadow:
+        0 1px 2px
+          color-mix(in srgb, var(--td-brand-night-court) 40%, transparent),
+        0 10px 22px -6px
+          color-mix(in srgb, var(--td-brand-night-court) 55%, transparent),
+        0 30px 60px -20px
+          color-mix(in srgb, var(--td-mcard-glow) 85%, transparent);
+    }
+
+    .td-mcard[data-size="strip"] .td-mcard__front {
+      box-shadow: none;
+    }
+
+    /* The glass edge: a top highlight, a faint rim and a bottom shade. */
+    .td-mcard__front::after,
+    .td-mcard__back::after {
       position: absolute;
       inset: 0;
-      z-index: -2;
+      z-index: 5;
+      border-radius: inherit;
+      box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--td-brand-salt) 42%, transparent),
+        inset 0 0 0 1px
+          color-mix(in srgb, var(--td-brand-salt) 12%, transparent),
+        inset 0 -1px 0
+          color-mix(in srgb, var(--td-brand-night-court) 22%, transparent);
+      pointer-events: none;
+      content: "";
+    }
+
+    .td-cardart {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      display: block;
+      overflow: hidden;
+      background-size: cover;
+    }
+
+    .td-cardart__canvas,
+    .td-cardart__poster,
+    .td-cardart__loop {
+      position: absolute;
+      inset: 0;
+      display: block;
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
 
-    /* Protection: the club's colour over its photo, so its name always reads. */
-    .td-mcard__band[data-photo]::before {
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      background: linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--td-brand-night-court) 82%, transparent),
-        color-mix(in srgb, var(--td-mcard-club) 40%, transparent)
-      );
-      content: "";
+    .td-cardart picture {
+      display: contents;
     }
 
-    .td-mcard__bandtext {
-      display: grid;
-      flex: 1;
+    /* The loop fades in over the poster once it can play through. */
+    .td-cardart__loop {
+      opacity: 0;
+      transition: opacity var(--td-duration-fade-reduced) linear;
+    }
+
+    .td-cardart[data-ready] .td-cardart__loop {
+      opacity: 1;
+    }
+
+    /* The measured local scrim: strong only where the type sits. */
+    .td-mcard__scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        radial-gradient(
+          95% 75% at 0% 0%,
+          color-mix(
+              in srgb,
+              var(--td-mcard-scrim) calc(var(--td-mcard-st) * 100%),
+              transparent
+            )
+            0%,
+          color-mix(
+              in srgb,
+              var(--td-mcard-scrim) calc(var(--td-mcard-st) * 75%),
+              transparent
+            )
+            28%,
+          transparent 62%
+        ),
+        radial-gradient(
+          110% 85% at 0% 100%,
+          color-mix(
+              in srgb,
+              var(--td-mcard-scrim) calc(var(--td-mcard-sb) * 100%),
+              transparent
+            )
+            0%,
+          color-mix(
+              in srgb,
+              var(--td-mcard-scrim) calc(var(--td-mcard-sb) * 78%),
+              transparent
+            )
+            30%,
+          transparent 66%
+        ),
+        linear-gradient(
+          0deg,
+          color-mix(
+            in srgb,
+            var(--td-mcard-scrim) calc(var(--td-mcard-sb) * 30%),
+            transparent
+          ),
+          transparent 38%
+        );
+    }
+
+    /* The sheen follows the pointer and never moves by itself. */
+    .td-mcard__sheen {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0;
+      mix-blend-mode: soft-light;
+      background:
+        radial-gradient(
+          circle at var(--td-mcard-mx, 30%) var(--td-mcard-my, 20%),
+          color-mix(in srgb, var(--td-brand-salt) 46%, transparent),
+          transparent 42%
+        ),
+        linear-gradient(
+          115deg,
+          transparent calc(var(--td-mcard-mx, 30%) - 22%),
+          color-mix(in srgb, var(--td-brand-salt) 18%, transparent)
+            var(--td-mcard-mx, 30%),
+          transparent calc(var(--td-mcard-mx, 30%) + 18%)
+        );
+      transition: opacity 420ms var(--td-ease-ui);
+    }
+
+    @media (hover: hover) {
+      .td-mcard:hover .td-mcard__sheen {
+        opacity: 1;
+      }
+    }
+
+    .td-mcard__keyline {
+      position: absolute;
+      inset: 1.9cqi;
+      z-index: 3;
+      border: 1px solid
+        color-mix(in srgb, var(--td-brand-salt) 32%, transparent);
+      border-radius: 3.3cqi;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .td-mcard__top,
+    .td-mcard__bottom {
+      position: absolute;
+      z-index: 4;
+      display: flex;
       min-width: 0;
+    }
+
+    .td-mcard__top {
+      top: 5.36cqi;
+      right: 4.5cqi;
+      left: 5cqi;
+      gap: 2.4cqi;
+      align-items: center;
+    }
+
+    .td-mcard[data-size="strip"] .td-mcard__top {
+      top: 3.4cqi;
+    }
+
+    .td-mcard__top .td-clubmark {
+      box-shadow: 0 1px 6px
+        color-mix(in srgb, var(--td-brand-night-court) 30%, transparent);
     }
 
     .td-mcard__club {
+      min-width: 0;
       overflow: hidden;
-      font: var(--td-type-label);
+      font-family: var(--td-font-ui);
+      font-size: clamp(12px, 3.63cqi, 15px);
       font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.005em;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-shadow: 0 1px 8px
+        color-mix(in srgb, var(--td-mcard-scrim) 28%, transparent);
     }
 
-    .td-mcard__kind {
-      overflow: hidden;
-      font: var(--td-type-meta);
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      opacity: 0.88;
-    }
-
-    .td-mcard__duna {
+    .td-mcard__chip,
+    .td-mcard__state {
+      display: inline-flex;
       flex: none;
-      align-self: flex-start;
-      width: 12px;
-      height: 15px;
-      fill: currentColor;
-    }
-
-    .td-mcard__face {
-      display: grid;
-      gap: var(--td-space-2);
-      padding: var(--td-space-4);
-    }
-
-    .td-mcard__who {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--td-space-2);
+      gap: 4px;
       align-items: center;
+      margin-inline-start: auto;
+      padding: 3px 9px;
+      border-radius: var(--td-radius-pill);
+      font-family: var(--td-font-ui);
+      font-size: 12px;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+
+    .td-mcard__chip {
+      border: 1px solid color-mix(in srgb, var(--td-mcard-on) 50%, transparent);
+      background: color-mix(in srgb, var(--td-mcard-scrim) 38%, transparent);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(8px);
+    }
+
+    /* State is a solid Salt chip: readable on any art, never a fade. */
+    .td-mcard__state {
+      padding-inline-start: 7px;
+      background: var(--td-brand-salt);
+      color: var(--td-brand-night-court);
+      font-weight: 600;
+      box-shadow: 0 1px 4px
+        color-mix(in srgb, var(--td-brand-night-court) 25%, transparent);
+    }
+
+    .td-mcard__bottom {
+      right: 4.5cqi;
+      bottom: 5.36cqi;
+      left: 5.5cqi;
+      gap: 2.7cqi;
+      align-items: flex-end;
       justify-content: space-between;
     }
 
+    .td-mcard__who {
+      display: grid;
+      gap: 0.8cqi;
+      min-width: 0;
+    }
+
     .td-mcard__member {
+      overflow: hidden;
+      font-family: var(--td-font-ui);
+      font-size: clamp(15px, 5.38cqi, 23px);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-shadow: 0 1px 10px
+        color-mix(in srgb, var(--td-mcard-scrim) 30%, transparent);
+    }
+
+    .td-mcard__held,
+    .td-mcard__meta {
+      overflow: hidden;
+      font-size: 12px;
+      line-height: 1.4;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-shadow: 0 1px 6px
+        color-mix(in srgb, var(--td-mcard-scrim) 30%, transparent);
+    }
+
+    .td-mcard__held {
+      font-family: var(--td-font-ui);
+      font-weight: 500;
+    }
+
+    .td-mcard__meta {
+      font-family: var(--td-font-mono);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    .td-mcard__fact {
+      flex: none;
+      padding: 5px 10px;
+      border: 1px solid
+        color-mix(in srgb, var(--td-brand-salt) 24%, transparent);
+      border-radius: var(--td-radius-pill);
+      background: color-mix(in srgb, var(--td-mcard-scrim) 55%, transparent);
+      font-family: var(--td-font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      backdrop-filter: blur(10px);
+    }
+
+    /* ---------- The flip ---------- */
+
+    .td-cardflip {
+      position: relative;
+      display: grid;
+      perspective: 1400px;
+    }
+
+    .td-cardflip__inner {
+      position: relative;
+      display: grid;
+      transform-style: preserve-3d;
+      transition: transform 620ms var(--td-ease-rise);
+    }
+
+    .td-cardflip[data-flipped] .td-cardflip__inner {
+      transform: rotateY(180deg);
+    }
+
+    .td-cardflip__face {
+      position: relative;
+      display: grid;
+      grid-area: 1 / 1;
+      align-self: start;
+      backface-visibility: hidden;
+    }
+
+    .td-cardflip__back {
+      align-self: stretch;
+    }
+
+    .td-cardflip__back {
+      transform: rotateY(180deg);
+    }
+
+    /* ---------- The pass: the back of the card ---------- */
+
+    .td-mcard__back {
+      background: var(--td-brand-salt);
+      color: var(--td-brand-night-court);
+      box-shadow:
+        0 1px 2px
+          color-mix(in srgb, var(--td-brand-night-court) 40%, transparent),
+        0 10px 22px -6px
+          color-mix(in srgb, var(--td-brand-night-court) 55%, transparent);
+    }
+
+    /* The pass is text first: at least the card's height, taller when the
+       text needs it. Sizes are in rem so they follow the person's text size. */
+    .td-mpass {
+      position: relative;
+      display: flex;
+      min-height: calc(100cqi / 1.586);
+      flex-direction: column;
+      background: var(--td-brand-salt);
+      color: var(--td-brand-night-court);
+    }
+
+    .td-mpass__band {
+      display: flex;
+      flex: none;
+      gap: 2.2cqi;
+      align-items: center;
+      min-height: calc(100cqi / 1.586 * 0.24);
+      padding: 2cqi 5cqi;
+      background: var(--td-mpass-club);
+      color: var(--td-mpass-on-club);
+    }
+
+    .td-mpass__club {
       min-width: 0;
       font-family: var(--td-font-ui);
-      font-size: 18px;
+      font-size: 0.8125rem;
       font-weight: 600;
-      line-height: 24px;
+      line-height: 1.25;
       overflow-wrap: anywhere;
     }
 
-    .td-mcard__plan,
-    .td-mcard__line {
-      margin: 0;
-      font: var(--td-type-meta);
-      color: var(--td-mcard-ink-2);
-    }
-
-    .td-mcard .td-mcard__chip {
+    .td-mpass__kicker {
       flex: none;
-    }
-
-    .td-mcard__pass {
-      display: flex;
-      gap: var(--td-space-3);
-      align-items: center;
-      margin-top: var(--td-space-2);
-      padding: var(--td-space-3);
-      border-radius: var(--td-radius-md);
-      background: var(--td-surface);
-      color: var(--td-text);
-      box-shadow: inset 0 0 0 1px var(--td-line);
-    }
-
-    .td-mcard__pass--none {
-      font: var(--td-type-meta);
-      color: var(--td-text-2);
-    }
-
-    .td-mcard__qr {
-      display: grid;
-      flex: none;
-      place-items: center;
-    }
-
-    .td-mcard__code {
-      display: grid;
-      gap: 2px;
-    }
-
-    .td-mcard__codelabel {
-      font: var(--td-type-micro);
+      margin-inline-start: auto;
       font-family: var(--td-font-mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--td-text-2);
     }
 
-    .td-mcard__codevalue {
-      font: var(--td-type-code);
-      font-size: 16px;
-      letter-spacing: 0.06em;
+    /* A narrow pass keeps the club's name; the kicker gives way. */
+    @container (max-width: 340px) {
+      .td-mpass__kicker {
+        display: none;
+      }
+    }
+
+    .td-mpass__body {
+      display: flex;
+      flex: 1;
+      gap: 4.5cqi;
+      align-items: center;
+      padding: 3.8cqi 5cqi;
+    }
+
+    /* Too narrow for the code and the text side by side (a small card, or
+       large text): the code sits above the text. */
+    @container (max-width: 20em) {
+      .td-mpass__body {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .td-mpass .td-mpass__qr {
+        align-self: center;
+        width: min(56cqi, 180px);
+        height: min(56cqi, 180px);
+      }
+    }
+
+    .td-qr {
+      display: block;
+    }
+
+    .td-qr__ground {
+      fill: var(--td-brand-salt);
+    }
+
+    .td-qr__modules {
+      fill: var(--td-brand-night-court);
+    }
+
+    .td-mpass__qr {
+      flex: none;
+      width: calc(100cqi / 1.586 * 0.6);
+      height: calc(100cqi / 1.586 * 0.6);
+      border-radius: 1.4cqi;
+    }
+
+    .td-mpass__info {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+      align-content: center;
+    }
+
+    .td-mpass__member {
+      font-family: var(--td-font-ui);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      line-height: 1.25;
       overflow-wrap: anywhere;
     }
 
-    /* The 64 px strip (compact card and wallet strips). */
-    .td-mcard--compact,
-    .td-wallet__strip {
-      display: flex;
-      gap: var(--td-space-3);
+    .td-mpass__status {
+      display: inline-flex;
+      gap: 5px;
       align-items: center;
-      width: 100%;
-      min-height: 64px;
-      padding: var(--td-space-3);
-      border: 0;
-      border-radius: var(--td-radius-lg);
-      background: var(--td-surface);
-      box-shadow: inset 0 0 0 1px var(--td-line);
-      color: var(--td-text);
-      font: inherit;
-      text-align: start;
+      font-family: var(--td-font-ui);
+      font-size: 0.75rem;
+      font-weight: 600;
+      line-height: 1.3;
     }
 
-    .td-mcard__striptext {
+    .td-mpass__meta {
       display: grid;
+      font-family: var(--td-font-mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1.4;
+      letter-spacing: 0.02em;
+      overflow-wrap: anywhere;
+      user-select: text;
+    }
+
+    .td-mpass__note {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      margin-top: 2px;
+      font-family: var(--td-font-mono);
+      font-size: 0.75rem;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+
+    .td-mpass__crest {
+      width: 9px;
+      height: 11px;
+      flex: none;
+      fill: currentColor;
+    }
+
+    .td-mpass__none {
+      display: grid;
+      flex: 1;
+      gap: 6px;
+      align-content: center;
+      padding: 4cqi 6cqi;
+    }
+
+    .td-mpass__title {
+      font-family: var(--td-font-ui);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .td-mpass__text {
+      font-family: var(--td-font-ui);
+      font-size: 0.8125rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    /* ---------- The wallet: a Night Court band, then the sheet ---------- */
+
+    .td-walletv {
+      width: 100%;
+      container-type: inline-size;
+    }
+
+    .td-walletv__layout {
+      display: grid;
+      align-items: start;
+    }
+
+    .td-walletv__band {
+      position: relative;
+      min-width: 0;
+      padding-block: 6px 34px;
+      border-radius: var(--td-radius-xl);
+      background: var(--td-brand-night-court);
+      color: var(--td-brand-salt);
+      container-type: inline-size;
+      isolation: isolate;
+    }
+
+    .td-walletv__bar {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      min-height: 52px;
+      padding: 4px 14px 4px 20px;
+    }
+
+    .td-walletv__title {
       flex: 1;
       min-width: 0;
 
-      .td-mcard__plan {
-        overflow: hidden;
-        color: var(--td-text-2);
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      :is(h1, h2, h3) {
+        margin: 0;
+        color: inherit;
       }
     }
 
-    /* ---------- WalletStack ---------- */
-
-    .td-wallet {
+    .td-walletv__icon {
       display: grid;
-      gap: var(--td-space-3);
-      max-width: 420px;
-    }
-
-    .td-wallet__strips {
-      display: grid;
-      gap: var(--td-space-2);
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    .td-wallet__strip {
+      flex: none;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: var(--td-radius-pill);
+      background: color-mix(in srgb, var(--td-brand-salt) 9%, transparent);
+      color: var(--td-brand-salt);
       cursor: pointer;
-      transition: box-shadow var(--td-duration-hover) var(--td-ease-ui);
+      transition: background var(--td-duration-hover) var(--td-ease-ui);
 
       &:hover {
-        box-shadow:
-          var(--td-shadow-raised),
-          inset 0 0 0 1px var(--td-line-strong);
+        background: color-mix(in srgb, var(--td-brand-salt) 16%, transparent);
+      }
+    }
+
+    .td-walletv__notice {
+      margin: 2px 16px 10px;
+      padding: 8px 12px;
+      border-radius: var(--td-radius-md);
+      background: color-mix(in srgb, var(--td-brand-salt) 8%, transparent);
+      font: var(--td-type-meta);
+      color: var(--td-brand-salt);
+    }
+
+    .td-walletv__empty {
+      padding: 8px 20px 0;
+    }
+
+    .td-walletv__actions {
+      padding: 18px 14px 0;
+    }
+
+    .td-walletv__sheet {
+      position: relative;
+      min-width: 0;
+      margin-top: -22px;
+      padding: 22px 20px 24px;
+      border-radius: var(--td-radius-xl);
+      background: var(--td-surface);
+      box-shadow: var(--td-shadow-raised);
+      color: var(--td-text);
+    }
+
+    @container (min-width: 860px) {
+      .td-walletv:not([data-layout="compact"], [data-empty])
+        .td-walletv__layout {
+        grid-template-columns: 440px minmax(0, 1fr);
+        gap: 24px;
       }
 
-      &:active {
-        transform: scale(0.98);
+      .td-walletv:not([data-layout="compact"]) .td-walletv__band {
+        position: sticky;
+        top: 16px;
       }
 
-      > .td-icon {
-        flex: none;
-        color: var(--td-text-3);
+      .td-walletv:not([data-layout="compact"]) .td-walletv__sheet {
+        margin-top: 0;
+        padding: 24px 28px;
       }
+    }
+
+    .td-walletv[data-empty] .td-walletv__layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .td-walletv[data-empty] .td-walletv__band {
+      position: static;
+    }
+
+    .td-walletv[data-layout="split"]:not([data-empty]) .td-walletv__layout {
+      grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+      gap: 24px;
+    }
+
+    .td-walletv[data-layout="split"] .td-walletv__sheet {
+      margin-top: 0;
+    }
+
+    .td-wallet__caption {
+      margin: 0;
+      font-family: var(--td-font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-align: center;
+      text-transform: uppercase;
+      color: color-mix(in srgb, var(--td-brand-salt) 68%, transparent);
     }
 
     .td-wallet__empty {
@@ -347,13 +814,442 @@
       color: var(--td-text-2);
     }
 
-    @media (prefers-reduced-motion: reduce) {
-      .td-wallet__strip {
-        transition: none;
+    /* ---------- WalletCarousel ---------- */
 
-        &:active {
-          transform: none;
+    .td-wcarousel {
+      display: grid;
+      gap: 14px;
+      padding-bottom: 12px;
+      container-type: inline-size;
+    }
+
+    .td-wcarousel__rail {
+      --td-wallet-card: min(
+        var(--td-wallet-card-max, 372px),
+        calc(100cqi - 52px)
+      );
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: -56px;
+      padding: 12px calc((100cqi - var(--td-wallet-card)) / 2) 72px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+      cursor: grab;
+      outline: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+      }
+    }
+
+    .td-wcarousel__rail[data-dragging] {
+      scroll-snap-type: none;
+      cursor: grabbing;
+      user-select: none;
+    }
+
+    .td-wcarousel__slot {
+      flex: none;
+      width: var(--td-wallet-card);
+      border-radius: calc(var(--td-wallet-card) * 0.052);
+      outline: none;
+      scroll-snap-align: center;
+
+      .td-mcard {
+        max-width: none;
+      }
+
+      &:focus-visible {
+        box-shadow:
+          0 0 0 3px var(--td-brand-night-court),
+          0 0 0 5px var(--td-focus);
+      }
+    }
+
+    .td-wcarousel__dots {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      height: 6px;
+    }
+
+    .td-wcarousel__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: var(--td-radius-pill);
+      background: color-mix(in srgb, var(--td-brand-salt) 30%, transparent);
+      transition:
+        width 320ms var(--td-ease-rise),
+        background 320ms var(--td-ease-rise);
+
+      &[data-on] {
+        width: 18px;
+        background: var(--td-brand-dune);
+      }
+    }
+
+    /* ---------- WalletStack ---------- */
+
+    .td-wstack {
+      display: grid;
+      gap: 14px;
+      padding-top: 8px;
+      container-type: inline-size;
+    }
+
+    .td-wstack__list {
+      position: relative;
+      width: min(var(--td-wallet-card-max, 372px), calc(100cqi - 40px));
+      margin-inline: auto;
+      border-radius: var(--td-radius-xl);
+      outline: none;
+      transition: height 420ms var(--td-ease-rise);
+
+      &:focus-visible {
+        box-shadow:
+          0 0 0 3px var(--td-brand-night-court),
+          0 0 0 5px var(--td-focus);
+      }
+    }
+
+    .td-wstack__item {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      cursor: pointer;
+      touch-action: none;
+      transform: translateY(
+          calc(var(--td-wstack-y, 0px) + var(--td-wstack-drag, 0px))
+        )
+        scale(var(--td-wstack-scale, 1));
+      transform-origin: top center;
+      transition: transform 480ms var(--td-ease-rise);
+
+      &[data-dragging] {
+        transition: none;
+      }
+
+      .td-mcard {
+        max-width: none;
+      }
+    }
+
+    .td-wstack__foot {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      width: min(var(--td-wallet-card-max, 372px), calc(100cqi - 40px));
+      min-height: 44px;
+      margin-inline: auto;
+    }
+
+    .td-wstack__back {
+      min-height: 44px;
+      padding: 6px 14px;
+      border: 1px solid
+        color-mix(in srgb, var(--td-brand-salt) 26%, transparent);
+      border-radius: var(--td-radius-pill);
+      background: transparent;
+      color: var(--td-brand-salt);
+      font-family: var(--td-font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    /* The standalone stack outside a band (the gallery, the home page). */
+    .td-wallet--empty {
+      display: grid;
+      max-width: 420px;
+    }
+
+    /* ---------- The four actions ---------- */
+
+    .td-wactions {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 4px;
+      max-width: 420px;
+      margin-inline: auto;
+    }
+
+    .td-waction {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      align-items: center;
+      min-height: 44px;
+      padding: 4px 0;
+      border: 0;
+      background: transparent;
+      color: var(--td-brand-salt);
+      font-family: var(--td-font-ui);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.2;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid var(--td-focus);
+        outline-offset: 2px;
+        border-radius: var(--td-radius-md);
+      }
+
+      &[aria-pressed="true"] .td-waction__circle {
+        background: var(--td-brand-dune);
+        color: var(--td-brand-night-court);
+      }
+
+      &[data-disabled] {
+        cursor: default;
+        color: color-mix(in srgb, var(--td-brand-salt) 72%, transparent);
+      }
+    }
+
+    .td-waction__circle {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: var(--td-radius-pill);
+      background: color-mix(in srgb, var(--td-brand-salt) 10%, transparent);
+      transition: background var(--td-duration-hover) var(--td-ease-ui);
+    }
+
+    .td-waction:hover:not([data-disabled]) .td-waction__circle {
+      background: color-mix(in srgb, var(--td-brand-salt) 17%, transparent);
+    }
+
+    /* ---------- CardArrival: the purchase moment ---------- */
+
+    .td-arrival {
+      display: grid;
+      gap: 22px;
+      justify-items: center;
+      padding: 28px 24px 32px;
+      border-radius: var(--td-radius-xl);
+      background: var(--td-brand-night-court);
+      color: var(--td-brand-salt);
+      text-align: center;
+      container-type: inline-size;
+    }
+
+    .td-arrival__stage {
+      --td-arrival-card: min(372px, calc(100cqi - 60px));
+      position: relative;
+      width: var(--td-arrival-card);
+      height: calc(var(--td-arrival-card) / 1.586 + 30px);
+    }
+
+    .td-arrival__line {
+      position: absolute;
+      right: -30px;
+      bottom: 0;
+      left: -30px;
+      height: 2px;
+      background: var(--td-brand-dune);
+      transform: scaleX(0);
+      transition: transform 450ms var(--td-ease-rise) 150ms;
+    }
+
+    .td-arrival__riser {
+      position: absolute;
+      right: 0;
+      bottom: 2px;
+      left: 0;
+      clip-path: inset(100% 0 0 0);
+      transform: translateY(30px);
+      transition:
+        clip-path 700ms var(--td-ease-rise) 600ms,
+        transform 700ms var(--td-ease-rise) 600ms;
+
+      .td-mcard {
+        max-width: none;
+      }
+    }
+
+    .td-arrival[data-phase="play"] {
+      .td-arrival__line {
+        transform: scaleX(1);
+      }
+
+      .td-arrival__riser {
+        clip-path: inset(-80px -80px -80px -80px);
+        transform: translateY(-22px);
+      }
+
+      .td-arrival__text > * {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .td-arrival__text {
+      display: grid;
+      gap: 6px;
+      max-width: 360px;
+
+      > * {
+        opacity: 0;
+        transform: translateY(8px);
+        transition:
+          opacity 600ms var(--td-ease-rise) 1250ms,
+          transform 600ms var(--td-ease-rise) 1250ms;
+      }
+
+      > :nth-child(2) {
+        transition-delay: 1370ms;
+      }
+
+      > :nth-child(3) {
+        transition-delay: 1490ms;
+      }
+    }
+
+    .td-arrival__title {
+      margin: 0;
+      font-family: var(--td-font-brand);
+      font-size: 26px;
+      font-weight: var(--td-type-brand-weight);
+      line-height: 1.15;
+      letter-spacing: -0.015em;
+    }
+
+    .td-arrival__line-text {
+      margin: 0;
+      font: var(--td-type-body);
+      color: color-mix(in srgb, var(--td-brand-salt) 80%, transparent);
+    }
+
+    .td-arrival__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+
+    /* ---------- CardArtPicker ---------- */
+
+    .td-artpicker {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+      gap: 10px;
+    }
+
+    .td-artpicker__option {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      border-radius: var(--td-radius-md);
+      font: var(--td-type-meta);
+      color: var(--td-text-2);
+      cursor: pointer;
+      outline: none;
+
+      &:focus-visible .td-artpicker__swatch {
+        box-shadow: 0 0 0 3px var(--td-focus);
+      }
+
+      &[aria-checked="true"] {
+        color: var(--td-text);
+
+        .td-artpicker__swatch {
+          box-shadow:
+            0 0 0 2px var(--td-ground),
+            0 0 0 4px var(--td-text);
         }
+      }
+    }
+
+    .td-artpicker__swatch {
+      position: relative;
+      display: block;
+      aspect-ratio: 1.586;
+      overflow: hidden;
+      border-radius: var(--td-radius-sm);
+      box-shadow: 0 0 0 1px var(--td-line);
+    }
+
+    .td-artpicker__name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      /* The flip becomes a 200 ms cross-fade; nothing turns. */
+      .td-cardflip__inner,
+      .td-cardflip[data-flipped] .td-cardflip__inner {
+        transform: none;
+        transition: none;
+      }
+
+      .td-cardflip__back {
+        transform: none;
+        opacity: 0;
+        transition: opacity var(--td-duration-fade-reduced) linear;
+      }
+
+      .td-cardflip__front {
+        transition: opacity var(--td-duration-fade-reduced) linear;
+      }
+
+      .td-cardflip[data-flipped] .td-cardflip__back {
+        opacity: 1;
+      }
+
+      .td-cardflip[data-flipped] .td-cardflip__front {
+        opacity: 0;
+      }
+
+      .td-cardart__loop {
+        display: none;
+      }
+
+      .td-wstack__item,
+      .td-wstack__list,
+      .td-wcarousel__dot {
+        transition: opacity var(--td-duration-fade-reduced) linear;
+      }
+
+      /* The arrival is its finished frame, faded in. */
+      .td-arrival__line,
+      .td-arrival[data-phase="play"] .td-arrival__line {
+        transform: scaleX(1);
+        transition: none;
+      }
+
+      .td-arrival__riser,
+      .td-arrival[data-phase="play"] .td-arrival__riser {
+        clip-path: none;
+        transform: none;
+      }
+
+      .td-arrival__riser,
+      .td-arrival__text > *,
+      .td-arrival__text > :nth-child(2),
+      .td-arrival__text > :nth-child(3) {
+        transform: none;
+        transition: opacity var(--td-duration-fade-reduced) linear;
+      }
+
+      .td-arrival[data-phase="start"] .td-arrival__riser {
+        opacity: 0;
+      }
+
+      .td-mcard__sheen {
+        transition: none;
       }
     }
   }

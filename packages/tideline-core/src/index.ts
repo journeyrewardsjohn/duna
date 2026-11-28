@@ -16,3 +16,5 @@ export * from "./slot-state";
 export * from "./time-rail";
 export * from "./sun-arc";
 export * from "./conditions-view";
+export * from "./wallet";
+export * from "./qr";
