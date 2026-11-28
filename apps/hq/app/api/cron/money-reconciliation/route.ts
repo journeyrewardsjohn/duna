@@ -1,4 +1,7 @@
-import { reconcileStripePaymentLineage } from "@duna/api";
+import {
+  reconcileDunaPayBalances,
+  reconcileStripePaymentLineage,
+} from "@duna/api";
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
@@ -22,8 +25,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const result = await reconcileStripePaymentLineage({ limit: 100 });
+  // Duna Pay: reserves, negative-balance recovery and processor drift.
+  const pay = await reconcileDunaPayBalances(new Date());
   return NextResponse.json({
-    status: result.failed ? "attention" : "ok",
+    status: result.failed || pay.failures || pay.drifted ? "attention" : "ok",
     ...result,
+    pay: {
+      drifted: pay.drifted,
+      failures: pay.failures,
+      clubs: pay.lines.length,
+    },
   });
 }
