@@ -71,7 +71,7 @@ function Trend({
 /**
  * A person › Health: the read-only summary the person chose to share, for
  * exactly the viewers the Health service allows for this person (see
- * `healthAccess` in people-data.ts); never in a list or an export, under the
+ * `healthTabExists` in people-data.ts); never in a list or an export, under the
  * product's standing "not medical advice" wording. For anyone else this tab
  * does not exist; reaching the address says "You need access" and nothing
  * about the person's health.
@@ -88,7 +88,12 @@ export default async function PersonHealthPage({
   const { page } = found;
   const { record, context } = page;
   const { row, profile } = record;
-  if (!record.canSeeHealth) {
+  // The one recording read (an access record), made only here where values
+  // are shown; the service re-checks grant, age and guardian approval.
+  const history = record.canSeeHealth
+    ? await loadHealthHistory(row.id)
+    : undefined;
+  if (!history || history.state === "denied") {
     return (
       <PersonScreen askStarters={[]} page={page} tab="health">
         <div className="hqs-state">
@@ -103,8 +108,6 @@ export default async function PersonHealthPage({
   const first = firstName(row.name);
   const now = new Date(context.now);
   const snapshot = profile.health;
-  // With Duna Database this is the service's own answer for this viewer.
-  const history = await loadHealthHistory(row.id);
   const detail = history.state === "ok" ? history.data : undefined;
   const metrics = {
     readinessScore:
@@ -187,17 +190,11 @@ export default async function PersonHealthPage({
       </PageSection>
       <PageSection id="trends" title="Recent days">
         {history.state !== "ok" ? (
-          history.state === "denied" ? (
-            <p className="people-quiet">
-              {`${first} shares a summary only, not the day-by-day history.`}
-            </p>
-          ) : (
-            <PeopleBlockState
-              loaded={history}
-              organization={context.organization}
-              what="the day-by-day history"
-            />
-          )
+          <PeopleBlockState
+            loaded={history}
+            organization={context.organization}
+            what="the day-by-day history"
+          />
         ) : (
           <>
             <div className="people-trends">

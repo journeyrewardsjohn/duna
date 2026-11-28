@@ -142,25 +142,24 @@ export const peopleContext = cache(async (): Promise<PeopleContext> => {
 });
 
 /**
- * Whether the Health service lets this viewer see this person's health,
- * following its own rule exactly. With Duna Database the service itself is
- * asked (it checks the person's grants: to the club, which reaches its
- * owners, managers and coaches for an adult and only its coaches for a
- * junior, or to this coach by name, plus age and guardian approval). In
- * demo mode, which has no grants table, the same rule is applied to the
- * club grant the profile carries: the viewer's role must be one the grant
- * reaches, and the person must have shared with the club.
+ * Whether this person's Health tab exists for this viewer, decided WITHOUT
+ * an access record. The Health service's only read (`memberHealthProfile`)
+ * records "health.profile_viewed" for every non-owner call, and its
+ * non-recording check (`resolveHealthAccess`) is not exported, so the page
+ * never calls the service on load. It decides from the two non-recording
+ * parts it can read: the service's viewer roles (owners, managers and coaches
+ * for an adult; only coaches for a junior), and the person's active share
+ * with the club as the member profile's own grant lookup returns it (the
+ * `health` snapshot `operator.memberProfile` builds from health sharing
+ * grants). The recording read happens once, when the Health tab is opened,
+ * and the service then checks age, guardian approval and the grant again.
  */
-async function healthAccess(
-  personId: string,
+function healthTabExists(
   subjectIsJunior: boolean,
   sharedWithClub: boolean,
   context: PeopleContext,
-): Promise<"allowed" | "refused"> {
-  if (!canSeeHealth(context.roles, subjectIsJunior)) return "refused";
-  if (!process.env.DATABASE_URL) return sharedWithClub ? "allowed" : "refused";
-  const history = await loadHealthHistory(personId);
-  return history.state === "ok" ? "allowed" : "refused";
+): boolean {
+  return sharedWithClub && canSeeHealth(context.roles, subjectIsJunior);
 }
 
 export interface PeopleWorkspace {
@@ -300,13 +299,11 @@ export const loadPerson = cache(
       "memberProfile",
     );
     if (profile.state !== "ok") return profile;
-    const access = await healthAccess(
-      personId,
+    const health = healthTabExists(
       row.isJunior,
       profile.data.health !== undefined,
       context,
     );
-    const health = access !== "refused";
     return {
       state: "ok",
       data: {
@@ -323,8 +320,10 @@ export const loadPerson = cache(
 );
 
 /**
- * The person's detailed Health history. Called only for a viewer who may see
- * it; the Health service checks the person's own grant again.
+ * The person's detailed Health history: the Health service's recording read
+ * (one "health.profile_viewed" access record per call). Called only by the
+ * Health tab itself, for a viewer whose tab exists; the service checks the
+ * person's grant, age and guardian approval again.
  */
 export const loadHealthHistory = cache(
   async (personId: string): Promise<Loaded<HealthProfile>> => {
