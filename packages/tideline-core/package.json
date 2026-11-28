@@ -24,7 +24,9 @@
     "./slot-state": "./src/slot-state.ts",
     "./time-rail": "./src/time-rail.ts",
     "./sun-arc": "./src/sun-arc.ts",
-    "./conditions-view": "./src/conditions-view.ts"
+    "./conditions-view": "./src/conditions-view.ts",
+    "./wallet": "./src/wallet.ts",
+    "./qr": "./src/qr.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
