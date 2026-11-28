@@ -196,7 +196,7 @@ test.describe("CH-7 Plan practice", () => {
       hq("/training/drills/d0070000-0000-4000-8000-000000000001"),
     );
     await expect(
-      page.getByRole("figure", { name: /the drawing/ }),
+      page.getByRole("region", { name: /the drawing/ }),
     ).toBeVisible();
     // Coach mode on the practice the plan is attached to.
     await page.goto(

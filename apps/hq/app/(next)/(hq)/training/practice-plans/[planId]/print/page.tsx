@@ -8,7 +8,9 @@ import {
   versionLine,
 } from "@/components/training/plan-model";
 import { PrintButton } from "@/components/training/print-button";
+import { SceneSlot } from "@/components/training/scene-slot";
 import {
+  loadDrill,
   loadPracticePlan,
   trainingContext,
 } from "@/components/training/training-data";
@@ -37,6 +39,24 @@ export default async function PracticePlanPrintPage({
   if (context.session.access !== "operator") return null;
   const plan = context.canWrite ? await loadPracticePlan(planId) : undefined;
   if (plan?.state === "not-found") notFound();
+  const drillIds =
+    plan?.state === "ok"
+      ? [
+          ...new Set(
+            plan.data.blocks.flatMap((block) =>
+              block.drillId ? [block.drillId] : [],
+            ),
+          ),
+        ].slice(0, 20)
+      : [];
+  const drills = await Promise.all(drillIds.map((id) => loadDrill(id)));
+  const sceneOf = new Map(
+    drills.flatMap((drill) =>
+      drill.state === "ok" && drill.data.scene
+        ? [[drill.data.id, drill.data.scene.document] as const]
+        : [],
+    ),
+  );
   const startsAt = start && /^\d{2}:\d{2}$/.test(start) ? start : undefined;
   return (
     <TrainingScreen
@@ -121,6 +141,14 @@ export default async function PracticePlanPrintPage({
                         <span className="tr-print__meta">
                           {block.instructionsMarkdown}
                         </span>
+                      ) : null}
+                      {block.drillId && sceneOf.has(block.drillId) ? (
+                        <SceneSlot
+                          compact
+                          label={`${block.title}: the drawing`}
+                          mode="diagram"
+                          scene={sceneOf.get(block.drillId)}
+                        />
                       ) : null}
                     </td>
                     <td className="tr-num">{block.durationMinutes}</td>

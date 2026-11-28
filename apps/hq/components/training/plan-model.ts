@@ -27,6 +27,8 @@ export interface DraftBlock extends Omit<PlanBlock, "id"> {
   readonly pinnedVersion?: number;
   /** The drill's current version number, when known. */
   readonly currentVersion?: number;
+  /** The drill's drawing (scene document), shown as a small diagram. */
+  readonly scene?: unknown;
 }
 
 export const MAX_PLAN_MINUTES = 720;
@@ -206,6 +208,7 @@ export function drillBlock(drill: {
   readonly currentVersionId?: string;
   readonly version: number;
   readonly perRep?: { readonly touches?: number; readonly jumps?: number };
+  readonly scene?: unknown;
 }): DraftBlock {
   const intensity = Math.min(10, Math.max(1, Math.round(drill.load / 9.2)));
   return {
@@ -238,6 +241,7 @@ export function drillBlock(drill: {
     ...(drill.perRep ? { perRep: drill.perRep } : {}),
     pinnedVersion: drill.version,
     currentVersion: drill.version,
+    ...(drill.scene ? { scene: drill.scene } : {}),
   };
 }
 

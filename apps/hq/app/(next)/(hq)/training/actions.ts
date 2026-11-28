@@ -289,6 +289,7 @@ export async function drillForPlanAction(drillId: string) {
         jumps: drill.jumps,
         version: drill.version,
         currentVersionId: drill.currentVersionId,
+        ...(drill.scene ? { scene: drill.scene.document } : {}),
         ...(perRep.touchesPerRep !== undefined
           ? {
               perRep: {

@@ -169,13 +169,19 @@ describe("Duna's proposal and the scene slot", () => {
       label: "Serve receive",
       step: 1,
     });
-    expect(rendered.elements("li").length).toBe(resolved.steps.length);
-    expect(rendered.html).toContain('aria-current="step"');
+    expect(rendered.elements("figure").length).toBe(1);
+    expect(rendered.text).toContain("Serve receive");
     const invalid = renderForTest(SceneSlot, {
       scene: { schema: "nope" },
       mode: "diagram",
       label: "Bad",
     });
-    expect(invalid.text).toContain("The drawing can't be shown");
+    expect(invalid.text).toContain("This drawing has a problem");
+    const empty = renderForTest(SceneSlot, {
+      scene: undefined,
+      mode: "player",
+      label: "None",
+    });
+    expect(empty.text).toContain("No drawing yet");
   });
 });

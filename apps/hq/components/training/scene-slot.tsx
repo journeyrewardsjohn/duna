@@ -1,24 +1,22 @@
 import { Icon } from "@duna/ui/icons";
-import { readScene, sceneDescription, sceneIssueWords } from "./drill-model";
+import { SceneDiagram, ScenePlayer } from "@duna/ui/tideline/training-scene";
 
 /**
- * The one place Training shows a drill's drawing. The design system's
- * scene player (`SceneDiagram` for the static and stepped 2D court,
- * `ScenePlayer` for the animated one, from `@duna/ui/tideline`) is being
- * built as its own component family; until it lands, this slot shows what
- * that drawing says in words: the court, who stands where, the objective,
- * and every step in order. Swap the body for the real component here and
- * nothing else in Training changes.
+ * The one place Training shows a drill's drawing: the design system's
+ * `SceneDiagram` (server-rendered SVG, prints in black and white) for cards,
+ * plan blocks and the run sheet, and `ScenePlayer` (2D, with 3D loaded only
+ * when the coach asks for it) on the drill page. Both validate the scene
+ * themselves and show the validator's problems when it can't be drawn.
  */
 export interface SceneSlotProps {
-  /** The scene document (model v2); validated and resolved here, never executed. */
+  /** The scene document (model v2); validated by the component, never executed. */
   readonly scene: unknown;
-  /** The step to mark as current (0-based), for a stepped diagram. */
+  /** The step to show (0-based); omitted draws the whole repetition. */
   readonly step?: number;
   readonly mode: "diagram" | "player";
   /** What the drawing shows, for assistive technology: "Serve-receive triangle". */
   readonly label: string;
-  /** A smaller version for cards and plan blocks. */
+  /** A smaller drawing for cards and plan blocks: no legend, no captions. */
   readonly compact?: boolean;
 }
 
@@ -44,52 +42,20 @@ export function SceneSlot({
       </figure>
     );
   }
-  const { validation, resolved } = readScene(scene);
-  if (!resolved) {
-    const issues = sceneIssueWords(validation);
-    return (
-      <figure
-        aria-label={`${label}: the drawing can't be shown`}
-        className="tr-scene"
-        data-compact={compact || undefined}
-        data-invalid=""
-      >
-        <figcaption className="tr-scene__caption">
-          <Icon name="alert" size="inline" />
-          {`The drawing can't be shown: ${issues.length} ${issues.length === 1 ? "problem" : "problems"} to fix.`}
-        </figcaption>
-        {compact ? null : (
-          <ul className="tr-scene__issues">
-            {issues.map((issue) => (
-              <li key={issue}>{issue}</li>
-            ))}
-          </ul>
-        )}
-      </figure>
-    );
-  }
-  const description = sceneDescription(resolved, scene);
+  const oneBased = step === undefined ? undefined : step + 1;
   return (
-    <figure
-      aria-label={label}
-      className="tr-scene"
-      data-compact={compact || undefined}
-      data-mode={mode}
-    >
-      <span className="tr-scene__head">
-        <Icon name="court" size="inline" />
-        {`${resolved.slots.filter((slot) => !slot.waiting).length} on court · ${resolved.steps.length} ${resolved.steps.length === 1 ? "step" : "steps"}`}
-      </span>
-      <figcaption className="tr-scene__caption">{description}</figcaption>
-      {compact ? null : (
-        <ol aria-label={`${label}: steps`} className="tr-scene__steps">
-          {resolved.steps.map((row, index) => (
-            <li aria-current={index === step ? "step" : undefined} key={row.id}>
-              {row.caption}
-            </li>
-          ))}
-        </ol>
+    <div className="tr-scene-slot" data-compact={compact || undefined}>
+      {mode === "diagram" ? (
+        <SceneDiagram
+          captions={!compact}
+          label={label}
+          legend={!compact}
+          scene={scene}
+          step={oneBased}
+        />
+      ) : (
+        <ScenePlayer label={label} scene={scene} step={oneBased} />
       )}
-    </figure>
+    </div>
   );
 }

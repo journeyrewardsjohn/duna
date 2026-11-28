@@ -35,6 +35,7 @@ import {
 } from "@/app/(next)/(hq)/training/actions";
 import { unwrap } from "../money/money-action-result";
 import { reportFailure } from "../team/team-report";
+import { SceneSlot } from "./scene-slot";
 import {
   appendBlock,
   blockKindLabels,
@@ -90,7 +91,7 @@ export function PlanBuilder({
   readonly plan?: Plan;
   /** Pinned and current version numbers of the plan's drills, by block id. */
   readonly pins?: Readonly<
-    Record<string, { pinned?: number; current?: number }>
+    Record<string, { pinned?: number; current?: number; scene?: unknown }>
   >;
   readonly library: readonly TrainingDrillsSummary[];
   readonly session?: BuilderSession;
@@ -108,6 +109,7 @@ export function PlanBuilder({
             ...fromSaved(block),
             pinnedVersion: pins?.[block.id]?.pinned,
             currentVersion: pins?.[block.id]?.current,
+            scene: pins?.[block.id]?.scene,
           })),
         ),
       ),
@@ -613,6 +615,14 @@ function BlockCard({
       ) : (
         <h3 className="tr-block__name">{block.title}</h3>
       )}
+      {block.scene ? (
+        <SceneSlot
+          compact
+          label={`${block.title}: the drawing`}
+          mode="diagram"
+          scene={block.scene}
+        />
+      ) : null}
       <div className="tr-block__fields">
         <Field label="Minutes">
           <NumberInput

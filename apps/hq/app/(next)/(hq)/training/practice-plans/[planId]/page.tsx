@@ -106,7 +106,9 @@ export default async function PracticePlanPage({
 /** Pinned and current version numbers for each drill block. */
 async function drillPins(
   blocks: readonly { id: string; drillId?: string; drillVersionId?: string }[],
-): Promise<Record<string, { pinned?: number; current?: number }>> {
+): Promise<
+  Record<string, { pinned?: number; current?: number; scene?: unknown }>
+> {
   const drillIds = [
     ...new Set(
       blocks.flatMap((block) => (block.drillId ? [block.drillId] : [])),
@@ -120,7 +122,10 @@ async function drillPins(
       drill.state === "ok" ? [[drill.data.id, drill.data] as const] : [],
     ),
   );
-  const pins: Record<string, { pinned?: number; current?: number }> = {};
+  const pins: Record<
+    string,
+    { pinned?: number; current?: number; scene?: unknown }
+  > = {};
   for (const block of blocks) {
     const drill = block.drillId ? byId.get(block.drillId) : undefined;
     if (!drill) continue;
@@ -130,6 +135,7 @@ async function drillPins(
     pins[block.id] = {
       ...(pinned ? { pinned: pinned.version } : {}),
       current: drill.version,
+      ...(drill.scene ? { scene: drill.scene.document } : {}),
     };
   }
   return pins;

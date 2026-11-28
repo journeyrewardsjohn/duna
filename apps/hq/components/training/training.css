@@ -917,6 +917,20 @@
       font-weight: 600;
     }
 
+    .tr-scene-slot {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .tr-scene-slot[data-compact] {
+      max-width: 18rem;
+    }
+
+    .tr-print .tr-scene-slot {
+      max-width: 12rem;
+      margin-block-start: var(--td-space-2);
+    }
+
     /* Run sheet */
     .tr-print {
       display: grid;
