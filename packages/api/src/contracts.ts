@@ -2811,7 +2811,7 @@ export const videoSummarySchema = z.object({
   organizationId: z.string().uuid().optional(),
   owner: personSummarySchema,
   source: videoSourceSchema,
-  liveProvider: z.enum(["cloudflare", "mux"]).optional(),
+  liveProvider: z.enum(["cloudflare"]).optional(),
   category: videoCategorySchema,
   title: z.string(),
   status: videoStatusSchema,
@@ -2903,11 +2903,9 @@ export const videoStudioSchema = z.object({
     .readonly(),
   liveConfigured: z.boolean(),
   uploadsConfigured: z.boolean(),
-  dataEnvironmentKey: z.string().optional(),
   broadcast: z.object({
-    preferredProvider: z.enum(["cloudflare", "mux"]).optional(),
+    preferredProvider: z.enum(["cloudflare"]).optional(),
     cloudflareConfigured: z.boolean(),
-    muxConfigured: z.boolean(),
     srtIngestAvailable: z.boolean(),
     activeClientIngest: z.enum(["rtmps", "srt"]),
     youtube: z.object({
@@ -2963,13 +2961,12 @@ export const videoAssociationOptionSchema = z.object({
 });
 export const videoPlaybackSchema = z.object({
   video: videoSummarySchema,
-  provider: z.enum(["cloudflare", "mux", "r2"]),
+  provider: z.enum(["cloudflare", "r2"]),
   playbackId: z.string().optional(),
   playbackToken: z.string().optional(),
   sourceUrl: z.url().optional(),
   embedUrl: z.url().optional(),
   posterUrl: z.url().optional(),
-  dataEnvironmentKey: z.string().optional(),
   viewSessionId: z.string().uuid(),
   isOwner: z.boolean(),
   isLinkedPlayer: z.boolean(),
@@ -2986,7 +2983,7 @@ export const videoPlaybackSchema = z.object({
 });
 export const liveVideoSessionSchema = z.object({
   video: videoSummarySchema,
-  provider: z.enum(["cloudflare", "mux"]),
+  provider: z.enum(["cloudflare"]),
   streamUrl: z.url(),
   streamKey: z.string().min(8),
   ingests: z.object({
@@ -3058,17 +3055,6 @@ export const videoMetricsSchema = z.object({
   watchedSeconds: z.number().int().nonnegative(),
   averageWatchSeconds: z.number().int().nonnegative(),
   completionRate: z.number().min(0).max(1),
-  mux: z
-    .object({
-      views: z.number().int().nonnegative().optional(),
-      uniqueViewers: z.number().int().nonnegative().optional(),
-      playingTimeSeconds: z.number().nonnegative().optional(),
-      videoStartupTimeMs: z.number().nonnegative().optional(),
-      rebufferPercentage: z.number().nonnegative().optional(),
-      playbackFailurePercentage: z.number().nonnegative().optional(),
-      currentConcurrentViewers: z.number().int().nonnegative().optional(),
-    })
-    .optional(),
 });
 export const dunaPlusGrantSchema = z.object({
   id: z.string().uuid(),
@@ -3142,7 +3128,6 @@ export const adminVideoOverviewSchema = z.object({
     calibrationSamples: z.array(visionCalibrationReviewSampleSchema).readonly(),
   }),
   cloudflareConfigured: z.boolean(),
-  muxConfigured: z.boolean(),
   r2Configured: z.boolean(),
 });
 export const visionModelStatusSchema = z.enum([

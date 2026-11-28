@@ -458,6 +458,27 @@ test.describe("Tideline gallery, keyboard", () => {
     await expect(palette).toBeHidden();
     await expect(trigger).toBeFocused();
   });
+
+  test("Document headings copy their link and the table region takes focus", async ({
+    page,
+  }) => {
+    const copy = page.getByRole("button", { name: "Copy link to “1. Scope”" });
+    await copy.focus();
+    await expect(copy).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByText(/Link copied|Link is in the address bar/).first(),
+    ).toBeVisible();
+    const table = page.getByRole("region", { name: "Payout timing" });
+    await table.focus();
+    await expect(table).toBeFocused();
+    const list = page
+      .getByRole("navigation", { name: "Sections of the sample policy" })
+      .first();
+    await expect(
+      list.getByRole("link", { name: "2. Payouts" }),
+    ).toHaveAttribute("href", "#doc-demo-payouts");
+  });
 });
 
 test.describe("Tideline gallery, layout", () => {

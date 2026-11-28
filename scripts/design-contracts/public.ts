@@ -8,8 +8,40 @@ import type { SurfaceContract } from "./types";
 export const publicWeb: SurfaceContract = {
   surface: "public",
   owners: "P2, F6a–d, P3, P4",
-  migrated: [],
+  // The legal center (L2) is built on the Duna Design System.
+  migrated: ["apps/web/app/legal/", "apps/web/components/legal/"],
   checks: [
+    {
+      kind: "includes",
+      file: "apps/web/app/legal/layout.tsx",
+      values: ['href="#legal-content"', "<Rise", "<LegalScope>"],
+      message:
+        "The legal center keeps its skip link, first-paint Rise and Tideline scope",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/components/legal/legal-document-view.tsx",
+      values: [
+        "DocumentSectionList",
+        "SectionHeading",
+        'className="td-display lc-doc__title"',
+        "<DraftNotice",
+      ],
+      message:
+        "Legal documents keep one Jost title, the section list, linkable headings and the draft notice",
+    },
+    {
+      kind: "includes",
+      file: "apps/web/components/legal/legal-status.tsx",
+      values: ['"Draft for review. Not yet in effect."'],
+    },
+    {
+      kind: "includes",
+      file: "apps/web/components/legal/legal-blocks.tsx",
+      values: ["To be confirmed"],
+      message:
+        "A placeholder in a legal draft must render as “To be confirmed”",
+    },
     { kind: "noFontPackages", app: "web" },
     // Audience routes and canonical URLs are behaviour (AGENTS.md).
     {
@@ -55,14 +87,14 @@ export const publicWeb: SurfaceContract = {
         "Jost({",
         "Geist({",
         "Geist_Mono({",
-        '"--td-font-brand"',
-        '"--td-font-ui"',
-        '"--td-font-mono"',
+        '"--duna-font-brand"',
+        '"--duna-font-ui"',
+        '"--duna-font-mono"',
         'weight: "500"',
         'display: "swap"',
       ],
       message:
-        "apps/web/app/fonts.ts must expose Jost 500, Geist and Geist Mono as the Tideline font variables",
+        "apps/web/app/fonts.ts must expose Jost 500, Geist and Geist Mono as the --duna-font-* variables the Tideline font tokens read",
     },
     {
       kind: "includes",

@@ -92,9 +92,9 @@ Durable workflows: `/api/inngest` (apps/web) serves `processWorkflowJob`, `recov
 | Webhook    | `https://duna.coach/api/cloudflare/stream/webhook`, generic destination; the secret goes in header `cf-webhook-auth`; include connected, disconnected, errored live-input events (`docs/VIDEO_PLATFORM.md`).                                                                                                                                                                                                                                                                                                                                                          |
 | Prod state | R2 values present in web Production under lowercase aliases and `CE_SECRET_ACCESS_KEY`/`CF_ACCESS_KEY_ID`/`CF_R2_S3_ENDPOINT`. Stray names with no code reader: `cloudflare_api_token_master`, `cf_r2_account_token` (a "master" Cloudflare token sits in the project; consider removing). Stream vars NOT set in web Production although `DUNA_LIVE_PROVIDER` is. Docs gate: "Cloudflare Stream and Mux account activation ... physical-device SRT/RTMPS streaming checks".                                                                                          |
 
-### 1.10 Mux (second video provider)
+### 1.10 Mux (removed)
 
-Names `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET` (alias `MUX_SECRET_KEY`), `MUX_WEBHOOK_SECRET`, `MUX_SIGNING_KEY_ID`, `MUX_PRIVATE_KEY` (aliases `MUX_SIGNING_SECRET`, `MUX_SIGNING_KEY`), `MUX_DATA_ENV_KEY`, `MUX_LIVE_VIDEO_QUALITY` (default plus). Webhook `https://duna.coach/api/mux/webhook` (Mux signature verified by SDK). Prod: all present under the alias names. Used for personal Premium+ and HQ Scale tiers. NOTE: a sibling worktree named `remove-mux-20261127` exists, so Mux may be removed by the rebuild (inferred); confirm before spending effort on Mux production activation.
+Mux was removed on 2026-11-27; Cloudflare Stream (live) and R2 (uploads) are the only video providers and no code reads a Mux value. Owner clean-up, in this order: delete the old media at Mux (the five legacy rows keep their Mux IDs in the database until the follow-up column drop, so do this first), delete the Mux webhook that pointed at `https://duna.coach/api/mux/webhook` (the route no longer exists), then remove these names from Vercel web and HQ: `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `MUX_SECRET_KEY`, `MUX_WEBHOOK_SECRET`, `MUX_SIGNING_KEY_ID`, `MUX_PRIVATE_KEY`, `MUX_SIGNING_SECRET`, `MUX_SIGNING_KEY`, `MUX_DATA_ENV_KEY`, `MUX_LIVE_VIDEO_QUALITY` and `DUNA_LIVE_PROVIDER`.
 
 ### 1.11 Google OAuth / YouTube
 
@@ -302,7 +302,7 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
 33. [RFF] Set `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `MESSAGING_SSE_ENABLED=true` in `duna-hq` as well.
 34. [RFF] Cloudflare Stream: create an API token (Stream Read + Write), set `CLOUDFLARE_STREAM_API_TOKEN`; create a webhook destination `https://duna.coach/api/cloudflare/stream/webhook` with a secret in header `cf-webhook-auth` and set `CLOUDFLARE_STREAM_WEBHOOK_SECRET`; leave `CLOUDFLARE_STREAM_RECORDING_RETENTION_DAYS` empty.
 35. [RFF] R2: confirm the bucket named by `R2_BUCKET_NAME` exists, and that `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCESS_KEY_ID`, `CE_SECRET_ACCESS_KEY` are also set in `duna-hq`.
-36. [RFF] Mux (if kept): set production access token, webhook `https://duna.coach/api/mux/webhook` with `MUX_WEBHOOK_SECRET`, signing key; `MUX_TOKEN_SECRET`; decide whether Mux is being removed first.
+36. [RFF] Mux: removed (section 1.10). Delete the old media at Mux, the Mux webhook, and the `MUX_*` and `DUNA_LIVE_PROVIDER` values from Vercel web and HQ.
 37. [RFF] Run the physical-device SRT/RTMPS test the docs require before enabling live provider routing (`DUNA_LIVE_PROVIDER=auto`).
 
 ### YouTube / Google

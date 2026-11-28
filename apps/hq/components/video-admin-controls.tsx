@@ -680,7 +680,7 @@ function UsageTables({ overview }: { readonly overview: AdminVideoOverview }) {
       <section className="hq-card video-live-list">
         <header className="hq-card-heading">
           <div>
-            <span className="hq-eyebrow">Mux ingest</span>
+            <span className="hq-eyebrow">Cloudflare Stream ingest</span>
             <h2>Live now</h2>
           </div>
           <Badge tone={overview.activeStreams.length ? "live" : "neutral"}>
@@ -703,7 +703,7 @@ function UsageTables({ overview }: { readonly overview: AdminVideoOverview }) {
         {overview.activeStreams.length === 0 && (
           <div className="hq-empty">
             <strong>No one is live right now.</strong>
-            <span>Active Mux streams will appear here.</span>
+            <span>Active live streams will appear here.</span>
           </div>
         )}
       </section>
@@ -826,19 +826,7 @@ export function VideoAdminControls({
             </small>
           </div>
           <Badge tone={overview.cloudflareConfigured ? "positive" : "warning"}>
-            {overview.cloudflareConfigured
-              ? "everyday ready"
-              : "needs environment"}
-          </Badge>
-        </article>
-        <article className="hq-card">
-          <Cloud aria-hidden size={22} />
-          <div>
-            <strong>Mux premium live</strong>
-            <small>Premium playback, stream health, Data, and YouTube</small>
-          </div>
-          <Badge tone={overview.muxConfigured ? "neutral" : "warning"}>
-            {overview.muxConfigured ? "premium ready" : "not configured"}
+            {overview.cloudflareConfigured ? "configured" : "needs environment"}
           </Badge>
         </article>
         <article className="hq-card">

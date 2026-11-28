@@ -167,7 +167,7 @@ const copy: Record<
     eyebrow: "Live, uploaded, and governed",
     title: "Video + Premium",
     description:
-      "Mux live streams, R2 uploads, player usage, complimentary entitlements, and global allowances.",
+      "Cloudflare live streams, R2 uploads, player usage, complimentary entitlements, and global allowances.",
   },
   vision: {
     eyebrow: "Verified model operations",

@@ -24,7 +24,7 @@ it is not a production-complete claim.
 | M15 Ask Duna and Operator    | Player, Pro, HQ               | CI-generated feature knowledge, organization brand context, Sol/Kimi model gate, event demand/marketing/price context, resource conflicts, coach coverage, persistent agent drafts, clarification, court/coach-aware single-session reschedule, player notifications, one-time confirmation, golden trace, audit | Core governed copilot connected; provider credentials and signed native/device validation remain environment-specific                                                                                      |
 | M16 Wallet                   | Player, Pro, HQ, Admin        | `wallet.test.ts` ledger, custody, guardian spend, tax rails, drift incidents                                                                                                                                                                                                                                     | Core verified; counsel and production Stripe rails pending                                                                                                                                                 |
 | M17 Trust and administration | Admin                         | Live queues/audit/guardian review; scoped feature flags; role and rate-limit contracts                                                                                                                                                                                                                           | Connected control plane verified; external monitoring and case providers pending                                                                                                                           |
-| M18 Duna Video               | Player iOS, web, Pro, Admin   | Mux live/R2 upload contracts; native court guide; privacy/share authorization; multi-angle playback; usage and grant controls                                                                                                                                                                                    | Core implemented; connected Mux, Web R2 credentials, physical-device stream, and audio-isolation provider remain gated                                                                                     |
+| M18 Duna Video               | Player iOS, web, Pro, Admin   | Cloudflare Stream live/R2 upload contracts; native court guide; privacy/share authorization; multi-angle playback; usage and grant controls                                                                                                                                                                      | Core implemented; connected Cloudflare Stream, Web R2 credentials, physical-device stream, and audio-isolation provider remain gated                                                                       |
 
 ## Cross-cutting release evidence
 
@@ -62,6 +62,6 @@ it is not a production-complete claim.
 - Production Stripe Connect, Tax, Treasury, Terminal, and 1099 approvals
 - SMS 10DLC registration, messaging credentials, and background-check agreement
 - Cloudflare, Upstash, Knock, PostHog, Sentry, and Axiom production credentials
-- Mux account activation, API/signing keys, webhook configuration, and a
-  physical-device iOS live-stream validation
+- Cloudflare Stream account activation, API token, webhook configuration, and
+  a physical-device iOS live-stream validation
 - Approved music-isolation processor and media/copyright policy review

@@ -5,7 +5,6 @@ import type {
   VideoSummary,
   VisionScoreSnapshot,
 } from "@duna/api";
-import MuxPlayer from "@mux/mux-player-react";
 import { Badge } from "@duna/ui";
 import { Clock3, Eye, LockKeyhole, Play, Radio, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,11 +21,6 @@ function statusLabel(video: VideoSummary) {
   if (video.status === "live") return "Live now";
   if (video.status === "processing") return "Replay processing";
   return durationLabel(video.durationSeconds);
-}
-
-function muxCurrentTime(event: Event) {
-  const target = event.target as { readonly currentTime?: number } | null;
-  return typeof target?.currentTime === "number" ? target.currentTime : 0;
 }
 
 interface CloudflarePlayerController {
@@ -353,33 +347,7 @@ export function DunaVideoGallery({
 
       {playback && (
         <div className="duna-video-gallery__stage">
-          {playback.provider === "mux" && playback.playbackId ? (
-            <MuxPlayer
-              accentColor="#d5ff4f"
-              envKey={playback.dataEnvironmentKey}
-              metadataVideoId={playback.video.id}
-              metadataVideoTitle={playback.video.title}
-              playbackId={playback.playbackId}
-              primaryColor="#f8fafc"
-              secondaryColor="#081522"
-              streamType={
-                playback.video.status === "live" ? "ll-live" : "on-demand"
-              }
-              title={playback.video.title}
-              tokens={
-                playback.playbackToken
-                  ? { playback: playback.playbackToken }
-                  : undefined
-              }
-              onEnded={(event) => reportView(muxCurrentTime(event), true)}
-              onPause={(event) => reportView(muxCurrentTime(event), false)}
-              onTimeUpdate={(event) => {
-                const seconds = muxCurrentTime(event);
-                setCurrentTime(seconds);
-                reportView(seconds, false);
-              }}
-            />
-          ) : playback.provider === "cloudflare" && playback.embedUrl ? (
+          {playback.provider === "cloudflare" && playback.embedUrl ? (
             <CloudflareStreamPlayer
               onEnded={(seconds) => reportView(seconds, true)}
               onPause={(seconds) => reportView(seconds, false)}
