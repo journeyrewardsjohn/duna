@@ -19,7 +19,8 @@
       "title": "Duna Legal Center",
       "group": null,
       "order": 0,
-      "description": "Every Duna agreement and policy in one place."
+      "description": "Every Duna agreement and policy in one place.",
+      "status": "draft"
     },
     {
       "slug": "terms",
@@ -27,7 +28,8 @@
       "title": "Terms of Service",
       "group": "players",
       "order": 1,
-      "description": "The main agreement for players, members, parents and guardians."
+      "description": "The main agreement for players, members, parents and guardians.",
+      "status": "draft"
     },
     {
       "slug": "guardians-and-youth",
@@ -35,7 +37,8 @@
       "title": "Guardian and Youth Terms",
       "group": "players",
       "order": 2,
-      "description": "What guardians agree to and what juniors can do at each age."
+      "description": "What guardians agree to and what juniors can do at each age.",
+      "status": "draft"
     },
     {
       "slug": "fees-and-premium",
@@ -43,7 +46,8 @@
       "title": "Player Fees and Duna Premium",
       "group": "players",
       "order": 3,
-      "description": "The service fee, Duna Premium, credits, taxes and failed payments."
+      "description": "The service fee, Duna Premium, credits, taxes and failed payments.",
+      "status": "draft"
     },
     {
       "slug": "booking-and-refunds",
@@ -51,7 +55,8 @@
       "title": "Booking and Refund Policy",
       "group": "players",
       "order": 4,
-      "description": "Cancellations, weather, no-shows, waitlists and refunds."
+      "description": "Cancellations, weather, no-shows, waitlists and refunds.",
+      "status": "draft"
     },
     {
       "slug": "hq-terms",
@@ -59,7 +64,8 @@
       "title": "Duna HQ Terms",
       "group": "organizations",
       "order": 1,
-      "description": "The agreement for organizations and everyone they invite, with the data processing addendum."
+      "description": "The agreement for organizations and everyone they invite, with the data processing addendum.",
+      "status": "draft"
     },
     {
       "slug": "duna-pay",
@@ -67,7 +73,8 @@
       "title": "Duna Pay Terms",
       "group": "organizations",
       "order": 2,
-      "description": "Payments, fees, payout timing, holdbacks, refunds and disputes."
+      "description": "Payments, fees, payout timing, holdbacks, refunds and disputes.",
+      "status": "draft"
     },
     {
       "slug": "privacy",
@@ -75,7 +82,8 @@
       "title": "Privacy Policy",
       "group": "privacy",
       "order": 1,
-      "description": "What Duna collects, why, who it is shared with and your rights."
+      "description": "What Duna collects, why, who it is shared with and your rights.",
+      "status": "draft"
     },
     {
       "slug": "consumer-health-privacy",
@@ -83,7 +91,8 @@
       "title": "Consumer Health Data Privacy Policy",
       "group": "privacy",
       "order": 2,
-      "description": "How Duna Health data is collected, shared, kept and deleted. Link from the home page."
+      "description": "How Duna Health data is collected, shared, kept and deleted. Link from the home page.",
+      "status": "draft"
     },
     {
       "slug": "childrens-privacy",
@@ -91,7 +100,8 @@
       "title": "Children's Privacy Notice",
       "group": "privacy",
       "order": 3,
-      "description": "Information about children under 13 and parents' rights."
+      "description": "Information about children under 13 and parents' rights.",
+      "status": "draft"
     },
     {
       "slug": "cookies",
@@ -99,7 +109,8 @@
       "title": "Cookie Policy",
       "group": "privacy",
       "order": 4,
-      "description": "The cookies and browser storage Duna uses."
+      "description": "The cookies and browser storage Duna uses.",
+      "status": "draft"
     },
     {
       "slug": "subprocessors",
@@ -107,7 +118,8 @@
       "title": "Service Providers",
       "group": "privacy",
       "order": 5,
-      "description": "The companies that process personal information for Duna."
+      "description": "The companies that process personal information for Duna.",
+      "status": "draft"
     },
     {
       "slug": "acceptable-use",
@@ -115,7 +127,8 @@
       "title": "Acceptable Use and Community Rules",
       "group": "policies",
       "order": 1,
-      "description": "Safeguarding, respect, fair play and content rules."
+      "description": "Safeguarding, respect, fair play and content rules.",
+      "status": "draft"
     },
     {
       "slug": "messaging",
@@ -123,7 +136,8 @@
       "title": "Messaging and Notifications Terms",
       "group": "policies",
       "order": 2,
-      "description": "Channels, text consent, opting out and guardians in junior conversations."
+      "description": "Channels, text consent, opting out and guardians in junior conversations.",
+      "status": "draft"
     },
     {
       "slug": "content-and-video",
@@ -131,7 +145,8 @@
       "title": "Content, Video and Likeness Policy",
       "group": "policies",
       "order": 3,
-      "description": "Recording, sharing and removing video, and juniors on camera."
+      "description": "Recording, sharing and removing video, and juniors on camera.",
+      "status": "draft"
     },
     {
       "slug": "copyright",
@@ -139,7 +154,8 @@
       "title": "Copyright and Takedown Policy",
       "group": "policies",
       "order": 4,
-      "description": "How to send a copyright notice or counter-notice."
+      "description": "How to send a copyright notice or counter-notice.",
+      "status": "draft"
     }
   ],
   "notes": "The existing Mobile App License (slug eula) stays in apps/web/lib/legal-documents.ts and is not redrafted here."

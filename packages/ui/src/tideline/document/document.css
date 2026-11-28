@@ -1,0 +1,369 @@
+/* Tideline document family. Rules: see styles.css and docs/design/tideline-components.md. */
+@layer tideline {
+  .td {
+    /* ---------- DocumentProse ---------- */
+
+    .td-doc-prose {
+      /* About 70 characters of Geist a line. */
+      max-width: 36em;
+      color: var(--td-text);
+      font-family: var(--td-font-ui);
+      font-size: var(--td-type-lead-size);
+      line-height: 1.7;
+      overflow-wrap: break-word;
+
+      & p,
+      & ul,
+      & ol {
+        margin: 0 0 var(--td-space-4);
+      }
+
+      & ul,
+      & ol {
+        padding-inline-start: var(--td-space-6);
+      }
+
+      & li + li {
+        margin-top: var(--td-space-2);
+      }
+
+      & a {
+        color: var(--td-link);
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 0.18em;
+        overflow-wrap: anywhere;
+      }
+
+      & a:hover {
+        text-decoration-thickness: 2px;
+      }
+
+      & strong {
+        color: var(--td-text);
+        font-weight: 600;
+      }
+
+      & code {
+        padding: 0 var(--td-space-1);
+        border-radius: var(--td-radius-xs);
+        background: var(--td-surface-sunken);
+        font-family: var(--td-font-mono);
+        font-size: 0.875em;
+        overflow-wrap: anywhere;
+      }
+    }
+
+    /* ---------- SectionHeading ---------- */
+
+    .td-doc-heading {
+      display: flex;
+      gap: var(--td-space-2);
+      align-items: baseline;
+      margin: var(--td-space-12) 0 var(--td-space-3);
+      scroll-margin-top: var(--td-doc-anchor-offset, 96px);
+      color: var(--td-text);
+      text-wrap: balance;
+    }
+
+    .td-doc-heading--2 {
+      font: var(--td-type-heading-20);
+      letter-spacing: var(--td-type-heading-20-tracking);
+    }
+
+    .td-doc-heading--3 {
+      margin-top: var(--td-space-8);
+      font: var(--td-type-heading-18);
+      letter-spacing: var(--td-type-heading-18-tracking);
+    }
+
+    .td-doc-heading__text {
+      min-width: 0;
+    }
+
+    .td-doc-copy {
+      display: inline-flex;
+      flex: none;
+      gap: var(--td-space-2);
+      align-items: center;
+    }
+
+    .td-doc-copy__button {
+      display: inline-grid;
+      place-items: center;
+      width: var(--td-size-control-sm);
+      height: var(--td-size-control-sm);
+      padding: 0;
+      border: 0;
+      border-radius: var(--td-radius-sm);
+      background: transparent;
+      color: var(--td-text-3);
+      cursor: pointer;
+      opacity: 0;
+      transition:
+        opacity var(--td-duration-quick) var(--td-ease-ui),
+        background-color var(--td-duration-quick) var(--td-ease-ui);
+
+      &:hover {
+        background: var(--td-surface-sunken);
+        color: var(--td-text);
+      }
+
+      &:focus-visible {
+        opacity: 1;
+        outline: 2px solid var(--td-focus-color);
+        outline-offset: 2px;
+      }
+
+      &[data-state="copied"],
+      &[data-state="address"] {
+        opacity: 1;
+        color: var(--td-positive);
+      }
+    }
+
+    .td-doc-heading:hover .td-doc-copy__button {
+      opacity: 1;
+    }
+
+    /* Touch screens have no hover: keep the button visible but quiet. */
+    @media (hover: none) {
+      .td-doc-copy__button {
+        opacity: 0.7;
+      }
+    }
+
+    .td-doc-copy__hash {
+      font-family: var(--td-font-mono);
+      font-size: var(--td-type-label-size);
+    }
+
+    .td-doc-copy__status {
+      color: var(--td-text-2);
+      font: var(--td-type-meta);
+
+      &:empty {
+        display: none;
+      }
+    }
+
+    /* ---------- DocumentTable ---------- */
+
+    .td-doc-table {
+      max-width: 100%;
+      margin: 0 0 var(--td-space-6);
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      border-radius: var(--td-radius-md);
+      box-shadow: inset 0 0 0 1px var(--td-line);
+      /* The edge hint: a shadow appears on the side that has more to read. */
+      background:
+        linear-gradient(to right, var(--td-surface), var(--td-surface)) left /
+          var(--td-space-6) 100% no-repeat local,
+        linear-gradient(to left, var(--td-surface), var(--td-surface)) right /
+          var(--td-space-6) 100% no-repeat local,
+        radial-gradient(
+            farthest-side at 0 50%,
+            var(--td-line-strong),
+            transparent
+          )
+          left / var(--td-space-3) 100% no-repeat scroll,
+        radial-gradient(
+            farthest-side at 100% 50%,
+            var(--td-line-strong),
+            transparent
+          )
+          right / var(--td-space-3) 100% no-repeat scroll,
+        var(--td-surface);
+
+      &:focus-visible {
+        outline: 2px solid var(--td-focus-color);
+        outline-offset: 2px;
+      }
+
+      & table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--td-type-body-size);
+        line-height: 1.55;
+      }
+
+      & th,
+      & td {
+        min-width: 14ch;
+        max-width: 40ch;
+        padding: var(--td-space-3) var(--td-space-4);
+        border-bottom: 1px solid var(--td-line);
+        text-align: start;
+        vertical-align: top;
+        overflow-wrap: normal;
+      }
+
+      & th {
+        color: var(--td-text);
+        font-weight: 600;
+        background: var(--td-surface-sunken);
+      }
+
+      & tr:last-child td {
+        border-bottom: 0;
+      }
+    }
+
+    /* ---------- DocumentSectionList ---------- */
+
+    .td-doc-toc__title {
+      margin: 0 0 var(--td-space-2);
+      color: var(--td-text-2);
+      font: var(--td-type-label);
+    }
+
+    .td-doc-toc__wide {
+      display: none;
+    }
+
+    .td-doc-toc__scroll {
+      max-height: calc(100dvh - var(--td-doc-anchor-offset, 96px) - 48px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+
+    .td-doc-toc__list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+
+      & .td-doc-toc__list {
+        padding-inline-start: var(--td-space-4);
+      }
+    }
+
+    .td-doc-toc__link {
+      display: block;
+      padding: var(--td-space-1) var(--td-space-3);
+      border-inline-start: 2px solid var(--td-line);
+      color: var(--td-text-2);
+      font: var(--td-type-body);
+      text-decoration: none;
+      transition:
+        color var(--td-duration-quick) var(--td-ease-ui),
+        border-color var(--td-duration-quick) var(--td-ease-ui);
+
+      &:hover {
+        color: var(--td-text);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--td-focus-color);
+        outline-offset: 2px;
+      }
+
+      &[aria-current="location"] {
+        border-inline-start-color: var(--td-action);
+        color: var(--td-text);
+        font-weight: 600;
+      }
+    }
+
+    .td-doc-toc__phone {
+      border-radius: var(--td-radius-lg);
+      background: var(--td-surface);
+      box-shadow: inset 0 0 0 1px var(--td-line);
+
+      & nav {
+        max-height: 60vh;
+        padding: 0 var(--td-space-2) var(--td-space-3);
+        overflow-y: auto;
+      }
+    }
+
+    .td-doc-toc__summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: var(--td-size-target);
+      padding: 0 var(--td-space-4);
+      color: var(--td-text);
+      font: var(--td-type-label);
+      cursor: pointer;
+      list-style: none;
+
+      &::-webkit-details-marker {
+        display: none;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--td-focus-color);
+        outline-offset: 2px;
+        border-radius: var(--td-radius-lg);
+      }
+    }
+
+    .td-doc-toc__chevron {
+      transition: transform var(--td-duration-quick) var(--td-ease-ui);
+    }
+
+    .td-doc-toc__phone[open] .td-doc-toc__chevron {
+      transform: rotate(180deg);
+    }
+
+    @media (min-width: 1024px) {
+      .td-doc-toc__wide {
+        display: block;
+      }
+
+      .td-doc-toc__phone {
+        display: none;
+      }
+    }
+
+    /* ---------- Print ---------- */
+
+    @media print {
+      .td-doc-toc,
+      .td-doc-copy {
+        display: none;
+      }
+
+      .td-doc-prose {
+        max-width: none;
+        font-size: 11pt;
+        line-height: 1.5;
+      }
+
+      .td-doc-heading {
+        break-after: avoid;
+        margin-top: var(--td-space-6);
+      }
+
+      .td-doc-table {
+        overflow: visible;
+        background: none;
+        box-shadow: none;
+
+        & table {
+          break-inside: auto;
+        }
+
+        & th,
+        & td {
+          max-width: none;
+          border: 1px solid currentColor;
+        }
+
+        & tr {
+          break-inside: avoid;
+        }
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .td-doc-copy__button,
+      .td-doc-toc__link,
+      .td-doc-toc__chevron {
+        transition: opacity var(--td-duration-quick) linear;
+      }
+    }
+  }
+}
