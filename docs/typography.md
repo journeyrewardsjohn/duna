@@ -30,16 +30,20 @@ tabular-nums`.
   weight 500 only, Geist as a variable font, Geist Mono as a variable font,
   all `display: "swap"`, subset `latin`. Jost and Geist are preloaded; Geist
   Mono is not (numerals in data and scores are not first paint).
-- **Variables.** The module sets the Tideline font-family tokens on `<html>`
+- **Variables.** The module sets one variable per loaded face on `<html>`
   through `dunaFontClassName`, which each root layout adds to the `<html>`
-  element: `--td-font-brand` (Jost), `--td-font-ui` (Geist) and
-  `--td-font-mono` (Geist Mono). `--td-font-display` and `--td-font-numeric`
-  alias `--td-font-ui` in `packages/ui/src/styles.css`. The legacy `--font-*`
-  names (`--font-display`, `--font-body`, `--font-data` and the public
-  `--public-font`, `--duna-web-font-mono`) point at these variables until each
-  surface migrates. Never name Jost, Geist or Geist Mono directly in a
-  `font-family`: `next/font` serves them under generated family names, so only
-  the variables resolve in production.
+  element: `--duna-font-brand` (Jost), `--duna-font-ui` (Geist) and
+  `--duna-font-mono` (Geist Mono). The Tideline font-family tokens read them,
+  with the contract's stack as the fallback: `--td-font-brand`,
+  `--td-font-ui` (and `--td-font-display`, `--td-font-numeric`) and
+  `--td-font-mono` resolve to the loaded faces at `:root`
+  (`tokens.root.css`) and in every nested `.td` scope (`tokens.css`), so a
+  dark, live or HQ scope never swaps a loaded face for a family name
+  `next/font` does not serve. The legacy `--font-*` names (`--font-display`,
+  `--font-body`, `--font-data` and the public `--public-font`,
+  `--duna-web-font-mono`) point at the tokens until each surface migrates.
+  Never name Jost, Geist or Geist Mono directly in a `font-family`, and never
+  read `--duna-font-*` directly: use the `--td-font-*` tokens.
 - **Title role.** Use `font-family: var(--td-font-brand); font-weight: 500;
 letter-spacing: -0.015em` for a marketing headline or the ONE title of a
   screen, at 22px or larger. Never put it on a control, a label, a table cell

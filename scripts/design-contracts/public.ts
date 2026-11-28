@@ -99,14 +99,14 @@ export const publicWeb: SurfaceContract = {
         "Jost({",
         "Geist({",
         "Geist_Mono({",
-        '"--td-font-brand"',
-        '"--td-font-ui"',
-        '"--td-font-mono"',
+        '"--duna-font-brand"',
+        '"--duna-font-ui"',
+        '"--duna-font-mono"',
         'weight: "500"',
         'display: "swap"',
       ],
       message:
-        "apps/web/app/fonts.ts must expose Jost 500, Geist and Geist Mono as the Tideline font variables",
+        "apps/web/app/fonts.ts must expose Jost 500, Geist and Geist Mono as the --duna-font-* variables the Tideline font tokens read",
     },
     {
       kind: "includes",
