@@ -22,8 +22,10 @@ interface SiteHeaderProps {
 }
 
 function isCurrent(pathname: string, href: string) {
-  const path = href.split("#")[0];
-  return path !== "/" && pathname === path;
+  const path = href.split("#")[0] ?? "";
+  if (!path.startsWith("/") || path === "/") return false;
+  // A section's pages count as it (the Pro Tour's team pages are the tour).
+  return pathname === path || pathname.startsWith(`${path}/`);
 }
 
 /** The scroll position past which the header draws its hairline. */

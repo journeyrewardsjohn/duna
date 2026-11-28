@@ -76,26 +76,39 @@ export function HoneypotBand() {
 /* Clubs chapter (spec 3.1 item 6)                                     */
 /* ------------------------------------------------------------------ */
 
-function Tile({
+/**
+ * A photograph with a concept over it and its words at the bottom on the
+ * scrim: the home clubs chapter, and every module on the clubs page. Below
+ * 540 px of tile width the concept takes its compact variant (site.css).
+ */
+export function ConceptTile({
   photo,
   span,
   label,
   title,
   body,
   concept,
+  status,
+  anchor,
+  credit = "Generated image · demo data",
 }: {
   readonly photo: SitePhoto;
   readonly span: "wide" | "narrow";
   readonly label: string;
   readonly title: string;
-  readonly body: string;
+  readonly body: ReactNode;
   readonly concept: ReactNode;
+  /** "Live today" / "In build": shown beside the label. */
+  readonly status?: ReactNode;
+  /** A fragment other pages can link to. */
+  readonly anchor?: string;
+  readonly credit?: string;
 }) {
   return (
-    <article className="site-tile" data-span={span}>
+    <article className="site-tile" data-span={span} id={anchor}>
       <PhotoStage
         className="site-tile__photo"
-        credit="Generated image · demo data"
+        credit={credit}
         photo={photo}
         sizes={
           span === "wide"
@@ -105,7 +118,10 @@ function Tile({
       >
         <div className="site-tile__concept">{concept}</div>
         <div className="td site-tile__copy" data-theme="dark">
-          <p className="site-label">{label}</p>
+          <p className="site-label site-tile__label">
+            <span>{label}</span>
+            {status}
+          </p>
           <h3 className="site-h3">{title}</h3>
           <p>{body}</p>
         </div>
@@ -132,7 +148,7 @@ export function ClubsChapter() {
         </p>
       </div>
       <div className="site-tiles">
-        <Tile
+        <ConceptTile
           body="Members carry one card in their phone’s wallet. On a class day it shows the pass for that class."
           concept={<ConceptMemberPass />}
           label="Memberships"
@@ -140,7 +156,7 @@ export function ClubsChapter() {
           span="wide"
           title="The membership card turns into tonight’s pass."
         />
-        <Tile
+        <ConceptTile
           body="Set a minimum and a confirm time. Players see “needs 2 more”, and Duna runs or cancels it on time."
           concept={<ConceptOpenGame view="club" />}
           label="Bookings"
@@ -148,7 +164,7 @@ export function ClubsChapter() {
           span="narrow"
           title="Courts, clinics and open games fill themselves."
         />
-        <Tile
+        <ConceptTile
           body="Practice plans built from a drill library, drawn on a court, with the time for each block."
           concept={<ConceptDrill />}
           label="Programs and drills"
@@ -156,7 +172,7 @@ export function ClubsChapter() {
           span="narrow"
           title="Write the week. Run the court."
         />
-        <Tile
+        <ConceptTile
           body="It notices wind, gaps and clashes, and proposes a change with the before and after. Nothing moves until you approve it."
           concept={<ConceptAskDuna />}
           label="Ask Duna"
@@ -207,7 +223,7 @@ export function PricingTeaser() {
       className="site-wrap site-section site-section--tight"
     >
       <NetLine
-        chip={<span className="site-draft">Draft · owner to confirm</span>}
+        chip={<span className="site-draft">Draft pricing</span>}
         label="Pricing"
       />
       <div className="site-section__head">
