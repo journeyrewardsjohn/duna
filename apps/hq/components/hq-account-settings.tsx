@@ -68,7 +68,7 @@ export function HqAccountSettings({
   }
 
   return (
-    <div className="hq-account-page">
+    <main className="hq-account-page">
       <header className="hq-page-header">
         <div>
           <span className="hq-eyebrow">Personal account</span>
@@ -263,6 +263,6 @@ export function HqAccountSettings({
           </button>
         )}
       </section>
-    </div>
+    </main>
   );
 }

@@ -495,6 +495,7 @@ export function TrainingPracticeBuilder({
             <label>
               <Search aria-hidden size={16} />
               <input
+                aria-label="Search drills"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search drills"
                 type="search"

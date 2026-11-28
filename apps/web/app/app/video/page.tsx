@@ -1,4 +1,6 @@
 import type { VideoSummary } from "@duna/api";
+import { log, report } from "@duna/observability";
+import { ErrorState, buttonClassName } from "@duna/ui/tideline";
 import {
   ArrowUpRight,
   Clapperboard,
@@ -7,6 +9,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import { ThemedTideline } from "@/components/themed-tideline";
+import { PaneErrorBoundary } from "@/components/observability/pane-error-boundary";
 import { ProfileAvatar } from "@/components/profile-avatar-stack";
 import { getServerCaller } from "@/lib/api";
 import styles from "./video-studio.module.css";
@@ -95,9 +99,62 @@ function VideoCardContent({ video }: { readonly video: VideoSummary }) {
   );
 }
 
+/**
+ * The library could not load. Without a connected Duna database (demo mode)
+ * this is expected and logged; anything else is reported with a reference.
+ * The cause lives in the video service, which another work stream owns: this
+ * page only fails soft.
+ */
+function VideoUnavailable({ error }: { readonly error: unknown }) {
+  const cause = (error as { cause?: { code?: unknown } } | null)?.cause;
+  const needsDatabase = cause?.code === "DATABASE_REQUIRED";
+  let reference: string | undefined;
+  if (needsDatabase) {
+    log.warn("web.video.library.unavailable", {
+      reason: "database-not-connected",
+    });
+  } else {
+    reference = report(error, { event: "web.video.library.failed" });
+  }
+  return (
+    <main className={styles.page} data-player-page="video" data-zone="athletic">
+      <header className={styles.hero}>
+        <div className={styles.heroCopy}>
+          <span>Duna Vision</span>
+          <h1>Review your game.</h1>
+        </div>
+      </header>
+      <ThemedTideline>
+        <ErrorState
+          action={
+            <Link
+              className={buttonClassName({ variant: "secondary" })}
+              href="/app"
+            >
+              Back to home
+            </Link>
+          }
+          message={
+            needsDatabase
+              ? "Your video library needs a connected Duna database, which this preview doesn't have."
+              : "We couldn't load your recordings. Try again in a moment."
+          }
+          reference={reference}
+          title="Your video library isn't available"
+        />
+      </ThemedTideline>
+    </main>
+  );
+}
+
 export default async function VideoStudioIndexPage() {
   const caller = await getServerCaller();
-  const studio = await caller.player.videoStudio();
+  let studio: Awaited<ReturnType<typeof caller.player.videoStudio>>;
+  try {
+    studio = await caller.player.videoStudio();
+  } catch (error) {
+    return <VideoUnavailable error={error} />;
+  }
   const readyCount = studio.videos.filter(
     (video) => video.status === "ready",
   ).length;
@@ -134,44 +191,46 @@ export default async function VideoStudioIndexPage() {
         </div>
       </header>
 
-      <section className={styles.archive}>
-        <header>
-          <div>
-            <span>Private archive</span>
-            <h2>Recent recordings</h2>
-            <p>Ready videos open their full Duna Vision report.</p>
-          </div>
-          <Sparkles aria-hidden size={22} />
-        </header>
-        {studio.videos.length > 0 ? (
-          <div className={styles.videoGrid}>
-            {studio.videos.map((video) =>
-              video.status === "ready" ? (
-                <Link
-                  className={styles.videoCard}
-                  href={`/app/video/${video.id}`}
-                  key={video.id}
-                >
-                  <VideoCardContent video={video} />
-                </Link>
-              ) : (
-                <article
-                  aria-label={`${video.title}: ${statusLabel(video.status)}`}
-                  className={styles.videoCard}
-                  data-disabled="true"
-                  key={video.id}
-                >
-                  <VideoCardContent video={video} />
-                </article>
-              ),
-            )}
-          </div>
-        ) : (
-          <p className={styles.empty}>
-            Record a match in Duna Player to start your private video library.
-          </p>
-        )}
-      </section>
+      <PaneErrorBoundary label="Your recordings" name="web.video.archive">
+        <section className={styles.archive}>
+          <header>
+            <div>
+              <span>Private archive</span>
+              <h2>Recent recordings</h2>
+              <p>Ready videos open their full Duna Vision report.</p>
+            </div>
+            <Sparkles aria-hidden size={22} />
+          </header>
+          {studio.videos.length > 0 ? (
+            <div className={styles.videoGrid}>
+              {studio.videos.map((video) =>
+                video.status === "ready" ? (
+                  <Link
+                    className={styles.videoCard}
+                    href={`/app/video/${video.id}`}
+                    key={video.id}
+                  >
+                    <VideoCardContent video={video} />
+                  </Link>
+                ) : (
+                  <article
+                    aria-label={`${video.title}: ${statusLabel(video.status)}`}
+                    className={styles.videoCard}
+                    data-disabled="true"
+                    key={video.id}
+                  >
+                    <VideoCardContent video={video} />
+                  </article>
+                ),
+              )}
+            </div>
+          ) : (
+            <p className={styles.empty}>
+              Record a match in Duna Player to start your private video library.
+            </p>
+          )}
+        </section>
+      </PaneErrorBoundary>
     </main>
   );
 }

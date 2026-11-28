@@ -285,9 +285,7 @@ test.describe("CO-13 Identity chrome", () => {
       await expect(
         page.getByText(/This page didn.t load|couldn.t load/),
       ).toHaveCount(0);
-      await expect(
-        page.getByRole("link", { name: "Open the Duna app" }),
-      ).toBeVisible();
+      await expect(page.getByRole("link", { name: "Open Duna" })).toBeVisible();
     });
   });
 });

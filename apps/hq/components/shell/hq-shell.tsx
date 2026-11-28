@@ -2,6 +2,7 @@ import { Button, PermissionDenied } from "@duna/ui/tideline";
 import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { getHqSession, hasScope } from "./hq-session";
+import { PageHeader } from "./page-header";
 import { parseSidebarMode, SIDEBAR_STORAGE_KEY } from "./nav-state";
 import { ShellFrame } from "./shell-frame";
 import type { ShellSession } from "./session-types";
@@ -15,6 +16,7 @@ export function NoHqAccess({ session }: { readonly session: ShellSession }) {
   if (session.access === "none") {
     return (
       <div className="hqs-state">
+        <PageHeader title="Duna HQ" />
         <PermissionDenied
           action={
             <Button href="/sign-in" variant="primary">
@@ -29,10 +31,11 @@ export function NoHqAccess({ session }: { readonly session: ShellSession }) {
   }
   return (
     <div className="hqs-state">
+      <PageHeader title="Duna HQ" />
       <PermissionDenied
         action={
           <Button href={`${playerAppUrl}/app`} variant="secondary">
-            Open the Duna app
+            Open Duna
           </Button>
         }
         area="Duna HQ"
