@@ -107,12 +107,12 @@ describe("operator.teamAvailability in demo and connected mode (W3-0 stubs)", ()
     ).resolves.toMatchObject({ weekStartsOn: "2026-12-06" });
   });
 
-  it("says 'not implemented yet' outside demo mode", async () => {
+  it("calls the B3a service outside demo mode (no longer 'not implemented')", async () => {
     dataSource.demo = false;
     const error = await caller()
       .coverageGrid({ weekStartsOn: "2026-12-06" })
       .catch((caught: unknown) => caught);
-    expect(error).toMatchObject({ code: "PRECONDITION_FAILED" });
-    expect(isNotImplementedYet(error)).toBe(true);
+    // No database in this test: the service is reached and fails on it.
+    expect(isNotImplementedYet(error)).toBe(false);
   });
 });

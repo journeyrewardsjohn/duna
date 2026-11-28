@@ -9,7 +9,11 @@ export type AvailabilityMode =
   | "blocked";
 
 export * from "./arrival";
+export * from "./availability";
+export * from "./coverage";
+export * from "./legacy-staff-availability";
 export * from "./natural-language-schedule";
+export * from "./time-zone";
 
 export interface TimeRange {
   readonly startsAt: string;
