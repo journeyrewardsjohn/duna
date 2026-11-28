@@ -74,7 +74,7 @@ development-only gallery at `/tideline`: `tests/e2e/tideline-gallery.spec.ts`,
 `tideline-score-identity.spec.ts` and `tideline-time-conditions.spec.ts` (the
 interaction-kit cases are in the first), on the desktop, tablet and phone
 projects. HQ runs in demo mode with `TIDELINE_GALLERY=1`; the public web server
-is not started. The gallery is read per request (`apps/hq/app/tideline/gallery-guard.ts`),
+is not started. The gallery is read per request (`apps/hq/app/(next)/tideline/gallery-guard.ts`),
 so the build is the ordinary production build. Without the flag those specs skip
 themselves, which is why `build-and-e2e` does not run them, and the ungated
 `tests/e2e/tideline-gallery-hidden.spec.ts` proves in that job that `/tideline`
