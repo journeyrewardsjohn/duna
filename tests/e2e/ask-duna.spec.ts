@@ -57,8 +57,8 @@ test("HQ assistant deep links open Ask Duna in the new shell and the floating su
   await expect(
     docked.getByRole("textbox", { name: "Ask Duna anything" }),
   ).toBeVisible();
-  // People is not rebuilt yet: the legacy floating surface still opens there.
-  await page.goto(`${hqBaseUrl}/people`);
+  // Marketing is not rebuilt yet: the legacy floating surface still opens there.
+  await page.goto(`${hqBaseUrl}/marketing`);
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeHidden();
@@ -67,7 +67,7 @@ test("HQ assistant deep links open Ask Duna in the new shell and the floating su
   } else {
     await page.keyboard.press("Control+j");
   }
-  await expect(page).toHaveURL(`${hqBaseUrl}/people`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/marketing`);
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeVisible();
@@ -82,7 +82,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   const { writes, turns } = await installAskDunaFixture(page);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(`${hqBaseUrl}/people`);
+  await page.goto(`${hqBaseUrl}/marketing`);
   const floating = page.getByRole("region", { name: "Floating Ask Duna" });
   const input = floating.getByRole("textbox", { name: "Ask Duna anything" });
   await expect(floating).toBeHidden();
@@ -124,16 +124,16 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   await floating.getByRole("button", { name: "Minimize Ask Duna" }).click();
   await expect(floating).toBeHidden();
   await expect(floatingReturnTarget(page)).toBeFocused();
-  const peopleLink = page
-    .getByRole("link", { name: "People", exact: true })
+  const marketingLink = page
+    .getByRole("link", { name: "Marketing", exact: true })
     .first();
-  if (!(await peopleLink.isVisible()))
+  if (!(await marketingLink.isVisible()))
     await page.locator(".hq-mobile-navigation-more > summary").click();
   await page
-    .getByRole("link", { name: "People", exact: true })
+    .getByRole("link", { name: "Marketing", exact: true })
     .filter({ visible: true })
     .click();
-  await expect(page).toHaveURL(`${hqBaseUrl}/people`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/marketing`);
   await openFloating(page);
   await expect(input).toBeEnabled();
   await input.fill("Use the people on this page");
@@ -141,7 +141,7 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   await expect
     .poll(() =>
       turns.some((turn) =>
-        JSON.stringify(turn.message).includes("Current Duna page: /people"),
+        JSON.stringify(turn.message).includes("Current Duna page: /marketing"),
       ),
     )
     .toBe(true);
@@ -188,12 +188,14 @@ test("Floating Ask Duna respects protected pages and its menus dismiss accessibl
   page,
 }) => {
   await installAskDunaFixture(page);
-  await page.goto(`${hqBaseUrl}/people`);
+  await page.goto(`${hqBaseUrl}/marketing`);
   const floating = page.getByRole("region", { name: "Floating Ask Duna" });
   await expect(floating).toBeHidden();
   await openFloating(page);
   await expect(floating).toBeVisible();
-  await expect(floating.locator(".ask-duna-context")).toContainText("People");
+  await expect(floating.locator(".ask-duna-context")).toContainText(
+    "Marketing",
+  );
   await floating.getByRole("button", { name: "Duna Medium" }).click();
   await page.keyboard.press("Escape");
   await expect(floating.getByRole("dialog")).toHaveCount(0);

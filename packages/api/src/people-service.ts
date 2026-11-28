@@ -27,6 +27,7 @@ import {
   videos,
 } from "@duna/db";
 import { arrivalSharingWindow } from "@duna/scheduling";
+import { participationDisplay, renderParticipationCopy } from "@duna/core";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import {
@@ -441,6 +442,57 @@ async function loadSessionNotes(input: {
   }));
 }
 
+/**
+ * The shared group-state words for a session on a member's profile
+ * (participationDisplay, the one display model; additive). Legacy event
+ * sessions carry no group rule, so this is the capacity view.
+ */
+export function memberSessionGroupState(input: {
+  readonly capacity: number;
+  readonly booked: number;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly status: string;
+  readonly timezone?: string;
+  readonly now: Date;
+}) {
+  const display = participationDisplay({
+    capacity: input.capacity,
+    booked: input.booked,
+    startsAt: new Date(input.startsAt),
+    endsAt: new Date(input.endsAt),
+    now: input.now,
+    timeZone: input.timezone,
+    outcome: input.status === "cancelled" ? "cancelled-by-club" : undefined,
+  });
+  return {
+    state: display.state,
+    tone: display.tone,
+    words: renderParticipationCopy(display.status),
+    staffWords: renderParticipationCopy(display.staff),
+  };
+}
+
+/** Places taken per session, counted once for the whole workspace. */
+function bookedBySession(
+  registrations: readonly { sessionId: string; status: string }[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const registration of registrations) {
+    if (
+      ["cancelled", "refunded", "invited", "waitlisted"].includes(
+        registration.status,
+      )
+    )
+      continue;
+    counts.set(
+      registration.sessionId,
+      (counts.get(registration.sessionId) ?? 0) + 1,
+    );
+  }
+  return counts;
+}
+
 export async function loadOperatorMemberProfile(input: {
   readonly actor: ApiActor;
   readonly organizationId: string;
@@ -580,6 +632,7 @@ export async function loadOperatorMemberProfile(input: {
   const sessionById = new Map(
     workspace.sessions.map((session) => [session.id, session]),
   );
+  const booked = bookedBySession(workspace.eventRegistrations);
   const memberSessions = workspace.eventRegistrations
     .filter((registration) => registration.personId === personId)
     .flatMap((registration) => {
@@ -601,6 +654,15 @@ export async function loadOperatorMemberProfile(input: {
                 "scheduled" | "attended" | "no-show" | "cancelled" | undefined,
               orderId: registration.orderId,
               noteCount: noteCountBySession.get(session.id) ?? 0,
+              groupState: memberSessionGroupState({
+                capacity: session.capacity,
+                booked: booked.get(session.id) ?? 0,
+                startsAt: session.startsAt,
+                endsAt: session.endsAt,
+                status: session.status,
+                timezone: session.timezone,
+                now: input.now,
+              }),
             },
           ]
         : [];
@@ -798,6 +860,7 @@ export async function loadDemoOperatorMemberProfile(
     personId,
     true,
   );
+  const demoBooked = bookedBySession(workspace.eventRegistrations);
   const demoHealthShared =
     relationship.displayName === "Maya Chen" && demoHealthVisibleTo(viewer);
   const sessionsForPerson = workspace.eventRegistrations
@@ -836,6 +899,15 @@ export async function loadDemoOperatorMemberProfile(
             ["Maya Chen", "Jordan Smith"].includes(relationship.displayName)
               ? 1
               : 0,
+          groupState: memberSessionGroupState({
+            capacity: session.capacity,
+            booked: demoBooked.get(session.id) ?? 0,
+            startsAt: session.startsAt,
+            endsAt: session.endsAt,
+            status: session.status,
+            timezone: session.timezone,
+            now: new Date(),
+          }),
         },
       ];
     })
