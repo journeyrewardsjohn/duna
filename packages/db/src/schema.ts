@@ -13315,3 +13315,5 @@ export * from "./schema/legal";
 export * from "./schema/participation";
 export * from "./schema/add-score";
 export * from "./schema/people";
+// INVITE-SMS: invitations by text message and the SMS suppression list.
+export * from "./schema/invites";

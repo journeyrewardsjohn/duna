@@ -178,6 +178,35 @@ Names `EXPO_PUBLIC_MAPBOX_API_TOKEN` (native, public `pk.` token), `MAPBOX_API_T
 
 `SENT_DM_API` (alias `SENT_DM_API_KEY`), `SENT_DM_SANDBOX`, template names/ids: `SENT_DM_BOOKING_INVITE_TEMPLATE_ID|NAME` (default `duna_court_booking_invite`), `SENT_DM_MATCH_INVITE_TEMPLATE_NAME`, `SENT_DM_PLAYER_INVITE_TEMPLATE_NAME`, `SENT_DM_STAFF_INVITE_TEMPLATE_NAME`, `SENT_DM_TEAM_INVITE_TEMPLATE_NAME` (`duna_team_event_invite`), `SENT_DM_EVENT_PLAYER_INVITE_TEMPLATE_NAME` (`duna_event_player_invitation`), `SENT_DM_TOURNAMENT_LIVE_TEMPLATE_NAME` (`duna_tournament_live`). The code sends `sandbox: true` whenever `SENT_DM_SANDBOX === "true"`, and `.env.example` ships `SENT_DM_SANDBOX=true`: an env copied from the example silently sends nothing real. Send-only, no inbound webhook. Docs gate: "SMS 10DLC registration". Templates must be approved at Sent.dm under exactly those names. Not set in web Production.
 
+### 1.21a Invitations by text message (INVITE-SMS): Prelude Notify
+
+The owner set `PRELUDE_API_KEY` in the deployment environment. The code reads it at call time and
+never logs it. Texting answers "not configured" until **both** `PRELUDE_API_KEY` and
+`PRELUDE_INVITE_TEMPLATE_ID` are set (`providerRegistry.sms`, flag `invites.sms`). No live send has
+been made by INVITE-SMS. What the owner must do, in the Prelude dashboard or with Prelude support
+(support@prelude.so):
+
+1. **Template.** Create a **transactional** Notify template with channels `sms` (and `rcs` if wanted)
+   whose English text is exactly
+   `Duna: {{inviter}} invited you to {{details}}. Join here: {{link}} Reply STOP to opt out.`
+   (`INVITE_SMS_TEMPLATE_TEXT`), list the sending countries (US at least; monthly volume ≥ 1000 where a
+   registration is needed), submit it for review, and set its id in `PRELUDE_INVITE_TEMPLATE_ID` once
+   it is `ready`. If counsel changes the wording, change `INVITE_SMS_TEMPLATE_TEXT` in the same release.
+2. **Sender.** US/Canada need a registered sender (10DLC, toll-free or short code). Prelude reviews an
+   opt-in screenshot, the Privacy Policy SMS section and an SMS Terms page before submitting; see the
+   consent question in `docs/legal/README.md` (Q25a): recipients of an invitation have not opted in
+   themselves. Optional `PRELUDE_SENDER_ID` if Prelude assigns a named sender; optional
+   `PRELUDE_PREFERRED_CHANNEL=rcs` once an RCS agent is launched for Duna (falls back to SMS).
+3. **Webhooks.** Generate the webhook signing key (Dashboard: Verify API › Configure › Webhooks) and put
+   its PEM public key in `PRELUDE_WEBHOOK_PUBLIC_KEY` (`\n` escapes accepted). Delivery receipts are
+   requested per message at `https://duna.coach/api/invites/sms/webhook`. Ask Prelude support to set up
+   **subscription management** for the sender with the same callback URL, so STOP / START / carrier
+   disconnects reach Duna's suppression list (Prelude does not block transactional sends after STOP).
+4. **Migration** `0126_invite_sms` (additive: `invite_sms_messages`, `sms_suppressions`) must run before
+   the deploy.
+5. Owner decisions: the message copy (`docs/legal/README.md` (b) O23); the limits (20 texts per sender,
+   3 per number, per 24 hours); whether HELP needs a custom reply in Prelude's subscription config.
+
 ### 1.22 Resend (email)
 
 `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (both required: `isResendConfigured` needs both). Plain-text transactional email with attachments; idempotency keys. No inbound email or delivery-webhook handler exists. Prod: `RESEND_API_KEY` is set; `RESEND_FROM_EMAIL` is NOT set in web Production, so email is reported unconfigured and not sent (finding). Domain verification (SPF/DKIM/DMARC) for the from-domain is needed.
@@ -314,6 +343,13 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
   serves `/add-score`.
 - Owner decisions: an invisible bot challenge on claim (none exists in the repo); the promotion rule
   from candidate to public listing (spec: three confirmed matches or one staff approval) waits for B9.
+
+### Invitations by text message (INVITE-SMS, 28 November 2026)
+
+- `PRELUDE_API_KEY` (set by the owner), `PRELUDE_INVITE_TEMPLATE_ID`, `PRELUDE_WEBHOOK_PUBLIC_KEY`,
+  optional `PRELUDE_SENDER_ID`, `PRELUDE_PREFERRED_CHANNEL`: see §1.21a for the template, sender,
+  webhook and subscription setup.
+- Migration `0126_invite_sms` (additive) before the deploy.
 
 ### Training programs, practice plans and the drill library (B4/B5, 28 November 2026)
 

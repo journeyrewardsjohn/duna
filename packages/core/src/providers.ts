@@ -159,6 +159,13 @@ export const providerRegistry = {
     requires: [["SENT_DM_API_KEY", "SENT_DM_API"]],
     features: ["concierge.channel.whatsapp"],
   },
+  sms: {
+    label: "Prelude Notify (invitations by text message, SMS or RCS)",
+    productionNote:
+      "A Prelude v2 API key (PRELUDE_API_KEY) and an approved transactional Notify template whose text is exactly INVITE_SMS_TEMPLATE_TEXT (PRELUDE_INVITE_TEMPLATE_ID), registered for each sending country (US/Canada need a registered sender). Optional: PRELUDE_SENDER_ID. Delivery receipts and STOP need the webhook public key (PRELUDE_WEBHOOK_PUBLIC_KEY) and a subscription config pointed at /api/invites/sms/webhook. See docs/product/invites.md.",
+    requires: [["PRELUDE_API_KEY"], ["PRELUDE_INVITE_TEMPLATE_ID"]],
+    features: ["invites.sms"],
+  },
   imageGeneration: {
     label: "Higgsfield (image generation)",
     productionNote: "A Higgsfield workspace and API token.",
