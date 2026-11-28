@@ -66,6 +66,9 @@ importers:
       '@duna/scheduling':
         specifier: workspace:*
         version: link:../../packages/scheduling
+      '@duna/tideline-core':
+        specifier: workspace:*
+        version: link:../../packages/tideline-core
       '@duna/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -863,6 +866,9 @@ importers:
       '@duna/expo-device-posture':
         specifier: workspace:*
         version: link:../expo-device-posture
+      '@duna/tideline-core':
+        specifier: workspace:*
+        version: link:../tideline-core
       '@ui-sdk/core':
         specifier: 0.1.0-beta.17
         version: 0.1.0-beta.17
