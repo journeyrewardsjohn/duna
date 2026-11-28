@@ -317,8 +317,13 @@ test.describe("Club, offering, event and coach pages", () => {
   }) => {
     await page.goto("/clubs/northside-indoor-collective");
     await expect(page.getByText("Not open for booking yet")).toBeVisible();
-    const response = await page.goto("/clubs/no-such-club-anywhere");
-    expect(response?.status()).toBe(404);
+    // The route streams its loading skeleton first, so the status is sent
+    // before the page knows; the not-found page and noindex say it instead.
+    await page.goto("/clubs/no-such-club-anywhere");
+    await expect(page.getByText("We can't find that club")).toBeVisible();
+    await expect(
+      page.locator('meta[name="robots"][content*="noindex"]').first(),
+    ).toBeAttached();
     await expect(
       page.getByRole("link", { name: "Search clubs near you" }),
     ).toHaveAttribute("href", "/discover");

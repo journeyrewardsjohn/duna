@@ -58,6 +58,12 @@ test.describe("PL-1 Find a game", () => {
       .first()
       .click();
     await expectPageReady(page, "Private lesson with Theo Park");
+    // Let the page-change Cross (a 16 px slide) finish before measuring.
+    await page.waitForFunction(() =>
+      document
+        .getAnimations()
+        .every((animation) => animation.playState !== "running"),
+    );
     await expectNoHorizontalOverflow(page);
   });
 });
