@@ -181,6 +181,7 @@ export function IconButton({
       {badge && badge > 0 ? (
         <View style={[styles.badge, { backgroundColor: colors.attention }]}>
           <Text
+            maxFontSizeMultiplier={1.4}
             style={{ color: colors["on-attention"] }}
             tabular
             variant="micro"
@@ -291,7 +292,12 @@ export function StatusChip({
   return (
     <View style={[styles.chip, { backgroundColor: colors[wash] }]}>
       {icon ? <Icon name={icon} size="chip" tone={tone} /> : null}
-      <Text numberOfLines={1} tone={tone} variant="phone-meta" weight={600}>
+      <Text
+        style={styles.chipText}
+        tone={tone}
+        variant="phone-meta"
+        weight={600}
+      >
         {label}
       </Text>
     </View>
@@ -341,7 +347,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: 14,
     alignSelf: "flex-start",
+    maxWidth: "100%",
   },
+  chipText: { flexShrink: 1 },
 });

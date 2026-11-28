@@ -160,6 +160,7 @@ function HomeHeader({ model }: { readonly model: HomeModel }) {
         style={[styles.avatar, { backgroundColor: colors.action }]}
       >
         <Text
+          maxFontSizeMultiplier={1.2}
           style={{ color: colors["on-action"] }}
           variant="phone-body"
           weight={600}
@@ -285,7 +286,12 @@ export function HomeActions({ columns }: { readonly columns?: 2 | 4 }) {
       accessibilityRole="menu"
       style={styles.actions}
     >
-      <Rally>
+      <Rally
+        itemStyle={{
+          flexBasis: across === 4 ? "22%" : "46%",
+          flexGrow: 1,
+        }}
+      >
         {HOME_ACTIONS.map((action) => (
           <Pressable
             accessibilityHint={action.hint}
@@ -299,7 +305,6 @@ export function HomeActions({ columns }: { readonly columns?: 2 | 4 }) {
             style={({ pressed }) => [
               styles.action,
               {
-                flexBasis: across === 4 ? "22%" : "46%",
                 backgroundColor: colors.surface,
                 borderColor: colors.line,
                 borderRadius: tokens.radius.xl,
@@ -701,7 +706,7 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   action: {
-    flexGrow: 1,
+    flex: 1,
     minHeight: 88,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 14,

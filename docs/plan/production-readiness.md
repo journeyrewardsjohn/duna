@@ -347,7 +347,7 @@ Command: `vercel env ls production --scope suttonx --cwd <linked duna-web dir>` 
 56. [RFF] Request Apple's Tap to Pay on iPhone entitlement for `com.duna.pro` (development and distribution), then regenerate profiles (`eas credentials`).
 57. [RBL] APNs: create one APNs auth key (.p8) with Live Activities support; set `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_PRIVATE_KEY`, bundle ids (already set in web Production); also set in `duna-hq` if HQ sends Live Activities.
 58. [RFF] Wallet: confirm Pass Type ID `pass.com.duna.tournament` certificate is current; add `APPLE_WALLET_MEMBER_*` if membership cards use a different pass type.
-59. [RBL] Add `PrivacyInfo.xcprivacy` data (via `ios.privacyManifests` in `app.json`) for both apps (engineering), then rebuild.
+59. [RBL] Add `PrivacyInfo.xcprivacy` data (via `ios.privacyManifests` in `app.json`) for both apps (engineering), then rebuild. Engineering part done in M-P0 (required-reason APIs, no tracking); the TestFlight steps and the App Store Connect checklist are in `docs/mobile/RELEASE.md`.
 60. [RBL] EAS: define `EXPO_PUBLIC_*` in the EAS "production" environment for both projects (needed for `eas update`); set `submit.production.ios.ascAppId` (Player 6796792115, Pro 6796792651) in each `eas.json` (engineering).
 61. [RBL] Provide App Store Connect metadata: iPhone, iPad (and iPhone Duo if targeted) screenshots, description, keywords, support and privacy-policy URLs, category.
 62. [RBL] Complete App Privacy labels for both apps (health, location, contacts, photos/videos, identifiers, purchases, user content).

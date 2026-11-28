@@ -1,3 +1,4 @@
+import { isRouteKey } from "./router";
 import type { ShellAction } from "./shell-state";
 
 /** Where an old Live Activity link lands (kept for links already on Lock Screens). */
@@ -183,4 +184,38 @@ export function internalPathTarget(href: string): InternalPathTarget {
   if (path === "/app" || path.startsWith("/app?"))
     return { kind: "navigate", action: { type: "select-tab", tab: "play" } };
   return { kind: "browser" };
+}
+
+/** A preview-build link that drives the shell on a simulator without touch. */
+export interface DevShellLink {
+  readonly actions: readonly ShellAction[];
+  readonly theme?: "light" | "dark" | "system";
+}
+
+/**
+ * `duna://dev/shell?tab=find&route=coaches&theme=dark&sheet=new` (preview
+ * builds only; DunaApp ignores it otherwise). Unknown values are ignored.
+ */
+export function parseDevShellUrl(url: string | null): DevShellLink | null {
+  if (!url?.startsWith("duna://dev/shell")) return null;
+  const query = new URLSearchParams(url.split("?")[1] ?? "");
+  const actions: ShellAction[] = [];
+  const tab = query.get("tab");
+  if (
+    tab === "find" ||
+    tab === "play" ||
+    tab === "improve" ||
+    tab === "connect"
+  )
+    actions.push({ type: "select-tab", tab });
+  const route = query.get("route");
+  if (route && isRouteKey(route)) actions.push({ type: "open", route });
+  if (query.get("sheet") === "new") actions.push({ type: "open-sheet" });
+  const theme = query.get("theme");
+  return {
+    actions,
+    ...(theme === "light" || theme === "dark" || theme === "system"
+      ? { theme }
+      : {}),
+  };
 }

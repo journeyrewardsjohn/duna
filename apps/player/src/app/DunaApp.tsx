@@ -68,6 +68,7 @@ import { colors } from "../shared/palette";
 import {
   deepLinkNavigation,
   internalPathTarget,
+  parseDevShellUrl,
   parsePlayerDeepLink,
 } from "./deep-links";
 import { NewSheet } from "./NewSheet";
@@ -116,7 +117,9 @@ export function quickActionNavigation(
 export function DunaApp() {
   const runtime = usePlayerRuntime();
   const haptics = useHaptics();
-  const { statusBar } = useTheme();
+  const { statusBar, setPreference } = useTheme();
+  const setPreferenceRef = useRef(setPreference);
+  setPreferenceRef.current = setPreference;
   const [state, dispatch] = useReducer(shellReducer, undefined, () =>
     initialShellState(),
   );
@@ -157,6 +160,7 @@ export function DunaApp() {
   const [foundations, setFoundations] = useState<FoundationsOptions | null>(
     foundationsAutostart,
   );
+  const mountedAt = useRef(Date.now());
   const previewRef = useRef(runtime.mode === "preview");
   previewRef.current = runtime.mode === "preview";
 
@@ -216,6 +220,16 @@ export function DunaApp() {
       const foundationsLink = parseFoundationsUrl(url);
       if (foundationsLink) {
         if (previewRef.current) setFoundations(foundationsLink);
+        return;
+      }
+      const devShell = parseDevShellUrl(url);
+      if (devShell) {
+        if (!previewRef.current) return;
+        if (devShell.theme) setPreferenceRef.current(devShell.theme);
+        for (const action of devShell.actions) {
+          if (action.type === "open-sheet") setNewSheetOpen(true);
+          else dispatch(action);
+        }
         return;
       }
       if (url?.startsWith("duna://dev/layout-lab")) {
@@ -528,9 +542,13 @@ export function DunaApp() {
                 },
               }}
               hidden={tabletop || Boolean(windowRoute)}
-              onSelect={(key) =>
-                dispatch({ type: "select-tab", tab: key as TabKey })
-              }
+              onSelect={(key) => {
+                // iPad's sidebar-adaptable tab bar reports its first tab once
+                // while it mounts; that echo is not a person's choice (it
+                // would open Find, and its location prompt, at launch).
+                if (Date.now() - mountedAt.current < 1_500) return;
+                dispatch({ type: "select-tab", tab: key as TabKey });
+              }}
               selected={state.tab}
               tabs={TABS.map((tab) => ({
                 key: tab.key,

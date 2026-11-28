@@ -336,7 +336,9 @@ export function buildHomeModel(input: HomeInput): HomeModel {
       state: next.status,
       stateLabel: STATE_LABELS[next.status],
       countdown: countdownText(start, Date.parse(next.endsAt), now),
-      people: next.participantNames,
+      people: next.participantNames.filter(
+        (name) => name !== player.displayName,
+      ),
       timeZone,
     };
     conditions = conditionsAt(start, timeZone, next, event, locale);

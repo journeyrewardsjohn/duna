@@ -100,6 +100,8 @@ export function AccountScreen() {
         <View style={styles.identity}>
           <View style={[styles.avatar, { backgroundColor: colors.action }]}>
             <Text
+              maxFontSizeMultiplier={1.2}
+
               style={{ color: colors["on-action"] }}
               variant="phone-heading"
             >

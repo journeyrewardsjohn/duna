@@ -15,7 +15,7 @@ import {
   useTheme,
 } from "@duna/ui/native";
 import { useRegionLayout } from "@duna/ui/native/layout";
-import { useContext, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { usePlayerRuntime } from "../../runtime";
 import { VideoStudioScreen } from "../../video-studio";
@@ -274,7 +274,14 @@ export function TabRoot({
   const { colors } = useTheme();
   const shell = useContext(ShellContext);
   const selected = state.stacks[tab];
-  const shown = visibleRoute(state, tab, plan.sideBySide ? 2 : 1);
+  // A tab's default detail mounts only once the person has opened the tab,
+  // so nothing behind an unvisited tab (Find's map asking for location)
+  // starts at launch.
+  const [visited, setVisited] = useState(state.tab === tab);
+  useEffect(() => {
+    if (state.tab === tab) setVisited(true);
+  }, [state.tab, tab]);
+  const shown = visibleRoute(state, tab, plan.sideBySide && visited ? 2 : 1);
   const detail: ReactNode =
     shown && ROUTES[shown.key].presentation === "pane" ? (
       <RouteStack entry={shown} showBack={plan.showBack} tab={tab} />

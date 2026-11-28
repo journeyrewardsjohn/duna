@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deepLinkNavigation,
   internalPathTarget,
+  parseDevShellUrl,
   parsePlayerDeepLink,
 } from "./deep-links";
 import { ROUTES } from "./router";
@@ -194,5 +195,26 @@ describe("Duna web paths inside the app", () => {
     ["/pricing", { kind: "browser" }],
   ] as const)("%s", (href, target) => {
     expect(internalPathTarget(href)).toEqual(target);
+  });
+});
+
+describe("preview shell links", () => {
+  it("drives tabs, routes, the New sheet and the theme", () => {
+    expect(
+      parseDevShellUrl(
+        "duna://dev/shell?tab=find&route=coaches&theme=dark&sheet=new",
+      ),
+    ).toEqual({
+      actions: [
+        { type: "select-tab", tab: "find" },
+        { type: "open", route: "coaches" },
+        { type: "open-sheet" },
+      ],
+      theme: "dark",
+    });
+    expect(parseDevShellUrl("duna://dev/shell?tab=nope&route=nope")).toEqual({
+      actions: [],
+    });
+    expect(parseDevShellUrl("duna://ai")).toBeNull();
   });
 });
