@@ -1468,7 +1468,6 @@ export async function startCatalogCheckout(input: {
             currency: fee.currency,
             ruleInputs: fee.ruleInputs,
           }),
-<<<<<<< HEAD
         ),
     ]);
   try {
@@ -1504,26 +1503,7 @@ export async function startCatalogCheckout(input: {
         "That session no longer has enough open places.",
       );
     }
-=======
-        ]
-      : []),
-    ...[
-      ...priced.fees,
-      ...(operatorFee ? [operatorFee] : []),
-      ...(organizationCommissionFee ? [organizationCommissionFee] : []),
-    ]
-      .filter((fee) => fee.amountMinor > 0)
-      .map((fee) =>
-        database.insert(appliedFees).values({
-          orderId,
-          ruleId: fee.id,
-          payer: fee.payer,
-          amountMinor: fee.amountMinor,
-          currency: fee.currency,
-          ruleInputs: fee.ruleInputs,
-        }),
-      ),
-  ]);
+  }
   if (input.paymentMethod === "card" && priced.totalMinor > 0) {
     // B2: the fees charged, stored with the order (receipt evidence).
     await recordCheckoutFeeQuote({
@@ -1538,7 +1518,6 @@ export async function startCatalogCheckout(input: {
       premiumApplied: hasDunaPlus && priced.dunaPlusSavingsMinor > 0,
       now: input.now,
     });
->>>>>>> origin/main
   }
 
   if (promoQuote) {
