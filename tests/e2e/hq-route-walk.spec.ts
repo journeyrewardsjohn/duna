@@ -4,9 +4,124 @@ import {
   hqRoutes,
   isHqDevOnlyRoute,
 } from "../../packages/core/src/hq-routes";
-import { visualRoutes } from "./hq-visual/routes";
 import { knownIssues } from "./personas/support/known-issues";
 import { formatIssues, QualityMonitor } from "./personas/support/quality";
+
+// Fixed demo-adapter record ids (not secrets; absent from connected data).
+const venue = "10000000-0000-4000-8000-000000000101";
+const court = "10000000-0000-4000-8000-000000000103";
+const clinic = "10000000-0000-4000-8000-000000000301";
+const tournament = "10000000-0000-4000-8000-000000000303";
+const member = "10000000-0000-4000-8000-000000000201";
+const audience = "00000000-0000-4000-8000-000000000091";
+const transaction = "00000000-0000-4000-8000-000000000093";
+const practicePlan = "33000000-0000-4000-8000-000000000300";
+const practice = "33000000-0000-4000-8000-000000000600";
+const program = "33000000-0000-4000-8000-000000000400";
+
+/** Concrete demo paths per page template (formerly the visual matrix's). */
+const demoRoutes: readonly { path: string; page: string }[] = [
+  { path: "/", page: "/" },
+  { path: "/setup", page: "/setup" },
+  { path: "/schedule", page: "/[module]" },
+  { path: "/activities", page: "/activities" },
+  { path: "/ask", page: "/ask/[[...conversation]]" },
+  { path: "/ask/history", page: "/ask/[[...conversation]]" },
+  { path: "/setup/places", page: "/setup/places" },
+  { path: "/setup/places/create", page: "/setup/places/create" },
+  { path: `/setup/places/${venue}`, page: "/setup/places/[venueId]" },
+  {
+    path: `/setup/places/${venue}/layout`,
+    page: "/setup/places/[venueId]/layout",
+  },
+  {
+    path: `/setup/places/${venue}/courts/create`,
+    page: "/setup/places/[venueId]/courts/create",
+  },
+  {
+    path: `/setup/places/${venue}/courts/${court}`,
+    page: "/setup/places/[venueId]/courts/[courtId]",
+  },
+  { path: "/people", page: "/[module]" },
+  { path: `/people/${member}`, page: "/people/[personId]" },
+  { path: "/people/invite", page: "/people/invite" },
+  { path: "/team", page: "/[module]" },
+  { path: "/team/invite", page: "/team/invite" },
+  { path: "/training", page: "/training" },
+  { path: "/training/drills/create", page: "/training/drills/create" },
+  {
+    path: "/training/drills/create/advanced",
+    page: "/training/drills/create/advanced",
+  },
+  {
+    path: "/training/practice-plans/create",
+    page: "/training/practice-plans/create",
+  },
+  {
+    path: `/training/practice-plans/${practicePlan}`,
+    page: "/training/practice-plans/[planId]",
+  },
+  {
+    path: `/training/practice-plans/${practicePlan}/print`,
+    page: "/training/practice-plans/[planId]/print",
+  },
+  {
+    path: `/training/practices/${practice}`,
+    page: "/training/practices/[eventId]",
+  },
+  { path: "/training/programs/create", page: "/training/programs/create" },
+  {
+    path: `/training/programs/${program}`,
+    page: "/training/programs/[programId]",
+  },
+  { path: "/programs", page: "/programs" },
+  { path: "/offerings", page: "/[module]" },
+  { path: "/offerings/create", page: "/offerings/create" },
+  { path: "/offerings/types/services", page: "/offerings/types/[productType]" },
+  { path: "/offerings/types/plans", page: "/offerings/types/[productType]" },
+  { path: "/offerings/types/goods", page: "/offerings/types/[productType]" },
+  { path: "/events", page: "/[module]" },
+  { path: "/events/create", page: "/events/create" },
+  { path: "/events/types/tournaments", page: "/events/types/[eventType]" },
+  { path: "/events/types/clinics", page: "/events/types/[eventType]" },
+  { path: "/events/types/open-play", page: "/events/types/[eventType]" },
+  { path: "/events/types/pickup", page: "/events/types/[eventType]" },
+  { path: `/events/${clinic}`, page: "/events/[sessionId]" },
+  { path: `/events/${tournament}`, page: "/events/[sessionId]" },
+  { path: "/events?type=league", page: "/[module]" },
+  { path: "/inbox", page: "/inbox" },
+  { path: "/inbox/create", page: "/inbox/create" },
+  { path: "/marketing/audiences", page: "/marketing/audiences" },
+  { path: "/marketing/audiences/create", page: "/marketing/audiences/create" },
+  {
+    path: `/marketing/audiences/${audience}`,
+    page: "/marketing/audiences/[audienceId]",
+  },
+  { path: "/website", page: "/website" },
+  { path: "/money", page: "/money" },
+  { path: "/money/setup", page: "/money/setup" },
+  { path: "/money/transactions", page: "/money/transactions" },
+  {
+    path: `/money/transactions/${transaction}`,
+    page: "/money/transactions/[transactionId]",
+  },
+  { path: "/money/disputes", page: "/money/disputes" },
+  { path: "/money/payouts", page: "/money/payouts" },
+  { path: "/money/refund-policies", page: "/money/refund-policies" },
+  { path: "/marketing", page: "/[module]" },
+  { path: "/marketing/create", page: "/marketing/create" },
+  { path: "/reports", page: "/[module]" },
+  { path: "/settings", page: "/settings" },
+  { path: "/setup/identity", page: "/setup/identity" },
+  { path: "/account", page: "/account" },
+  { path: "/setup/start", page: "/setup/start" },
+  { path: "/setup/start/complete", page: "/setup/start/complete" },
+  { path: "/overview", page: "/[module]" },
+  { path: "/admin", page: "/admin" },
+  { path: "/admin/organizations", page: "/admin/[module]" },
+  { path: "/admin/ask-duna", page: "/admin/ask-duna" },
+  { path: "/admin/video", page: "/admin/video" },
+];
 
 /**
  * Walks HQ in demo mode (work package S2): every sidebar item, and every page
@@ -105,10 +220,9 @@ function walkPaths(): string[] {
     (template) => !isHqDevOnlyRoute(template),
   );
   const paths = templates.flatMap((template) => {
-    const covered = visualRoutes
+    const covered = demoRoutes
       .filter((route) => route.page === template)
       .map((route) => route.path)
-      // The visual matrix opens a missing module on purpose (its 404 state).
       .filter((path) => path !== "/overview");
     if (covered.length > 0) return covered;
     const extra = extraPaths[template];
