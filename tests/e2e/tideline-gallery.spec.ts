@@ -458,6 +458,27 @@ test.describe("Tideline gallery, keyboard", () => {
     await expect(palette).toBeHidden();
     await expect(trigger).toBeFocused();
   });
+
+  test("Document headings copy their link and the table region takes focus", async ({
+    page,
+  }) => {
+    const copy = page.getByRole("button", { name: "Copy link to “1. Scope”" });
+    await copy.focus();
+    await expect(copy).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByText(/Link copied|Link is in the address bar/).first(),
+    ).toBeVisible();
+    const table = page.getByRole("region", { name: "Payout timing" });
+    await table.focus();
+    await expect(table).toBeFocused();
+    const list = page
+      .getByRole("navigation", { name: "Sections of the sample policy" })
+      .first();
+    await expect(
+      list.getByRole("link", { name: "2. Payouts" }),
+    ).toHaveAttribute("href", "#doc-demo-payouts");
+  });
 });
 
 test.describe("Tideline gallery, layout", () => {
@@ -693,7 +714,13 @@ test.describe("Tideline gallery, foundations", () => {
     expect(await ground("HQ")).toBe("rgb(255, 255, 255)");
     expect(await ground("Dark")).toBe("rgb(14, 26, 34)");
     expect(await ground("Live zone")).toBe("rgb(14, 26, 34)");
-    await expect(foundations.getByText(/falls back to Geist/)).toBeVisible();
+    // The fonts have landed: the type scale names Jost for the one title and
+    // Geist for everything else, with no "falls back" note.
+    await expect(
+      foundations.getByText(/Jost Medium 500.*one per screen/),
+    ).toBeVisible();
+    await expect(foundations.getByText(/Geist 400, 16\/24/)).toBeVisible();
+    await expect(foundations.getByText(/falls back to Geist/)).toHaveCount(0);
   });
 
   test("closed UI SDK parts stay hidden without an important rule", async ({

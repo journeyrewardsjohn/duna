@@ -1,7 +1,9 @@
+import { log } from "@duna/observability";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { MoneyWorkspace, type MoneyView } from "@/components/money-workspace";
 import { OperatorShell } from "@/components/operator-shell";
+import { orAccessDenied } from "@/lib/access";
 import { getServerCaller } from "@/lib/api";
 
 const moneyNavigation: readonly {
@@ -89,13 +91,17 @@ export async function MoneyPageContent({
         idempotencyKey: crypto.randomUUID(),
       });
     } catch (error) {
-      console.error("Stripe onboarding status refresh failed.", error);
+      log.warn("hq.money.onboardingRefreshFailed", { error });
     }
   }
-  const [dashboard, money] = await Promise.all([
-    caller.operator.dashboard(),
-    caller.operator.moneyWorkspace(),
-  ]);
+  const loaded = await orAccessDenied("Money", () =>
+    Promise.all([
+      caller.operator.dashboard(),
+      caller.operator.moneyWorkspace(),
+    ]),
+  );
+  if ("denied" in loaded) return loaded.denied;
+  const [dashboard, money] = loaded.value;
   const copy = pageCopy[view];
   return (
     <OperatorShell

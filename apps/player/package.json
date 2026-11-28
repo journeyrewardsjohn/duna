@@ -21,6 +21,7 @@
     "@duna/expo-device-posture": "workspace:*",
     "@duna/messaging-client": "workspace:*",
     "@duna/mobile-auth": "workspace:*",
+    "@duna/observability": "workspace:*",
     "@duna/ui": "workspace:*",
     "@expo/dom-webview": "~58.0.2",
     "@expo/ui": "~58.0.30",

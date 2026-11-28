@@ -295,6 +295,7 @@ export function AskDunaWorkspace({
     <section
       className={`ask-duna ${history ? "ask-duna--history" : "ask-duna--new"}`}
       data-zone="editorial"
+      role="main"
     >
       <header className="ask-duna-header">
         <span>
@@ -664,7 +665,11 @@ export function AskDunaThread({
     }
   }
   return (
-    <section className="ask-duna ask-duna--thread" data-zone="editorial">
+    <section
+      className="ask-duna ask-duna--thread"
+      data-zone="editorial"
+      role={floating ? undefined : "main"}
+    >
       {!floating && (
         <header className="ask-duna-header">
           <details className="ask-duna-title-editor">

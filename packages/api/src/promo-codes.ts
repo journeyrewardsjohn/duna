@@ -649,6 +649,32 @@ export async function duplicatePromoCode(input: {
   return created;
 }
 
+/**
+ * The workspace a demo-mode runtime (no database) shows: the organization and
+ * nothing else. No promo codes are invented; the page renders its empty state.
+ */
+export function loadDemoPromoCodeWorkspace(organization: {
+  readonly id: string;
+  readonly name: string;
+}) {
+  return {
+    organization: {
+      id: organization.id,
+      name: organization.name,
+      currency: "USD",
+    },
+    catalog: [] as {
+      id: string;
+      title: string;
+      type: (typeof catalogItems.$inferSelect)["type"];
+      subtype: (typeof catalogItems.$inferSelect)["subtype"];
+      status: (typeof catalogItems.$inferSelect)["status"];
+    }[],
+    members: [] as { id: string; displayName: string; email: string | null }[],
+    promoCodes: [] as PromoCodeWorkspace["promoCodes"],
+  } satisfies PromoCodeWorkspace;
+}
+
 export async function loadPromoCodeWorkspace(input: {
   readonly actor: ApiActor;
   readonly now: Date;

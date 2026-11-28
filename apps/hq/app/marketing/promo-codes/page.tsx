@@ -1,15 +1,21 @@
 import { OperatorShell } from "@/components/operator-shell";
 import { PromoCodeWorkspaceView } from "@/components/promo-code-workspace";
+import { PaneErrorBoundary } from "@/components/observability/pane-error-boundary";
+import { orAccessDenied } from "@/lib/access";
 import { getServerCaller } from "@/lib/api";
 
 export const metadata = { title: "Promo codes" };
 
 export default async function PromoCodesPage() {
   const caller = await getServerCaller();
-  const [dashboard, workspace] = await Promise.all([
-    caller.operator.dashboard(),
-    caller.operator.promoCodeWorkspace(),
-  ]);
+  const loaded = await orAccessDenied("Promo codes", () =>
+    Promise.all([
+      caller.operator.dashboard(),
+      caller.operator.promoCodeWorkspace(),
+    ]),
+  );
+  if ("denied" in loaded) return loaded.denied;
+  const [dashboard, workspace] = loaded.value;
   return (
     <OperatorShell
       active="marketing"
@@ -27,7 +33,9 @@ export default async function PromoCodesPage() {
             </p>
           </div>
         </header>
-        <PromoCodeWorkspaceView workspace={workspace} />
+        <PaneErrorBoundary label="Promo codes" name="hq.promoCodes.workspace">
+          <PromoCodeWorkspaceView workspace={workspace} />
+        </PaneErrorBoundary>
       </main>
     </OperatorShell>
   );

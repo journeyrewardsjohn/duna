@@ -2,6 +2,8 @@ import { providerKeys, providersForFeature } from "@duna/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isProviderUsable,
+  providerNotConfiguredBody,
+  providerNotConfiguredResponse,
   loadProviderReadiness,
   providerStatus,
 } from "./provider-readiness";
@@ -93,5 +95,18 @@ describe("provider readiness", () => {
       "stripeConnect",
     ]);
     expect(providersForFeature("training.scene3d")).toEqual([]);
+  });
+
+  it("answers a not-configured provider with a 200 body, not an error status", async () => {
+    const response = providerNotConfiguredResponse("mapbox", "No map key yet.");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      state: "provider-not-configured",
+      status: "not-configured",
+      provider: "mapbox",
+      message: "No map key yet.",
+    });
+    expect(providerNotConfiguredBody("mapbox")).not.toHaveProperty("message");
   });
 });

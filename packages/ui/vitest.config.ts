@@ -2,9 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const support = (file: string) =>
-  fileURLToPath(
-    new URL(`./src/native/layout/test-support/${file}`, import.meta.url),
-  );
+  fileURLToPath(new URL(`./src/native/${file}`, import.meta.url));
 
 export default defineConfig({
   test: {
@@ -12,13 +10,21 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "**/dist/**"],
   },
   resolve: {
-    // Native layout tests render with react-test-renderer against plain host
+    // Native tests render with react-test-renderer against plain host
     // components; React Native's own sources are Flow and do not run in Node.
+    // The foundation stand-in extends the layout one (same window object).
     alias: [
-      { find: /^react-native$/, replacement: support("react-native.ts") },
+      {
+        find: /^react-native$/,
+        replacement: support("test-support/react-native.ts"),
+      },
+      {
+        find: /^react-native-svg$/,
+        replacement: support("test-support/react-native-svg.ts"),
+      },
       {
         find: /^@duna\/expo-device-posture$/,
-        replacement: support("device-posture.ts"),
+        replacement: support("layout/test-support/device-posture.ts"),
       },
     ],
   },

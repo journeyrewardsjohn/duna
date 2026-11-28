@@ -110,6 +110,7 @@ export function AudienceOverview({
             <label>
               <Search aria-hidden size={18} />
               <input
+                aria-label="Search audiences"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search audiences"
                 type="search"

@@ -245,6 +245,8 @@ test.describe("CO-12 Grow: reports, marketing and the website", () => {
 
 test.describe("CO-13 Identity chrome", () => {
   test.fixme("CO-13.1 Switch organisation and create a new one from the switcher [S1]", async () => {});
+  // CH-6.3 (coach.spec.ts) and regressions.spec.ts cover a coach opening
+  // Money and a player opening HQ; the other owner pages are S1's.
   test.fixme("CO-13.2 A coach or player who opens an owner page sees 'You need access', not an error page [S1]", async () => {});
 });
 

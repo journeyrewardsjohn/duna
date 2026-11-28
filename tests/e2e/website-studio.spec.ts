@@ -6,6 +6,13 @@ const one = "10000000-0000-4000-8000-000000000001",
   two = "10000000-0000-4000-8000-000000000002";
 const newest = "20000000-0000-4000-8000-000000000001",
   older = "20000000-0000-4000-8000-000000000002";
+// A Next.js router prefetch (`/website?_rsc=…`) can still be inside a
+// `route.fetch()` call when a test ends, which Playwright reports as the
+// unattributed error "route.fetch: Test ended". Waiting for in-flight route
+// handlers to settle before the page closes is the correct end condition.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
 function detail(id = one, credits = 1000, hosting = true, active = true) {
   return {
     site: {

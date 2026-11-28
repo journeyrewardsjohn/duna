@@ -1,7 +1,8 @@
 /**
  * Regenerates the Tideline token outputs from the design contract.
  *
- *   pnpm tideline:tokens           write tokens.json, tokens.css, tokens.root.css and tokens.ts
+ *   pnpm tideline:tokens           write tokens.json, tokens.css, tokens.root.css,
+ *                                  tokens.ts and the React Native tokens.native.ts
  *   pnpm tideline:tokens --check   exit 1 when a generated file is stale
  *
  * The source of truth is the contract's `docs/design/tideline-4.1.1/tokens.json`.
@@ -15,10 +16,11 @@
  * `tokens.additions.json`. To take a new design revision, replace the contract
  * file and run the first command.
  */
-import { readFileSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { format } from "prettier";
 import {
+  buildTidelineNativeTokensTs,
   buildTidelineRootTokensCss,
   buildTidelineTokensCss,
   buildTidelineTokensTs,
@@ -61,6 +63,12 @@ async function main() {
       join(directory, "tokens.ts"),
       await format(buildTidelineTokensTs(source), { parser: "typescript" }),
     ],
+    [
+      join(root, "packages/ui/src/native/tokens/tokens.native.ts"),
+      await format(buildTidelineNativeTokensTs(source), {
+        parser: "typescript",
+      }),
+    ],
   ];
 
   const stale: string[] = [];
@@ -73,7 +81,10 @@ async function main() {
     }
     if (current === content) continue;
     stale.push(relative(root, path));
-    if (!check) writeFileSync(path, content);
+    if (!check) {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, content);
+    }
   }
 
   if (check && stale.length > 0) {

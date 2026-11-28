@@ -1,3 +1,4 @@
+import { providerNotConfiguredResponse } from "./provider-readiness";
 import {
   getDatabase,
   isDatabaseConfigured,
@@ -156,27 +157,47 @@ export function scheduleConversationWakeUp(input: {
   void task;
 }
 
+/**
+ * Live updates are off or not set up here. That is an honest state, not a
+ * failure: the person's inbox keeps working by cursor polling. An
+ * EventSource (it asks for `text/event-stream`) gets 204, which the standard
+ * says means "do not reconnect"; the client engine's readiness probe (it asks
+ * for JSON) gets the provider-readiness body so it stops opening streams.
+ */
+function liveUpdatesUnavailable(accept: string | null | undefined): Response {
+  if (accept?.includes("text/event-stream")) {
+    return new Response(null, {
+      status: 204,
+      headers: { "cache-control": "no-store" },
+    });
+  }
+  return providerNotConfiguredResponse(
+    "messagingWakeups",
+    "Live updates aren't set up yet; messages still arrive by refresh.",
+  );
+}
+
 export async function openMessagingUpdatesStream(input: {
   readonly actor: ApiActor;
   readonly signal?: AbortSignal;
+  /** The request's Accept header: JSON asks only whether live updates exist. */
+  readonly accept?: string | null;
 }): Promise<Response> {
   if (process.env.MESSAGING_SSE_ENABLED === "false") {
-    return Response.json(
-      {
-        error:
-          "Messaging wake-ups are disabled; cursor polling remains active.",
-      },
-      { status: 503 },
-    );
+    return liveUpdatesUnavailable(input.accept);
   }
   const configuration = upstashConfiguration();
   if (!configuration) {
+    return liveUpdatesUnavailable(input.accept);
+  }
+  if (
+    input.accept?.includes("application/json") &&
+    !input.accept.includes("text/event-stream")
+  ) {
+    // The client engine's readiness probe: live updates exist, no stream.
     return Response.json(
-      {
-        error:
-          "Messaging wake-ups are not configured; cursor polling remains active.",
-      },
-      { status: 503 },
+      { state: "ready", status: "configured", provider: "messagingWakeups" },
+      { headers: { "cache-control": "no-store" } },
     );
   }
   const channels = messagingWakeChannelsForActor(input.actor);

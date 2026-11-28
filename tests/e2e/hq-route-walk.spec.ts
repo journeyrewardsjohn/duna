@@ -127,8 +127,6 @@ const knownFailures: Readonly<Record<string, string>> = {
     "S1: /ask/history renders without a main landmark, like /ask.",
   "/account":
     "S1: /account renders without a main landmark (persona known issue).",
-  "/marketing/promo-codes":
-    "Q1: promo codes throw in demo mode (persona-journeys.md, H13).",
   [extraPaths.offering]:
     "H9: the demo catalog is empty, so no offering record resolves (404).",
   [extraPaths.offeringBuilder]:

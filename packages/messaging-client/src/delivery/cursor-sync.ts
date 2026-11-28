@@ -418,8 +418,36 @@ export class CursorSyncEngine implements DeliveryEngine {
     source.onerror = () => {
       source.close();
       if (this.#eventSource === source) this.#eventSource = undefined;
-      this.#scheduleReconnect();
+      // A stream that ends because live updates are not set up must not be
+      // retried: polling already keeps the inbox current.
+      void this.#liveUpdatesConfigured().then((configured) => {
+        if (configured) this.#scheduleReconnect();
+      });
     };
+  }
+
+  /**
+   * Asks the updates endpoint, as JSON, whether live updates exist at all.
+   * Anything but an explicit "provider-not-configured" (a network error, a
+   * server error) counts as configured, so a real outage still reconnects.
+   */
+  async #liveUpdatesConfigured(): Promise<boolean> {
+    try {
+      const response = await this.#fetch(this.#url("/updates"), {
+        cache: "no-store",
+        credentials: "include",
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) return true;
+      const body: unknown = await response.json();
+      return !(
+        typeof body === "object" &&
+        body !== null &&
+        (body as { state?: unknown }).state === "provider-not-configured"
+      );
+    } catch {
+      return true;
+    }
   }
 
   #scheduleReconnect(): void {
