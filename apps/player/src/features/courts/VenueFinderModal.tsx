@@ -8,7 +8,7 @@ import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
 } from "../../../satoshi-text";
-import { discoveryDistance } from "../discovery/discovery-distance";
+import { discoveryDistance } from "../find/discovery-distance";
 import { colors } from "../../shared/palette";
 import type { CourtBookingRequest } from "./court-types";
 import {

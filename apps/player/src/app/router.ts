@@ -39,6 +39,11 @@ export interface RouteDefinition {
   readonly legacy: boolean;
   /** Listed in its tab's hub (false for routes reached only from elsewhere). */
   readonly listed: boolean;
+  /**
+   * The screen draws its own one Jost title (a session's name); the shell
+   * header shows only Back.
+   */
+  readonly ownTitle: boolean;
 }
 
 function route(
@@ -47,7 +52,7 @@ function route(
   icon: GlyphName,
   summary: string,
   options: Partial<
-    Pick<RouteDefinition, "presentation" | "legacy" | "listed">
+    Pick<RouteDefinition, "presentation" | "legacy" | "listed" | "ownTitle">
   > = {},
 ): RouteDefinition {
   return {
@@ -58,17 +63,33 @@ function route(
     presentation: options.presentation ?? "pane",
     legacy: options.legacy ?? true,
     listed: options.listed ?? true,
+    ownTitle: options.ownTitle ?? false,
   };
 }
 
 export const ROUTES = {
   // Find: discover courts, clubs, matches, events and coaches.
+  // Find's root (M-P1): Where · When · What, results as a list and a map.
+  // The key stays "discover" so every link already shipped still lands here.
   discover: route(
     "find",
-    "Search",
+    "Find",
     "find",
     "Courts, clubs, matches and events near you",
+    { legacy: false, listed: false, ownTitle: true },
   ),
+  // A group session (lesson, clinic, group training, open play) and its booking.
+  session: route("find", "Session", "lesson", "A session and its group", {
+    legacy: false,
+    listed: false,
+    ownTitle: true,
+  }),
+  // A venue's open court times: day, length and time, then checkout.
+  court: route("find", "Court times", "court", "Open times at a venue", {
+    legacy: false,
+    listed: false,
+    ownTitle: true,
+  }),
   coaches: route(
     "find",
     "Coaches",
@@ -176,7 +197,8 @@ export const TABS: readonly TabDefinition[] = [
     title: "Find",
     systemImage: "magnifyingglass",
     icon: "find",
-    defaultRoute: "discover",
+    // Find's root is the search itself; the map fills the second pane.
+    defaultRoute: null,
     summary: "Courts, clubs, matches, events and coaches",
   },
   {

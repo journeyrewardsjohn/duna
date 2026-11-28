@@ -218,3 +218,54 @@ describe("preview shell links", () => {
     expect(parseDevShellUrl("duna://ai")).toBeNull();
   });
 });
+
+describe("Find links (M-P1)", () => {
+  it("opens a session, a venue's court times and Find itself", () => {
+    expect(parsePlayerDeepLink("duna://sessions/occ%201")).toEqual({
+      kind: "session",
+      sessionId: "occ%201",
+    });
+    expect(
+      deepLinkNavigation({ kind: "session", sessionId: "occ%201" }),
+    ).toEqual({ type: "open", route: "session", targetId: "occ 1" });
+    expect(parsePlayerDeepLink("duna://courts/v1")).toEqual({
+      kind: "court",
+      venueId: "v1",
+    });
+    expect(deepLinkNavigation({ kind: "court", venueId: "v1" })).toEqual({
+      type: "open",
+      route: "court",
+      targetId: "v1",
+    });
+    expect(parsePlayerDeepLink("duna://find")).toEqual({ kind: "find" });
+    expect(deepLinkNavigation({ kind: "find" })).toEqual({
+      type: "open",
+      route: "discover",
+    });
+  });
+
+  it("lands the session on the Find tab with its target", () => {
+    const state = shellReducer(initialShellState(), {
+      type: "open",
+      route: "session",
+      targetId: "occ-1",
+    });
+    expect(state.tab).toBe("find");
+    expect(state.stacks.find).toMatchObject({
+      key: "session",
+      targetId: "occ-1",
+    });
+    expect(ROUTES.session.ownTitle).toBe(true);
+  });
+
+  it("drives a detail route with an id in preview builds", () => {
+    expect(
+      parseDevShellUrl("duna://dev/shell?tab=find&route=session&id=abc"),
+    ).toEqual({
+      actions: [
+        { type: "select-tab", tab: "find" },
+        { type: "open", route: "session", targetId: "abc" },
+      ],
+    });
+  });
+});
