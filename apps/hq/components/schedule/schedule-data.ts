@@ -29,16 +29,13 @@ import {
   type ScheduleItem,
   type ScheduleQuery,
   placeToday,
-  teamAvailabilityToInputs,
   viewDays,
 } from "./schedule-model";
 
 /**
  * Schedule's data (H-SCHEDULE): one server read per request that turns the
  * operator workspace's calendar, its places and courts, the club's group
- * sessions (`operator.catalogSessionOccurrences`), each coach's
- * availability (`operator.teamAvailability.staff`, for the shared rule) and
- * the day's conditions (`operator.conditions.venueDay`) into what the
+ * sessions (`operator.catalogSessionOccurrences`) and the day's conditions (`operator.conditions.venueDay`) into what the
  * calendar draws. A failing part never fails the page: conditions and
  * availability are simply left out (and the screen says so).
  */
@@ -97,8 +94,6 @@ export interface ScheduleData {
   readonly conditions:
     | { readonly state: "ready"; readonly day: ScheduleConditions }
     | { readonly state: "no-data" | "not-configured" | "many-places" };
-  /** Coaches whose availability could not be read (the rule cannot speak for them). */
-  readonly availabilityMissing: number;
   readonly demo: boolean;
   readonly viewerId?: string;
   readonly permissions: SchedulePermissions;
@@ -619,25 +614,9 @@ export const loadSchedule = cache(
       }
     }
 
-    // Each coach's availability, for the shared rule. One read per coach.
-    let availabilityMissing = 0;
-    coaches = await Promise.all(
-      coaches.map(async (coach) => {
-        if (!coach.staffProfileId) {
-          availabilityMissing += 1;
-          return coach;
-        }
-        try {
-          const page = await caller.operator.teamAvailability.staff({
-            staffProfileId: coach.staffProfileId,
-          });
-          return { ...coach, availability: teamAvailabilityToInputs(page) };
-        } catch {
-          availabilityMissing += 1;
-          return coach;
-        }
-      }),
-    );
+    // Coaches' availability is read only when the person needs it (creating,
+    // moving, "Who is free"): see `coachAvailabilityAction`. Reading it for
+    // every page view would spend one request per coach.
 
     const permissions = schedulePermissions(session);
     const conditionsPlace =
@@ -675,7 +654,6 @@ export const loadSchedule = cache(
             available: item.quantityOnHand - item.quantityReserved,
           })),
         conditions,
-        availabilityMissing,
         demo,
         ...(session.person ? { viewerId: session.person.id } : {}),
         permissions,

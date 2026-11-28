@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   checkInAction,
+  coachAvailabilityAction,
   moveItemAction,
 } from "@/app/(next)/(hq)/schedule/actions";
 import { ClosureSheet, type ClosureDraft } from "./closure-sheet";
@@ -104,6 +105,46 @@ export function ScheduleScreen({
   const [whoOpen, setWhoOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const { permissions, timeZone } = data;
+  // Coaches' availability, read once when first needed (see ensureAvailability).
+  const [availability, setAvailability] = useState<Readonly<
+    Record<
+      string,
+      NonNullable<ScheduleData["coaches"][number]["availability"]> | null
+    >
+  > | null>(null);
+  const coaches = useMemo(
+    () =>
+      data.coaches.map((coach) => {
+        const loaded = coach.staffProfileId
+          ? availability?.[coach.staffProfileId]
+          : undefined;
+        return loaded ? { ...coach, availability: loaded } : coach;
+      }),
+    [availability, data.coaches],
+  );
+  const availabilityMissing = availability
+    ? data.coaches.filter(
+        (coach) => !coach.staffProfileId || !availability[coach.staffProfileId],
+      ).length
+    : 0;
+  const ensureAvailability = useCallback(async () => {
+    if (availability) return availability;
+    const ids = data.coaches.flatMap((coach) =>
+      coach.staffProfileId ? [coach.staffProfileId] : [],
+    );
+    if (ids.length === 0) {
+      setAvailability({});
+      return {};
+    }
+    try {
+      const loaded = await coachAvailabilityAction(ids);
+      setAvailability(loaded);
+      return loaded;
+    } catch {
+      setAvailability({});
+      return {};
+    }
+  }, [availability, data.coaches]);
 
   useEffect(() => {
     setViewerZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -208,6 +249,11 @@ export function ScheduleScreen({
     [permissions.change],
   );
 
+  // Availability is read the first time something needs it.
+  useEffect(() => {
+    if (createDraft || whoOpen) void ensureAvailability();
+  }, [createDraft, whoOpen, ensureAvailability]);
+
   // Intents from the command palette (`?intent=`), handled once.
   useEffect(() => {
     if (!intent) return;
@@ -266,9 +312,14 @@ export function ScheduleScreen({
     }
     const courtId = next.courtId ?? item.courtId;
     const court = allCourts.find((candidate) => candidate.id === courtId);
-    const coach = data.coaches.find(
+    const loaded = item.coachId ? await ensureAvailability() : null;
+    const listed = data.coaches.find(
       (candidate) => candidate.id === item.coachId,
     );
+    const coach =
+      listed && loaded && listed.staffProfileId && loaded[listed.staffProfileId]
+        ? { ...listed, availability: loaded[listed.staffProfileId]! }
+        : listed;
     const [conflict] = explainConflicts(
       {
         startsAt: next.startsAt,
@@ -905,9 +956,9 @@ export function ScheduleScreen({
               Court bookings without a coach show in the Courts view.
             </p>
           ) : null}
-          {data.availabilityMissing > 0 && data.coaches.length > 0 ? (
+          {availabilityMissing > 0 && data.coaches.length > 0 ? (
             <p className="sch-quiet">
-              {plural(data.availabilityMissing, "coach has", "coaches have")} no
+              {plural(availabilityMissing, "coach has", "coaches have")} no
               availability on file, so their conflicts can't be checked.
             </p>
           ) : null}
@@ -936,7 +987,7 @@ export function ScheduleScreen({
         }}
       />
       <CreateSheet
-        coaches={data.coaches}
+        coaches={coaches}
         courts={courts.length > 0 ? courts : allCourts}
         draft={createDraft}
         items={items}
@@ -962,7 +1013,8 @@ export function ScheduleScreen({
         timeZone={timeZone}
       />
       <WhoIsFreeSheet
-        coaches={data.coaches}
+        checking={availability === null}
+        coaches={coaches}
         date={query.date}
         items={items}
         onClose={() => setWhoOpen(false)}
@@ -1014,6 +1066,7 @@ function ScheduleActions({
 }
 
 function WhoIsFreeSheet({
+  checking,
   open,
   onClose,
   coaches,
@@ -1021,6 +1074,7 @@ function WhoIsFreeSheet({
   date,
   timeZone,
 }: {
+  readonly checking: boolean;
   readonly open: boolean;
   readonly onClose: () => void;
   readonly coaches: ScheduleData["coaches"];
@@ -1074,7 +1128,9 @@ function WhoIsFreeSheet({
               <h3 className="td-field__label">
                 Free {clockRange(startsAt, endsAt, timeZone)}
               </h3>
-              {answer.free.length === 0 ? (
+              {checking ? (
+                <p className="sch-quiet">Checking the team's availability…</p>
+              ) : answer.free.length === 0 ? (
                 <p className="sch-quiet">Nobody is free for the whole time.</p>
               ) : (
                 <ul className="sch-affected">

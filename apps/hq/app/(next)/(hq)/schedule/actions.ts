@@ -12,9 +12,11 @@ import {
   serializeDemoSchedule,
   type DemoScheduleStore,
 } from "@/components/schedule/schedule-demo";
-import type {
-  ItemKind,
-  ItemSource,
+import {
+  teamAvailabilityToInputs,
+  type CoachFacts,
+  type ItemKind,
+  type ItemSource,
 } from "@/components/schedule/schedule-model";
 import { getHqSession } from "@/components/shell/hq-session";
 import { getServerCaller, getServerContext } from "@/lib/api";
@@ -571,4 +573,29 @@ export async function equipmentAction(
           });
     return { id: result.id };
   });
+}
+
+/**
+ * Coaches' availability for the shared rule, read when the person first
+ * needs it (creating, moving, "Who is free"). A coach whose availability
+ * cannot be read is answered with null: the screen says their conflicts
+ * can't be checked instead of guessing.
+ */
+export async function coachAvailabilityAction(
+  staffProfileIds: readonly string[],
+): Promise<Record<string, NonNullable<CoachFacts["availability"]> | null>> {
+  const caller = await getServerCaller();
+  const entries = await Promise.all(
+    staffProfileIds.slice(0, 40).map(async (staffProfileId) => {
+      try {
+        const page = await caller.operator.teamAvailability.staff({
+          staffProfileId,
+        });
+        return [staffProfileId, teamAvailabilityToInputs(page)] as const;
+      } catch {
+        return [staffProfileId, null] as const;
+      }
+    }),
+  );
+  return Object.fromEntries(entries);
 }

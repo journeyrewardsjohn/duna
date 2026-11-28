@@ -96,14 +96,14 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
     buffer: Buffer.from("Two courts available"),
   });
   await page
-    // Schedule moved to the new shell; Events is still a legacy page.
-    .getByRole("link", { name: "Events", exact: true })
+    // Schedule moved to the new shell; Inbox is still a legacy page.
+    .getByRole("link", { name: "Inbox", exact: true })
     .first()
     .click();
-  await expect(page).toHaveURL(`${hqBaseUrl}/events`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/inbox`);
   await expect(input).toHaveValue("Help plan next week");
   await expect(floating.getByText("courts.txt", { exact: true })).toBeVisible();
-  await expect(floating.locator(".ask-duna-context")).toContainText("Events");
+  await expect(floating.locator(".ask-duna-context")).toContainText("Inbox");
   await page.screenshot({
     path: testInfo.outputPath("floating-ask-duna.png"),
     style: "nextjs-portal { display: none; }",
@@ -116,10 +116,10 @@ test("Floating Ask Duna keeps drafts, files and reviewed conversations across HQ
   await expect(
     floating.getByText("Ready for your review", { exact: true }),
   ).toBeVisible();
-  await expect(page).toHaveURL(`${hqBaseUrl}/events`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/inbox`);
   expect(writes.filter((row) => row.path === "conversations")).toHaveLength(1);
   expect(writes.find((row) => row.path === "conversations")?.body.page).toBe(
-    "/events",
+    "/inbox",
   );
   expect(writes.filter((row) => row.path.endsWith("/review"))).toHaveLength(0);
   await floating.getByRole("button", { name: "Minimize Ask Duna" }).click();

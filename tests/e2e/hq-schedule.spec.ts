@@ -233,12 +233,15 @@ test("on a phone the day is an agenda with a day strip, and nothing overflows", 
   await expect(
     page.getByRole("radiogroup", { name: "Choose a day" }),
   ).toBeVisible();
-  const overflow = await page.evaluate(
-    () =>
-      document.documentElement.scrollWidth -
-      document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(2);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      ),
+    )
+    .toBeLessThanOrEqual(2);
   expect(
     stylesheets.filter((url) =>
       /globals|design-v3|work-focus|forms\.css|legacy/.test(url),
