@@ -12,6 +12,10 @@ export function isPublicHqRoute(pathname: string): boolean {
     pathname === "/api/cron/workflows" ||
     pathname === "/api/cron/event-operations" ||
     pathname === "/api/cron/vision-improvement" ||
+    // The money crons check CRON_SECRET themselves; the proxy blocked them
+    // with 401 since they were added, so payouts and reconciliation never ran.
+    pathname === "/api/cron/money-payouts" ||
+    pathname === "/api/cron/money-reconciliation" ||
     routeMatches(pathname, "/api/health")
   );
 }
