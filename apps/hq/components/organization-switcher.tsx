@@ -130,7 +130,10 @@ export function OrganizationSwitcher({
             })}
           </div>
           <footer>
-            <Link href="/onboarding?mode=create" onClick={() => setOpen(false)}>
+            <Link
+              href="/setup/start?mode=create"
+              onClick={() => setOpen(false)}
+            >
               <Plus aria-hidden size={16} /> Create new organization
             </Link>
           </footer>

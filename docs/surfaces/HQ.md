@@ -18,24 +18,31 @@ remain available through disclosures on Home.
 
 ## Operator navigation
 
-`apps/hq/components/navigation.ts` is the navigation source of truth.
+`apps/hq/components/navigation.ts` is the navigation source of truth and
+`packages/core/src/hq-routes.ts` (`@duna/core/hq-routes`) holds every HQ
+address. The groups follow `docs/design/tideline-4.1.1/ia-hq.md`; the
+old-to-new table is `docs/plan/s2-route-map.md`.
 
-| Group     | Modules                                                   | Primary ownership                               |
-| --------- | --------------------------------------------------------- | ----------------------------------------------- |
-| Today     | Overview, Calendar                                        | Daily state, schedule, arrivals, quick actions  |
-| Run       | Venues, People, Team, Products, Events, Leagues, Messages | Organization operations and delivery            |
-| Grow      | Money, Marketing, Reports, Duna AI                        | Commerce, reporting, drafts, proposals          |
-| Configure | Settings                                                  | Organization profile, billing, themes, controls |
+| Group           | Items                                     | Primary ownership                                |
+| --------------- | ----------------------------------------- | ------------------------------------------------ |
+| Run the day     | Today, Schedule, Inbox                    | Daily state, schedule, arrivals, Concierge inbox |
+| People and play | People, Team, Training, Events, Offerings | Organization operations and delivery             |
+| Money and setup | Money, Club setup                         | Commerce, payouts, places, identity, first run   |
+| Grow            | Website, Marketing, Reports               | Website, campaigns, audiences, promo codes       |
 
-Specialized routes supplement the module routes:
+Settings and the personal account open from the account menu; Ask Duna opens
+from the shell. Specialized routes supplement the list pages:
 
-- `/onboarding` and `/payments/setup` for organization activation;
-- `/locations/*` for venue, court, availability, and layout workflows;
-- `/events/*` and `/leagues/create` for competition operations;
-- `/products/*` for catalog and inventory;
-- `/members/*`, `/team/*`, and invitation routes for people;
-- `/messages/*` for the organization inbox;
-- `/account` and `/settings/theme` for account and theme controls.
+- `/setup/start` (first run) and `/money/setup` for organization activation;
+- `/setup/places/*` for venue, court, availability, and layout workflows;
+- `/setup/identity` for the club theme;
+- `/events/*` and `/events?type=league` for competition operations;
+- `/offerings/*` for catalog and inventory;
+- `/people/*`, `/team/*`, and invitation routes for people;
+- `/inbox/*` for the organization inbox;
+- `/marketing/audiences/*` and `/marketing/promo-codes` for growth;
+- `/money/*` for balance, transactions, payouts, refund policies and disputes;
+- `/account` and `/settings` for the personal account and organization settings.
 
 ## Runtime and data path
 

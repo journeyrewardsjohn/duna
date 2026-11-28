@@ -40,7 +40,7 @@ import {
 import {
   generateTrainingProgramAction,
   saveTrainingProgramAction,
-} from "@/app/training/actions";
+} from "@/app/(legacy)/training/actions";
 
 type ProgramMilestone = {
   readonly id: string;
@@ -1010,7 +1010,7 @@ export function TrainingProgramDesigner({
                   ) : (
                     <Link
                       className="hq-button hq-button--secondary"
-                      href="/products/create?type=service&subtype=program"
+                      href="/offerings/create?type=service&subtype=program"
                     >
                       Create Program offer
                     </Link>

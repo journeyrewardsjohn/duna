@@ -551,7 +551,7 @@ describe("Tideline colour discipline", () => {
     const pattern = new RegExp(`(?:${retired.join("|")})(?![0-9a-f])`, "i");
     const scanned = [
       ...files(join(here, "..")),
-      ...files(join(repo, "apps/hq/app/tideline")),
+      ...files(join(repo, "apps/hq/app/(next)/tideline")),
     ].filter(
       (path) => /\.(css|json|ts|tsx)$/.test(path) && !path.endsWith(".test.ts"),
     );
@@ -620,7 +620,7 @@ describe("Tideline type, icons and motion", () => {
     }
     const library = [
       ...files(join(here, "..")),
-      ...files(join(repo, "apps/hq/app/tideline")),
+      ...files(join(repo, "apps/hq/app/(next)/tideline")),
     ].filter((path) => /\.(css|tsx?)$/.test(path) && !path.includes("tokens"));
     for (const path of library) {
       expect(readFileSync(path, "utf8"), path).not.toMatch(

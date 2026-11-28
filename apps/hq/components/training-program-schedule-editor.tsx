@@ -33,7 +33,7 @@ import {
   importTrainingTournamentAction,
   removeTrainingProgramEventAction,
   updateTrainingProgramEventAction,
-} from "@/app/training/actions";
+} from "@/app/(legacy)/training/actions";
 import { PlaceSearch, type PlaceDetails } from "./place-search";
 
 export type ProgramTournamentCandidate = {

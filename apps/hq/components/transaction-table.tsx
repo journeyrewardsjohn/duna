@@ -88,7 +88,7 @@ const columns = helper.columns([
     cell: ({ row }) => (
       <Link
         className="transaction-customer"
-        href={`/payments/transactions/${encodeURIComponent(row.original.id)}`}
+        href={`/money/transactions/${encodeURIComponent(row.original.id)}`}
       >
         <strong>{row.original.buyerName}</strong>
         <small>{row.original.description}</small>
@@ -140,7 +140,7 @@ const columns = helper.columns([
       <Link
         aria-label={`Open ${row.original.description} transaction`}
         className="transaction-open"
-        href={`/payments/transactions/${encodeURIComponent(row.original.id)}`}
+        href={`/money/transactions/${encodeURIComponent(row.original.id)}`}
       >
         <ArrowRight size={17} />
       </Link>

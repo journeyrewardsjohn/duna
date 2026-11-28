@@ -71,7 +71,7 @@ export function getOrganizationSetupReadiness(
       label: "Add a venue and court",
       detail:
         "Tell Duna where you operate so scheduling, capacity, and discovery work correctly.",
-      href: "/locations/create",
+      href: "/setup/places/create",
       actionLabel: "Add a venue",
       complete: venueReady,
     },
@@ -80,7 +80,7 @@ export function getOrganizationSetupReadiness(
       label: "Bring in your first people",
       detail:
         "Add a player, member, guardian, or teammate so the workspace reflects the real organization.",
-      href: "/members/invite",
+      href: "/people/invite",
       actionLabel: "Add a person",
       complete: peopleReady,
     },
@@ -89,7 +89,7 @@ export function getOrganizationSetupReadiness(
       label: "Publish your player-facing brand",
       detail:
         "Add a logo and short story, then publish the Theme Kit players and parents will see.",
-      href: "/settings/theme",
+      href: "/setup/identity",
       actionLabel: "Open Theme Kit",
       complete: brandReady,
     },
@@ -98,7 +98,7 @@ export function getOrganizationSetupReadiness(
       label: "Connect payments",
       detail:
         "Add the legal address and complete secure payout verification before selling online.",
-      href: "/payments/setup",
+      href: "/money/setup",
       actionLabel: "Set up payments",
       complete: paymentsReady,
     },

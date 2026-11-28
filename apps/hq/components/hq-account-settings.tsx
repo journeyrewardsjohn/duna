@@ -13,7 +13,7 @@ import { useState, useTransition } from "react";
 import {
   cancelHqAccountDeletionAction,
   requestHqAccountDeletionAction,
-} from "@/app/account/actions";
+} from "@/app/(legacy)/account/actions";
 
 export function HqAccountSettings({
   deletionReadiness,

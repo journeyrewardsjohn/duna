@@ -16,7 +16,7 @@ describe("transactions v2 projection", () => {
       people: [
         expect.objectContaining({
           name: "Maya Chen",
-          profileHref: expect.stringMatching(/^\/members\//),
+          profileHref: expect.stringMatching(/^\/people\//),
         }),
       ],
       items: [

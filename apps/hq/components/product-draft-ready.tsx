@@ -86,7 +86,7 @@ export function ProductDraftReady({
 
   useEffect(() => {
     if (state.status === "success") {
-      router.replace(`/products/${item.id}?published=1`);
+      router.replace(`/offerings/${item.id}?published=1`);
     }
   }, [item.id, router, state.status]);
 
@@ -183,11 +183,11 @@ export function ProductDraftReady({
           </form>
           <Link
             className="hq-button hq-button--secondary"
-            href={`/products/${item.id}`}
+            href={`/offerings/${item.id}`}
           >
             <Pencil aria-hidden size={16} /> Edit draft
           </Link>
-          <Link className="product-draft-ready__all-products" href="/products">
+          <Link className="product-draft-ready__all-products" href="/offerings">
             <Eye aria-hidden size={16} /> See all products
           </Link>
         </footer>

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { recordTrainingOutcomeAction } from "@/app/training/actions";
+import { recordTrainingOutcomeAction } from "@/app/(legacy)/training/actions";
 import { TrainingCourtAnimation } from "./training-court-animation";
 
 type BlockStatus = "completed" | "modified" | "skipped";
