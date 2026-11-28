@@ -61,7 +61,10 @@ export interface RecipientChannelFacts {
 
 export type ChannelChoice =
   | { readonly channel: ConciergeChannel; readonly reason?: undefined }
-  | { readonly channel?: undefined; readonly reason: ConciergeUnreachableReason };
+  | {
+      readonly channel?: undefined;
+      readonly reason: ConciergeUnreachableReason;
+    };
 
 function minutesOf(value: string): number {
   const [hours, minutes] = value.split(":").map(Number);

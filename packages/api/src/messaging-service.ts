@@ -59,6 +59,8 @@ import {
   registrations,
   reports,
   sessions,
+  trainingProgramParticipants,
+  trainingPrograms,
   venues,
   workflowJobs,
 } from "@duna/db";
@@ -1912,6 +1914,32 @@ async function organizationAudienceForContext(input: {
     return rows.map((row) => row.personId);
   }
   if (input.context.type === "league") {
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        input.context.id,
+      )
+    ) {
+      // Concierge (B7): a league thread may be a training program (B4). Its
+      // roster is the program's active athletes.
+      const athletes = await database
+        .select({ personId: trainingProgramParticipants.personId })
+        .from(trainingProgramParticipants)
+        .innerJoin(
+          trainingPrograms,
+          eq(trainingPrograms.id, trainingProgramParticipants.programId),
+        )
+        .where(
+          and(
+            eq(trainingPrograms.id, input.context.id),
+            eq(trainingPrograms.organizationId, input.organizationId),
+            eq(trainingProgramParticipants.role, "athlete"),
+            eq(trainingProgramParticipants.status, "active"),
+          ),
+        );
+      if (athletes.length > 0) {
+        return [...new Set(athletes.map((row) => row.personId))];
+      }
+    }
     const rows = await database
       .select({ personId: registrations.personId })
       .from(registrations)

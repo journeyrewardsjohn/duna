@@ -160,7 +160,8 @@ export const conciergeDemoThreads = [
     participantCount: 9,
     unreadCount: 1,
     minorPresent: false,
-    lastMessagePreview: "Rain is moving in: today's clinic moves to Sunday 9:00 AM.",
+    lastMessagePreview:
+      "Rain is moving in: today's clinic moves to Sunday 9:00 AM.",
     lastMessageAt: "2026-11-28T15:00:00.000Z",
   },
   {

@@ -244,7 +244,9 @@ export async function processConciergeDelivery(
     to: endpoint.destination,
     subject: `${club}: ${conversation?.title ?? "Message"}`,
     text: outsideText({ club, author: authorName, body: proposal.body, link }),
-    ...(token && replyDomain ? { replyTo: `reply+${token}@${replyDomain}` } : {}),
+    ...(token && replyDomain
+      ? { replyTo: `reply+${token}@${replyDomain}` }
+      : {}),
     idempotencyKey: `concierge-delivery-${delivery.id}`,
     statusCallbackUrl: canonicalPublicWebUrl(
       `/api/concierge/sendblue/status?delivery=${delivery.id}`,
@@ -311,7 +313,9 @@ export async function applyConciergeDeliveryStatus(input: {
     where: and(
       eq(conciergeDeliveries.channel, input.channel),
       eq(conciergeDeliveries.providerMessageHandle, input.handle),
-      ...(input.deliveryId ? [eq(conciergeDeliveries.id, input.deliveryId)] : []),
+      ...(input.deliveryId
+        ? [eq(conciergeDeliveries.id, input.deliveryId)]
+        : []),
     ),
   });
   if (!row) return "not-found";

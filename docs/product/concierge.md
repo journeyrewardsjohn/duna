@@ -18,14 +18,14 @@ A thread belongs to a thing. It IS a `messaging_conversations` row: every
 existing conversation already is a thread (read directly, nothing copied, no
 data migrated). Kind comes from the conversation:
 
-| Thing                                       | Conversation                           | Thread kind  |
-| ------------------------------------------- | -------------------------------------- | ------------ |
-| Lesson, clinic, bookable session occurrence | `context_type = lesson`                | `lesson`     |
-| Match                                       | `match`                                | `match`      |
-| Tournament / event, division                | `event`, `division`                    | `tournament` |
-| League (program)                            | `league`                               | `league`     |
-| The club, a court booking, a direct thread  | `organization`, `rental`, none         | `club`       |
-| A person and Duna                           | `type = support`                       | `duna`       |
+| Thing                                       | Conversation                   | Thread kind  |
+| ------------------------------------------- | ------------------------------ | ------------ |
+| Lesson, clinic, bookable session occurrence | `context_type = lesson`        | `lesson`     |
+| Match                                       | `match`                        | `match`      |
+| Tournament / event, division                | `event`, `division`            | `tournament` |
+| League (program)                            | `league`                       | `league`     |
+| The club, a court booking, a direct thread  | `organization`, `rental`, none | `club`       |
+| A person and Duna                           | `type = support`               | `duna`       |
 
 - **Audience, resolved on the server, now.** A club thread for a thing reaches
   whoever is connected to it at the moment of sending: booked players (for a
@@ -56,7 +56,7 @@ data migrated). Kind comes from the conversation:
    `editDraft` and `setRecipientChannel` (only to a channel the rules would
    deliver on) give a new hash. A review expires after 15 minutes.
 3. The person presses Send: `confirmSend({ proposalId, contentHash,
-   idempotencyKey })`. The roster and every channel are recomputed; if the
+idempotencyKey })`. The roster and every channel are recomputed; if the
    hash no longer matches (someone joined, cancelled, connected, opted out,
    or the text changed) the send is refused (`CONFLICT`) and the review is
    refreshed. A repeat confirm returns the sent card and never sends twice.
@@ -73,19 +73,19 @@ AI never sends: only `confirmSend`, by a signed-in person with
 
 `chooseChannel` in `channel-choice.ts`, in order:
 
-| Rule                                                           | Result                     |
-| -------------------------------------------------------------- | -------------------------- |
-| No Duna account anyone can sign in to                          | cannot reach: `no-channel` |
-| The person blocked the club                                    | `blocked`                  |
-| A junior                                                       | `duna` (in-app only); the verified guardian is a recipient of their own (`guardianOf`); a junior with no verified guardian: `no-channel` |
-| Muted the club or the thread                                   | `duna`                     |
-| Preferred channel for this kind is `duna` (the default)        | `duna`                     |
-| Preferred outside channel opted out (STOP)                     | `no-consent`               |
-| Preferred outside channel not connected and verified           | `duna` (never assumed)     |
-| Channel switched off (`concierge.channel.*`)                   | `channel-not-enabled`      |
-| Provider has no production values                              | `provider-not-configured`  |
-| Inside the person's quiet hours (their time zone), conversation | `quiet-hours` (not sent, not delayed: a delayed send would act without a new confirmation) |
-| Otherwise                                                      | that channel               |
+| Rule                                                            | Result                                                                                                                                   |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| No Duna account anyone can sign in to                           | cannot reach: `no-channel`                                                                                                               |
+| The person blocked the club                                     | `blocked`                                                                                                                                |
+| A junior                                                        | `duna` (in-app only); the verified guardian is a recipient of their own (`guardianOf`); a junior with no verified guardian: `no-channel` |
+| Muted the club or the thread                                    | `duna`                                                                                                                                   |
+| Preferred channel for this kind is `duna` (the default)         | `duna`                                                                                                                                   |
+| Preferred outside channel opted out (STOP)                      | `no-consent`                                                                                                                             |
+| Preferred outside channel not connected and verified            | `duna` (never assumed)                                                                                                                   |
+| Channel switched off (`concierge.channel.*`)                    | `channel-not-enabled`                                                                                                                    |
+| Provider has no production values                               | `provider-not-configured`                                                                                                                |
+| Inside the person's quiet hours (their time zone), conversation | `quiet-hours` (not sent, not delayed: a delayed send would act without a new confirmation)                                               |
+| Otherwise                                                       | that channel                                                                                                                             |
 
 Two kinds of message: `conversation` (the preferred channel; quiet hours
 apply) and `operational` (cancellations, time changes: the person's
@@ -93,12 +93,12 @@ operational channel if set, else the preferred one; not held by quiet hours).
 
 ## Channels: live vs "not configured"
 
-| Channel              | Today                                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| Duna (in-app + push) | Live: the thread, Expo push through the existing workflow.                                   |
+| Channel              | Today                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Duna (in-app + push) | Live: the thread, Expo push through the existing workflow.                                                                                                                                       |
 | Email                | Code complete (Resend). Sends when `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are both set; production lacks `RESEND_FROM_EMAIL`, so it reports "not configured". Replies need the inbound domain. |
-| iMessage             | Code complete (the Sendblue API shape of the existing pilot). "Not configured" until the owner provisions a Duna line. |
-| WhatsApp             | Code complete (Sent.dm, the provider already used for SMS templates, `whatsapp` channel, approved templates). "Not configured" until the owner approves a sender and templates. |
+| iMessage             | Code complete (the Sendblue API shape of the existing pilot). "Not configured" until the owner provisions a Duna line.                                                                           |
+| WhatsApp             | Code complete (Sent.dm, the provider already used for SMS templates, `whatsapp` channel, approved templates). "Not configured" until the owner approves a sender and templates.                  |
 
 Every outside adapter sits behind one interface and answers the typed
 `not-configured` result, with no HTTP call, while its values are absent.
@@ -114,7 +114,7 @@ endpoint is still connected.
 ## Inbound
 
 - Webhooks: `POST /api/concierge/whatsapp` (Sent.dm), `POST
-  /api/concierge/email` (Resend), Sendblue on the existing
+/api/concierge/email` (Resend), Sendblue on the existing
   `/api/sendblue/webhook` (a number with no pilot binding falls through to
   Concierge) and `/api/concierge/sendblue/status?delivery=<id>`. Signatures
   are verified before anything is read; each event is stored once

@@ -35,6 +35,12 @@ import {
  * FOLLOW-UP-DROPS.md): a cancelled program is stored as `archived` with
  * `cancelled_at` set, and the service reports it as "cancelled".
  */
+/** B7: the Concierge hand-off a cancellation with `notifyAthletes` returns. Nothing is sent. */
+export const trainingProgramsConciergeDraftSchema = z.object({
+  conversationId: w3IdSchema,
+  proposalId: w3IdSchema.optional(),
+});
+
 export const trainingProgramsProgramStatuses = [
   ...trainingProgramStatusEnum.enumValues,
   "cancelled",
@@ -160,6 +166,8 @@ export const trainingProgramsProgramSchema =
     exceptions: z.array(trainingProgramsExceptionSchema),
     weeks: z.array(trainingProgramsWeekSchema),
     cancellation: trainingProgramsCancellationSchema.optional(),
+    /** B7: on cancel with `notifyAthletes`, the Concierge thread and Send review a person confirms. */
+    conciergeDraft: trainingProgramsConciergeDraftSchema.optional(),
     updatedAt: w3DateTimeSchema,
   });
 
@@ -277,6 +285,8 @@ export const trainingProgramsSessionSchema = z.object({
   needsCover: z.boolean(),
   athleteCount: z.number().int().nonnegative(),
   cancellation: trainingProgramsCancellationSchema.optional(),
+  /** B7: on cancel with `notifyAthletes`, the Concierge thread and Send review a person confirms. */
+  conciergeDraft: trainingProgramsConciergeDraftSchema.optional(),
 });
 
 export const trainingProgramsSessionsInputSchema = z.object({

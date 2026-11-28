@@ -27,7 +27,17 @@ import {
   organizations,
   people,
 } from "@duna/db";
-import { and, asc, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { verifiedGuardianMembership } from "../../messaging-guardian-access";
 import { personRef } from "./proposals";
 import { ConciergeError, type ConciergeChannel } from "./types";
@@ -38,7 +48,11 @@ export type ConciergeThreadFilter = "all" | "unread" | "families";
 export type ConciergeQueue = "all" | "mine" | "unassigned";
 
 export type ConciergeViewer =
-  | { readonly kind: "club"; readonly organizationId: string; readonly personId: string }
+  | {
+      readonly kind: "club";
+      readonly organizationId: string;
+      readonly personId: string;
+    }
   | { readonly kind: "person"; readonly personId: string };
 
 type ConversationRow = typeof messagingConversations.$inferSelect;
@@ -289,10 +303,11 @@ export async function listConciergeThreads(
   };
 }
 
-const SYSTEM_KINDS: Readonly<Record<string, "schedule" | "score" | undefined>> = {
-  "schedule-change": "schedule",
-  "score-update": "score",
-};
+const SYSTEM_KINDS: Readonly<Record<string, "schedule" | "score" | undefined>> =
+  {
+    "schedule-change": "schedule",
+    "score-update": "score",
+  };
 
 /** One thread with participants and up to 50 messages (fixed query count). */
 export async function loadConciergeThread(
@@ -304,7 +319,10 @@ export async function loadConciergeThread(
   const [membership] = await database
     .select({ participant: p, conversation: messagingConversations })
     .from(p)
-    .innerJoin(messagingConversations, eq(messagingConversations.id, p.conversationId))
+    .innerJoin(
+      messagingConversations,
+      eq(messagingConversations.id, p.conversationId),
+    )
     .where(
       and(
         eq(p.conversationId, input.conversationId),
@@ -320,8 +338,14 @@ export async function loadConciergeThread(
   const m = conversationMessages;
   const own =
     viewer.kind === "club"
-      ? and(eq(m.senderPrincipalType, "organization"), eq(m.senderPrincipalId, viewer.organizationId))
-      : and(eq(m.senderPrincipalType, "user"), eq(m.senderPrincipalId, viewer.personId));
+      ? and(
+          eq(m.senderPrincipalType, "organization"),
+          eq(m.senderPrincipalId, viewer.organizationId),
+        )
+      : and(
+          eq(m.senderPrincipalType, "user"),
+          eq(m.senderPrincipalId, viewer.personId),
+        );
   const [participantRows, messageRows, unreadRows] = await Promise.all([
     database
       .select({
@@ -350,7 +374,9 @@ export async function loadConciergeThread(
           ...(viewer.kind === "person"
             ? [sql`${m.createdAt} >= ${participant.joinedAt}`]
             : []),
-          ...(input.beforeSequence ? [sql`${m.sequence} < ${input.beforeSequence}`] : []),
+          ...(input.beforeSequence
+            ? [sql`${m.sequence} < ${input.beforeSequence}`]
+            : []),
         ),
       )
       .orderBy(desc(m.sequence))
@@ -374,14 +400,20 @@ export async function loadConciergeThread(
   const personIds = [
     ...new Set([
       ...participantRows.flatMap((row) =>
-        [row.personId, row.guardianOfPersonId].filter((id): id is string => Boolean(id)),
+        [row.personId, row.guardianOfPersonId].filter((id): id is string =>
+          Boolean(id),
+        ),
       ),
-      ...messageRows.flatMap((row) => (row.senderPersonId ? [row.senderPersonId] : [])),
+      ...messageRows.flatMap((row) =>
+        row.senderPersonId ? [row.senderPersonId] : [],
+      ),
     ]),
   ];
   const orgIds = [
     ...new Set(
-      messageRows.flatMap((row) => (row.senderOrganizationId ? [row.senderOrganizationId] : [])),
+      messageRows.flatMap((row) =>
+        row.senderOrganizationId ? [row.senderOrganizationId] : [],
+      ),
     ),
   ];
   const showDelivery = viewer.kind === "club";
@@ -408,7 +440,10 @@ export async function loadConciergeThread(
             .from(organizationMemberships)
             .where(
               and(
-                eq(organizationMemberships.organizationId, conversation.organizationId),
+                eq(
+                  organizationMemberships.organizationId,
+                  conversation.organizationId,
+                ),
                 eq(organizationMemberships.active, true),
                 inArray(organizationMemberships.personId, personIds),
               ),
@@ -432,7 +467,9 @@ export async function loadConciergeThread(
             .where(
               and(
                 inArray(conciergeDeliveries.messageId, messageIds),
-                ...(showDelivery ? [] : [eq(conciergeDeliveries.personId, viewer.personId)]),
+                ...(showDelivery
+                  ? []
+                  : [eq(conciergeDeliveries.personId, viewer.personId)]),
               ),
             )
         : Promise.resolve([]),
@@ -440,20 +477,30 @@ export async function loadConciergeThread(
   const nameOf = new Map(personRows.map((row) => [row.id, row.displayName]));
   const orgName = new Map(orgRows.map((row) => [row.id, row.name]));
   const staffRole = new Map(staffRows.map((row) => [row.personId, row.role]));
-  const inboundOf = new Map(inboundChannels.map((row) => [row.messageId, row.channel]));
+  const inboundOf = new Map(
+    inboundChannels.map((row) => [row.messageId, row.channel]),
+  );
   const ref = (id: string) =>
     personRef({ id, displayName: nameOf.get(id) ?? "Duna member" });
   const watermarks = showDelivery
     ? await database
         .select({ personId: p.personId, lastRead: p.lastReadSequence })
         .from(p)
-        .where(and(eq(p.conversationId, conversation.id), eq(p.principalType, "user"), isNull(p.leftAt)))
+        .where(
+          and(
+            eq(p.conversationId, conversation.id),
+            eq(p.principalType, "user"),
+            isNull(p.leftAt),
+          ),
+        )
     : [];
   return {
     conversationId: conversation.id,
     kind: threadKindOf(conversation),
     title: conversation.title,
-    ...(conversation.contextType && conversation.contextId && conversation.type !== "support"
+    ...(conversation.contextType &&
+    conversation.contextId &&
+    conversation.type !== "support"
       ? {
           context: {
             type: conversation.contextType,
@@ -465,7 +512,9 @@ export async function loadConciergeThread(
     participantCount: participantRows.length,
     unreadCount: unreadRows[0]?.count ?? 0,
     minorPresent: conversation.minorPresent,
-    ...(conversation.lastMessageAt ? { lastMessageAt: conversation.lastMessageAt.toISOString() } : {}),
+    ...(conversation.lastMessageAt
+      ? { lastMessageAt: conversation.lastMessageAt.toISOString() }
+      : {}),
     participants: participantRows.flatMap((row) => {
       if (!row.personId) return [];
       const staff = staffRole.get(row.personId);
@@ -489,9 +538,16 @@ export async function loadConciergeThread(
     messages: messageRows.map((row) => {
       const mine =
         viewer.kind === "club"
-          ? row.senderPrincipalType === "organization" && row.senderPersonId === viewer.personId
-          : row.senderPrincipalType === "user" && row.senderPrincipalId === viewer.personId;
-      const system = ["system", "schedule-change", "score-update", "event-update"].includes(row.kind);
+          ? row.senderPrincipalType === "organization" &&
+            row.senderPersonId === viewer.personId
+          : row.senderPrincipalType === "user" &&
+            row.senderPrincipalId === viewer.personId;
+      const system = [
+        "system",
+        "schedule-change",
+        "score-update",
+        "event-update",
+      ].includes(row.kind);
       const kind = mine
         ? ("mine" as const)
         : row.senderPrincipalType === "agent" || row.kind === "support-response"
@@ -501,14 +557,23 @@ export async function loadConciergeThread(
             : row.senderPrincipalType === "organization"
               ? ("coach" as const)
               : ("person" as const);
-      const deliveries = deliveryRows.filter((delivery) => delivery.messageId === row.id);
-      const own = deliveries.find((delivery) => delivery.personId === viewer.personId);
+      const deliveries = deliveryRows.filter(
+        (delivery) => delivery.messageId === row.id,
+      );
+      const own = deliveries.find(
+        (delivery) => delivery.personId === viewer.personId,
+      );
       const channel =
         (inboundOf.get(row.id) as ConciergeChannel | undefined) ??
         (own?.channel as ConciergeChannel | undefined);
       const readBy = showDelivery
         ? watermarks
-            .filter((mark) => mark.personId && mark.lastRead >= row.sequence && deliveries.some((d) => d.personId === mark.personId))
+            .filter(
+              (mark) =>
+                mark.personId &&
+                mark.lastRead >= row.sequence &&
+                deliveries.some((d) => d.personId === mark.personId),
+            )
             .slice(0, 10)
             .map((mark) => nameOf.get(mark.personId!) ?? "Duna member")
         : [];
@@ -516,12 +581,20 @@ export async function loadConciergeThread(
         messageId: row.id,
         sequence: row.sequence,
         kind,
-        ...(row.senderPersonId && kind !== "duna" ? { author: ref(row.senderPersonId) } : {}),
-        ...(row.senderOrganizationId && row.senderPrincipalType === "organization"
-          ? { onBehalfOfOrganization: orgName.get(row.senderOrganizationId) ?? "Club" }
+        ...(row.senderPersonId && kind !== "duna"
+          ? { author: ref(row.senderPersonId) }
+          : {}),
+        ...(row.senderOrganizationId &&
+        row.senderPrincipalType === "organization"
+          ? {
+              onBehalfOfOrganization:
+                orgName.get(row.senderOrganizationId) ?? "Club",
+            }
           : {}),
         body: row.status === "published" || mine ? (row.body ?? "") : "",
-        ...(system && SYSTEM_KINDS[row.kind] ? { systemKind: SYSTEM_KINDS[row.kind] } : {}),
+        ...(system && SYSTEM_KINDS[row.kind]
+          ? { systemKind: SYSTEM_KINDS[row.kind] }
+          : {}),
         ...(channel ? { channel } : {}),
         ...(showDelivery && deliveries.length > 0
           ? {
@@ -559,7 +632,8 @@ export async function assignConciergeThread(input: {
         eq(organizationMemberships.active, true),
       ),
     });
-    if (!staff) throw new ConciergeError("NOT_FOUND", "Staff member not found.");
+    if (!staff)
+      throw new ConciergeError("NOT_FOUND", "Staff member not found.");
     await database
       .insert(conciergeThreadAssignments)
       .values({
@@ -581,7 +655,9 @@ export async function assignConciergeThread(input: {
   } else {
     await database
       .delete(conciergeThreadAssignments)
-      .where(eq(conciergeThreadAssignments.conversationId, input.conversationId));
+      .where(
+        eq(conciergeThreadAssignments.conversationId, input.conversationId),
+      );
   }
 }
 
@@ -594,10 +670,16 @@ export async function setConciergeThreadMute(input: {
 }) {
   const [updated] = await getDatabase()
     .update(messagingConversationParticipants)
-    .set({ notificationLevel: input.muted ? "muted" : "all", updatedAt: input.now })
+    .set({
+      notificationLevel: input.muted ? "muted" : "all",
+      updatedAt: input.now,
+    })
     .where(
       and(
-        eq(messagingConversationParticipants.conversationId, input.conversationId),
+        eq(
+          messagingConversationParticipants.conversationId,
+          input.conversationId,
+        ),
         eq(messagingConversationParticipants.principalType, "user"),
         eq(messagingConversationParticipants.personId, input.personId),
         isNull(messagingConversationParticipants.leftAt),

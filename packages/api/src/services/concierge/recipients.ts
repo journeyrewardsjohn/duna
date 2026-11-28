@@ -73,7 +73,8 @@ async function inChunks<T>(
 ): Promise<T[]> {
   if (ids.length === 0) return [];
   const rows: T[] = [];
-  for (const batch of chunks([...new Set(ids)])) rows.push(...(await load(batch)));
+  for (const batch of chunks([...new Set(ids)]))
+    rows.push(...(await load(batch)));
   return rows;
 }
 

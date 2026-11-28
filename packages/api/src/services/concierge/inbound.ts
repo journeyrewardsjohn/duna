@@ -32,7 +32,10 @@ import { log } from "@duna/observability";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { ApiActor } from "../../context";
-import { MessagingError, sendConversationMessage } from "../../messaging-service";
+import {
+  MessagingError,
+  sendConversationMessage,
+} from "../../messaging-service";
 import { withProviderCall } from "../../observability";
 import { revokeConciergeEndpoint } from "./channels";
 import {
@@ -329,7 +332,9 @@ export async function routeConciergeEmailInbound(input: {
     organizationId: found.delivery.organizationId ?? undefined,
     conversationId: found.conversationId,
   };
-  const sender = /<?([^<>\s]+@[^<>\s]+)>?\s*$/.exec(input.from)?.[1]?.toLowerCase();
+  const sender = /<?([^<>\s]+@[^<>\s]+)>?\s*$/
+    .exec(input.from)?.[1]
+    ?.toLowerCase();
   if (!sender || sender !== found.destination?.toLowerCase()) {
     return { disposition: "quarantined-sender-mismatch", ...scope };
   }
@@ -404,7 +409,10 @@ export async function receiveConciergeWhatsappWebhook(input: {
   readonly rawBody: string;
   readonly headers: Headers;
   readonly now: Date;
-}): Promise<{ readonly status: number; readonly disposition?: InboundDisposition }> {
+}): Promise<{
+  readonly status: number;
+  readonly disposition?: InboundDisposition;
+}> {
   const secret = process.env.SENT_DM_WEBHOOK_SECRET?.trim();
   if (!secret) return { status: 503 };
   const header = (v2: string, v1: string) =>
@@ -509,7 +517,10 @@ export async function receiveConciergeEmailWebhook(input: {
   readonly rawBody: string;
   readonly headers: Headers;
   readonly now: Date;
-}): Promise<{ readonly status: number; readonly disposition?: InboundDisposition }> {
+}): Promise<{
+  readonly status: number;
+  readonly disposition?: InboundDisposition;
+}> {
   const secret = process.env.RESEND_WEBHOOK_SECRET?.trim();
   if (!secret) return { status: 503 };
   const id = input.headers.get("svix-id");
@@ -541,7 +552,8 @@ export async function receiveConciergeEmailWebhook(input: {
           : type === "email.opened"
             ? "read"
             : undefined;
-    if (!status || !data.email_id) return { status: 200, disposition: "ignored" };
+    if (!status || !data.email_id)
+      return { status: 200, disposition: "ignored" };
     await applyConciergeDeliveryStatus({
       channel: "email",
       handle: data.email_id,
@@ -559,7 +571,8 @@ export async function receiveConciergeEmailWebhook(input: {
   });
   if (!claimed.fresh) return { status: 200, disposition: "duplicate" };
   const text =
-    data.text ?? (data.email_id ? await fetchReceivedEmailText(data.email_id) : "");
+    data.text ??
+    (data.email_id ? await fetchReceivedEmailText(data.email_id) : "");
   const routed = await routeConciergeEmailInbound({
     from: data.from ?? "",
     to: data.to ?? [],
@@ -570,7 +583,9 @@ export async function receiveConciergeEmailWebhook(input: {
   await finishEvent(claimed.id, routed.disposition, {
     ...(routed.organizationId ? { organizationId: routed.organizationId } : {}),
     ...(routed.conversationId ? { conversationId: routed.conversationId } : {}),
-    ...(routed.disposition.startsWith("quarantined") ? { text: text.slice(0, 4000) } : {}),
+    ...(routed.disposition.startsWith("quarantined")
+      ? { text: text.slice(0, 4000) }
+      : {}),
   });
   log.info("concierge.inbound.routed", {
     channel: "email",
@@ -628,4 +643,3 @@ export async function dismissConciergeQuarantine(
   if (!row) return { dismissed: false };
   return { dismissed: true };
 }
-

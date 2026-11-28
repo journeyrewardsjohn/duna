@@ -21,12 +21,18 @@ import {
   type RecipientChannelFacts,
 } from "./channel-choice";
 import { deliveryIdFromReplyToken, replyTokenFor } from "./delivery";
-import { OPT_OUT_KEYWORDS, stripQuotedReply, verifySvixSignature } from "./inbound";
+import {
+  OPT_OUT_KEYWORDS,
+  stripQuotedReply,
+  verifySvixSignature,
+} from "./inbound";
 import { conciergeContentHash } from "./recipients";
 import type { ConciergeChannel } from "./types";
 
 const noon = new Date("2026-12-01T20:00:00.000Z"); // 12:00 in Los Angeles
-const facts = (over: Partial<RecipientChannelFacts> = {}): RecipientChannelFacts => ({
+const facts = (
+  over: Partial<RecipientChannelFacts> = {},
+): RecipientChannelFacts => ({
   isMinor: false,
   hasAccount: true,
   blockedClub: false,
@@ -79,7 +85,9 @@ describe("channel choice: one channel or one reason, per rule", () => {
   });
   it("the default is in-app: a preference never implies consent", () => {
     expect(choose({ preferredChannel: "duna" })).toEqual({ channel: "duna" });
-    expect(choose({ connectedChannels: new Set() })).toEqual({ channel: "duna" });
+    expect(choose({ connectedChannels: new Set() })).toEqual({
+      channel: "duna",
+    });
   });
   it("an opted-out channel is no consent", () => {
     expect(
@@ -93,14 +101,20 @@ describe("channel choice: one channel or one reason, per rule", () => {
     expect(choose({}, { availability: all("not-enabled") })).toEqual({
       reason: "channel-not-enabled",
     });
-    expect(choose({}, { availability: all("provider-not-configured") })).toEqual({
+    expect(
+      choose({}, { availability: all("provider-not-configured") }),
+    ).toEqual({
       reason: "provider-not-configured",
     });
   });
   it("quiet hours hold conversation, not operational notices", () => {
     const night = new Date("2026-12-02T06:30:00.000Z"); // 22:30 in Los Angeles
     const quiet = {
-      quietHours: { start: "21:00", end: "07:00", timezone: "America/Los_Angeles" },
+      quietHours: {
+        start: "21:00",
+        end: "07:00",
+        timezone: "America/Los_Angeles",
+      },
     };
     expect(choose(quiet, { now: night })).toEqual({ reason: "quiet-hours" });
     expect(choose(quiet, { now: night, kind: "operational" })).toEqual({
@@ -163,7 +177,12 @@ describe("review staleness: the hash follows the roster (seeded property)", () =
       return state / 2 ** 31;
     };
   }
-  const channels: ConciergeChannel[] = ["duna", "email", "imessage", "whatsapp"];
+  const channels: ConciergeChannel[] = [
+    "duna",
+    "email",
+    "imessage",
+    "whatsapp",
+  ];
   it("joins, cancellations and channel changes all change it; order never does", () => {
     for (let seed = 1; seed <= 200; seed += 1) {
       const next = random(seed);
@@ -173,23 +192,42 @@ describe("review staleness: the hash follows the roster (seeded property)", () =
         channel: channels[Math.floor(next() * 4)]!,
       }));
       const hash = (list: typeof roster) =>
-        conciergeContentHash({ body: "Hi", kind: "conversation", recipients: list });
+        conciergeContentHash({
+          body: "Hi",
+          kind: "conversation",
+          recipients: list,
+        });
       const original = hash(roster);
       expect(hash([...roster].reverse())).toBe(original);
       const leaver = Math.floor(next() * size);
       if (size > 1)
-        expect(hash(roster.filter((_, index) => index !== leaver))).not.toBe(original);
+        expect(hash(roster.filter((_, index) => index !== leaver))).not.toBe(
+          original,
+        );
       expect(
-        hash([...roster, { personId: "ffffffff-0000-4000-8000-000000000000", channel: "duna" }]),
+        hash([
+          ...roster,
+          { personId: "ffffffff-0000-4000-8000-000000000000", channel: "duna" },
+        ]),
       ).not.toBe(original);
       const changed = roster.map((entry, index) =>
         index === leaver
-          ? { ...entry, channel: entry.channel === "duna" ? ("email" as const) : ("duna" as const) }
+          ? {
+              ...entry,
+              channel:
+                entry.channel === "duna"
+                  ? ("email" as const)
+                  : ("duna" as const),
+            }
           : entry,
       );
       expect(hash(changed)).not.toBe(original);
       expect(
-        conciergeContentHash({ body: "Hi!", kind: "conversation", recipients: roster }),
+        conciergeContentHash({
+          body: "Hi!",
+          kind: "conversation",
+          recipients: roster,
+        }),
       ).not.toBe(original);
     }
   });
@@ -199,7 +237,9 @@ describe("webhooks and reply tokens", () => {
   const secret = `whsec_${Buffer.from("0123456789abcdef0123456789abcdef").toString("base64")}`;
   const now = new Date("2026-12-01T12:00:00Z");
   const sign = (id: string, timestamp: string, body: string) =>
-    `v1,${createHmac("sha256", Buffer.from(secret.slice(6), "base64")).update(`${id}.${timestamp}.${body}`).digest("base64")}`;
+    `v1,${createHmac("sha256", Buffer.from(secret.slice(6), "base64"))
+      .update(`${id}.${timestamp}.${body}`)
+      .digest("base64")}`;
   const timestamp = String(now.getTime() / 1000);
   it("accepts the right signature, rejects tampering, old and missing", () => {
     const body = '{"event":"message.received"}';
@@ -217,7 +257,9 @@ describe("webhooks and reply tokens", () => {
     expect(check({})).toBe(true);
     expect(check({ signature: `v1,rotated ${good}` })).toBe(true);
     expect(check({ rawBody: `${body} ` })).toBe(false);
-    expect(check({ timestamp: String(now.getTime() / 1000 - 301) })).toBe(false);
+    expect(check({ timestamp: String(now.getTime() / 1000 - 301) })).toBe(
+      false,
+    );
     expect(check({ secret: undefined })).toBe(false);
     expect(check({ signature: null })).toBe(false);
   });
@@ -251,7 +293,12 @@ describe("adapters: typed outcomes, never a call without credentials", () => {
     subject: "Club: thread",
     idempotencyKey: "concierge-delivery-1",
     template: "message" as const,
-    templateParameters: { club: "Club", author: "Coach", message: "hi", link: "https://duna.coach" },
+    templateParameters: {
+      club: "Club",
+      author: "Coach",
+      message: "hi",
+      link: "https://duna.coach",
+    },
   };
   it("answers not-configured with no HTTP call for every outside channel", async () => {
     for (const name of [
@@ -278,11 +325,14 @@ describe("adapters: typed outcomes, never a call without credentials", () => {
     vi.stubEnv("SENDBLUE_PHONE_NUMBERS", "+18885550100");
     vi.stubEnv("SENT_DM_API", "fixture");
     const answer = (status: number, body: unknown) =>
-      setConciergeFetchForTests(async () =>
-        new Response(JSON.stringify(body), { status }),
+      setConciergeFetchForTests(
+        async () => new Response(JSON.stringify(body), { status }),
       );
     answer(200, { message_handle: "sb-1", status: "QUEUED" });
-    expect(await imessageAdapter.send(message)).toEqual({ kind: "sent", handle: "sb-1" });
+    expect(await imessageAdapter.send(message)).toEqual({
+      kind: "sent",
+      handle: "sb-1",
+    });
     answer(400, { error_code: "invalid_number" });
     expect(await imessageAdapter.send(message)).toEqual({
       kind: "rejected",

@@ -165,7 +165,10 @@ function demoProposal(proposalId: string) {
   return proposal;
 }
 
-function viewerOf(ctx: { organizationId: string; actor: { personId: string } }) {
+function viewerOf(ctx: {
+  organizationId: string;
+  actor: { personId: string };
+}) {
   return {
     kind: "club" as const,
     organizationId: ctx.organizationId,
@@ -388,7 +391,10 @@ export const conciergeOperatorRouter = router({
           procedure: "concierge.confirmSend",
           personId: ctx.actor.personId,
           organizationId: ctx.organizationId,
-          request: { proposalId: input.proposalId, contentHash: input.contentHash },
+          request: {
+            proposalId: input.proposalId,
+            contentHash: input.contentHash,
+          },
           now: ctx.now,
           execute: () =>
             confirmConciergeSend({
@@ -584,10 +590,12 @@ export const conciergePlayerRouter = router({
     }),
 
   /** Preferred channels, quiet hours, connected destinations (masked). */
-  channels: protectedProcedure.output(conciergeChannelsSchema).query(({ ctx }) => {
-    if (usesDemoData()) return conciergeDemo.channels;
-    return guardedConcierge(() => loadConciergeChannels(ctx.actor));
-  }),
+  channels: protectedProcedure
+    .output(conciergeChannelsSchema)
+    .query(({ ctx }) => {
+      if (usesDemoData()) return conciergeDemo.channels;
+      return guardedConcierge(() => loadConciergeChannels(ctx.actor));
+    }),
 
   /** Start connecting a channel; never calls a provider when it is unavailable. */
   connectChannel: playerConnect

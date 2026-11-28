@@ -47,7 +47,10 @@ const conversationTypeFor = {
   rental: "group",
 } as const;
 
-const fallbackLabel: Record<Exclude<ConciergeHandoffContextType, "direct">, string> = {
+const fallbackLabel: Record<
+  Exclude<ConciergeHandoffContextType, "direct">,
+  string
+> = {
   lesson: "Session",
   event: "Event",
   division: "Division",
@@ -67,9 +70,15 @@ async function existingThread(input: {
     .innerJoin(
       messagingConversationParticipants,
       and(
-        eq(messagingConversationParticipants.conversationId, messagingConversations.id),
+        eq(
+          messagingConversationParticipants.conversationId,
+          messagingConversations.id,
+        ),
         eq(messagingConversationParticipants.principalType, "organization"),
-        eq(messagingConversationParticipants.organizationId, input.organizationId),
+        eq(
+          messagingConversationParticipants.organizationId,
+          input.organizationId,
+        ),
         isNull(messagingConversationParticipants.leftAt),
       ),
     )
@@ -94,7 +103,10 @@ async function existingDirectThread(organizationId: string, personId: string) {
     .innerJoin(
       messagingConversationParticipants,
       and(
-        eq(messagingConversationParticipants.conversationId, messagingConversations.id),
+        eq(
+          messagingConversationParticipants.conversationId,
+          messagingConversations.id,
+        ),
         eq(messagingConversationParticipants.principalType, "user"),
         eq(messagingConversationParticipants.personId, personId),
         isNull(messagingConversationParticipants.leftAt),
@@ -126,7 +138,10 @@ async function labelFor(
     const [row] = await getDatabase()
       .select({ title: catalogItems.title })
       .from(catalogSessionOccurrences)
-      .innerJoin(catalogItems, eq(catalogItems.id, catalogSessionOccurrences.catalogItemId))
+      .innerJoin(
+        catalogItems,
+        eq(catalogItems.id, catalogSessionOccurrences.catalogItemId),
+      )
       .where(
         and(
           eq(catalogSessionOccurrences.id, contextId),
@@ -151,7 +166,10 @@ export async function ensureConciergeThread(input: {
 }): Promise<string> {
   const actor = { ...input.actor, organizationId: input.organizationId };
   if (input.contextType === "direct") {
-    const existing = await existingDirectThread(input.organizationId, input.contextId);
+    const existing = await existingDirectThread(
+      input.organizationId,
+      input.contextId,
+    );
     if (existing) return existing;
     const person = await getDatabase().query.people.findFirst({
       where: eq(people.id, input.contextId),
@@ -173,7 +191,10 @@ export async function ensureConciergeThread(input: {
     });
     return created.id!;
   }
-  if (input.contextType === "organization" && input.contextId !== input.organizationId) {
+  if (
+    input.contextType === "organization" &&
+    input.contextId !== input.organizationId
+  ) {
     throw new ConciergeError("NOT_FOUND", "Club not found.");
   }
   const existing = await existingThread({

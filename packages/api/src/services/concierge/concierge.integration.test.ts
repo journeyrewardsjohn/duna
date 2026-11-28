@@ -74,7 +74,12 @@ const staff = (personId: string, role: "coach" | "owner"): ApiActor => ({
   scopes:
     role === "owner"
       ? ["*"]
-      : ["messages:read", "messages:propose", "messages:write", "sessions:read"],
+      : [
+          "messages:read",
+          "messages:propose",
+          "messages:write",
+          "sessions:read",
+        ],
 });
 const coachActor = staff(coach, "coach");
 const ownerActor = staff(owner, "owner");
@@ -115,7 +120,12 @@ function signed(body: unknown, at = now) {
   const raw = JSON.stringify(body);
   const id = `msg_${key()}`;
   const timestamp = String(Math.floor(at.getTime() / 1000));
-  const signature = `v1,${createHmac("sha256", Buffer.from(webhookSecret.slice(6), "base64")).update(`${id}.${timestamp}.${raw}`).digest("base64")}`;
+  const signature = `v1,${createHmac(
+    "sha256",
+    Buffer.from(webhookSecret.slice(6), "base64"),
+  )
+    .update(`${id}.${timestamp}.${raw}`)
+    .digest("base64")}`;
   return {
     rawBody: raw,
     headers: new Headers({
@@ -193,7 +203,9 @@ describe("existing conversations are threads (compatibility read, no copy)", () 
 
   it("answers not found for another club's thread and for non-participants", async () => {
     await expect(
-      api(coachActor).operator.concierge.thread({ conversationId: otherThread }),
+      api(coachActor).operator.concierge.thread({
+        conversationId: otherThread,
+      }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
       api(testActor(players[3]!)).player.concierge.thread({
@@ -244,14 +256,14 @@ describe("the Send review follows the roster and sends exactly what was reviewed
     await book(players[1]!);
     await book(players[2]!);
     await book(guardian, child);
-    const handoff = await api(coachActor).operator.concierge.drafts.createFromHandoff(
-      {
-        source: "hq.offerings.session",
-        contextType: "lesson",
-        contextId: occurrence,
-        suggestedText: "Bring water: it will be hot.",
-      },
-    );
+    const handoff = await api(
+      coachActor,
+    ).operator.concierge.drafts.createFromHandoff({
+      source: "hq.offerings.session",
+      contextType: "lesson",
+      contextId: occurrence,
+      suggestedText: "Bring water: it will be hot.",
+    });
     const review = handoff.proposal!;
     expect(review.status).toBe("ready");
     const byName = Object.fromEntries(
@@ -265,7 +277,9 @@ describe("the Send review follows the roster and sends exactly what was reviewed
       guardianOf: { displayName: "Mia Junior" },
     });
     expect(review.guardianNote).toBeTruthy();
-    expect(review.recipients.some((r) => r.person.personId === coach)).toBe(false);
+    expect(review.recipients.some((r) => r.person.personId === coach)).toBe(
+      false,
+    );
 
     // Player 3 cancels: the reviewed hash no longer matches the roster.
     await pg.exec(
@@ -307,18 +321,22 @@ describe("the Send review follows the roster and sends exactly what was reviewed
       proposalId: review.proposalId,
     });
     expect(deliveries.deliveries).toHaveLength(refreshed.recipients.length);
-    expect(new Set(deliveries.deliveries.map((d) => d.person.personId)).size).toBe(
-      deliveries.deliveries.length,
-    );
+    expect(
+      new Set(deliveries.deliveries.map((d) => d.person.personId)).size,
+    ).toBe(deliveries.deliveries.length);
     // A junior is in the thread, so the club message is held for screening.
-    expect(deliveries.deliveries.every((d) => d.status === "queued")).toBe(true);
+    expect(deliveries.deliveries.every((d) => d.status === "queued")).toBe(
+      true,
+    );
     // Audit rows carry counts, never the text.
     const audit = await rows<{ reason: string }>(
       `select reason from audit_log where entity_id = $1`,
       [review.proposalId],
     );
     expect(audit.length).toBeGreaterThan(0);
-    expect(audit.every((row) => !row.reason.includes("Bring water"))).toBe(true);
+    expect(audit.every((row) => !row.reason.includes("Bring water"))).toBe(
+      true,
+    );
   });
 
   it("an outside channel says not configured with no HTTP call, then delivers once configured", async () => {
@@ -332,26 +350,24 @@ describe("the Send review follows the roster and sends exactly what was reviewed
         { status: 200 },
       );
     });
-    const blocked = await api(coachActor).operator.concierge.drafts.createFromHandoff(
-      {
-        source: "hq.offerings.session",
-        contextType: "lesson",
-        contextId: occurrence,
-        suggestedText: "Court 2 today.",
-      },
-    );
+    const blocked = await api(
+      coachActor,
+    ).operator.concierge.drafts.createFromHandoff({
+      source: "hq.offerings.session",
+      contextType: "lesson",
+      contextId: occurrence,
+      suggestedText: "Court 2 today.",
+    });
     expect(blocked.proposal!.recipients[0]).toMatchObject({
       unreachableReason: "provider-not-configured",
     });
     expect(fetches).toEqual([]);
 
     vi.stubEnv("SENT_DM_API", "test-key-for-recorded-fixture");
-    const review = (
-      await api(coachActor).operator.concierge.draftSend({
-        conversationId: blocked.conversationId,
-        body: "Court 2 today.",
-      })
-    );
+    const review = await api(coachActor).operator.concierge.draftSend({
+      conversationId: blocked.conversationId,
+      body: "Court 2 today.",
+    });
     expect(review.recipients[0]?.channel).toBe("whatsapp");
     await api(coachActor).operator.concierge.confirmSend({
       proposalId: review.proposalId,
@@ -366,9 +382,9 @@ describe("the Send review follows the roster and sends exactly what was reviewed
       `select kind from workflow_jobs where kind = 'concierge.deliver'`,
     );
     expect(jobs).toHaveLength(1);
-    expect(await processConciergeDelivery({ deliveryId: delivery!.id }, now)).toBe(
-      "sent",
-    );
+    expect(
+      await processConciergeDelivery({ deliveryId: delivery!.id }, now),
+    ).toBe("sent");
     expect(fetches).toEqual(["https://api.sent.dm/v3/messages"]);
     // Replays never send again.
     expect(
@@ -409,14 +425,14 @@ describe("the Send review follows the roster and sends exactly what was reviewed
     setConciergeFetchForTests(
       async () => new Response(JSON.stringify({}), { status: 503 }),
     );
-    const { proposal } = await api(coachActor).operator.concierge.drafts.createFromHandoff(
-      {
-        source: "test",
-        contextType: "lesson",
-        contextId: occurrence,
-        suggestedText: "Hello",
-      },
-    );
+    const { proposal } = await api(
+      coachActor,
+    ).operator.concierge.drafts.createFromHandoff({
+      source: "test",
+      contextType: "lesson",
+      contextId: occurrence,
+      suggestedText: "Hello",
+    });
     await api(coachActor).operator.concierge.confirmSend({
       proposalId: proposal!.proposalId,
       contentHash: proposal!.contentHash,
@@ -452,13 +468,14 @@ describe("inbound replies", () => {
           status: 200,
         }),
     );
-    const { proposal, conversationId } =
-      await api(coachActor).operator.concierge.drafts.createFromHandoff({
-        source: "test",
-        contextType: "lesson",
-        contextId: occurrence,
-        suggestedText: "See you at 9.",
-      });
+    const { proposal, conversationId } = await api(
+      coachActor,
+    ).operator.concierge.drafts.createFromHandoff({
+      source: "test",
+      contextType: "lesson",
+      contextId: occurrence,
+      suggestedText: "See you at 9.",
+    });
     await api(coachActor).operator.concierge.confirmSend({
       proposalId: proposal!.proposalId,
       contentHash: proposal!.contentHash,
@@ -491,7 +508,9 @@ describe("inbound replies", () => {
     const thread = await api(coachActor).operator.concierge.thread({
       conversationId,
     });
-    const reply = thread.messages.find((m) => m.body === "Thanks, see you there");
+    const reply = thread.messages.find(
+      (m) => m.body === "Thanks, see you there",
+    );
     expect(reply).toMatchObject({ kind: "person", channel: "whatsapp" });
   });
 
@@ -519,7 +538,9 @@ describe("inbound replies", () => {
       conversationId,
       body: "Another update",
     });
-    expect(review.recipients[0]).toMatchObject({ unreachableReason: "no-consent" });
+    expect(review.recipients[0]).toMatchObject({
+      unreachableReason: "no-consent",
+    });
     const [endpoint] = await rows<{ status: string; revoked_reason: string }>(
       `select status, revoked_reason from person_channel_endpoints`,
     );
@@ -546,33 +567,60 @@ describe("PART-B hand-offs create Send reviews, never sends", () => {
     expect(proposal.recipients.map((r) => r.person.personId)).toContain(
       players[1],
     );
-    expect(
-      await rows(`select id from concierge_deliveries`),
-    ).toEqual([]);
+    expect(await rows(`select id from concierge_deliveries`)).toEqual([]);
   });
 
   it("declining a coach's request opens a thread with the coach and a review of the note", async () => {
     await book(players[1]!);
-    const { requestId } = await api(coachActor).operator.participation.requestCancel({
+    const { requestId } = await api(
+      coachActor,
+    ).operator.participation.requestCancel({
       subjectType: "catalog-session-occurrence",
       subjectId: occurrence,
       reason: "weather",
       idempotencyKey: key(),
     });
-    const resolved = await api(ownerActor).operator.participation.resolveCancelRequest(
-      {
-        requestId,
-        decision: "decline",
-        note: "Forecast cleared; let's run it.",
-        confirmed: true,
-        idempotencyKey: key(),
-      },
-    );
+    const resolved = await api(
+      ownerActor,
+    ).operator.participation.resolveCancelRequest({
+      requestId,
+      decision: "decline",
+      note: "Forecast cleared; let's run it.",
+      confirmed: true,
+      idempotencyKey: key(),
+    });
     expect(resolved.coachNotified).toBe(false);
     const proposal = await api(ownerActor).operator.concierge.proposal({
       proposalId: resolved.conciergeDraft!.proposalId!,
     });
     expect(proposal.recipients.map((r) => r.person.personId)).toEqual([coach]);
+  });
+});
+
+describe("B4 hand-off: notify athletes prepares a review in the program thread", () => {
+  it("cancelling a program with notifyAthletes returns a Send review for its athletes", async () => {
+    const program = "60000000-0000-4000-8000-0000000000a1";
+    await pg.exec(`
+      INSERT INTO training_programs (id, organization_id, slug, title, purpose, target_audience, approach, start_date, end_date, timezone)
+        VALUES ('${program}', '${org}', 'winter', 'Winter juniors', '', '', '', '2026-11-01', '2027-01-31', 'UTC');
+      INSERT INTO training_program_participants (program_id, person_id, role, status)
+        VALUES ('${program}', '${players[3]}', 'athlete', 'active'),
+               ('${program}', '${players[4]}', 'athlete', 'removed');
+    `);
+    const result = await api(ownerActor).operator.trainingPrograms.cancel({
+      programId: program,
+      reason: "Gym closed for repairs.",
+      notifyAthletes: true,
+    });
+    expect(result.status).toBe("cancelled");
+    const proposal = await api(ownerActor).operator.concierge.proposal({
+      proposalId: result.conciergeDraft!.proposalId!,
+    });
+    expect(proposal.body).toContain("Gym closed for repairs.");
+    expect(proposal.recipients.map((r) => r.person.personId)).toEqual([
+      players[3],
+    ]);
+    expect(await rows(`select id from concierge_deliveries`)).toEqual([]);
   });
 });
 
@@ -583,7 +631,9 @@ describe("channels", () => {
       fetches.push(String(url));
       return new Response("{}");
     });
-    const result = await api(testActor(players[1]!)).player.concierge.connectChannel({
+    const result = await api(
+      testActor(players[1]!),
+    ).player.concierge.connectChannel({
       channel: "whatsapp",
       destination: whatsappNumber,
     });
@@ -631,7 +681,11 @@ describe("channels", () => {
     const channels = await player.setPreference({
       preferredChannel: "whatsapp",
       operationalChannel: "duna",
-      quietHours: { start: "21:00", end: "07:00", timezone: "America/Los_Angeles" },
+      quietHours: {
+        start: "21:00",
+        end: "07:00",
+        timezone: "America/Los_Angeles",
+      },
     });
     expect(channels).toMatchObject({
       preferredChannel: "whatsapp",
@@ -643,4 +697,3 @@ describe("channels", () => {
     expect(stored[0]!.code_hash).not.toContain(code);
   });
 });
-

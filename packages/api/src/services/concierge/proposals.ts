@@ -209,7 +209,9 @@ export async function proposalOutput(row: ProposalRow) {
   };
 }
 
-export type ConciergeProposalOutput = Awaited<ReturnType<typeof proposalOutput>>;
+export type ConciergeProposalOutput = Awaited<
+  ReturnType<typeof proposalOutput>
+>;
 
 function summary(recipients: readonly ResolvedRecipient[]) {
   return {
@@ -368,7 +370,10 @@ export async function loadConciergeProposal(input: {
   return proposalOutput(row);
 }
 
-async function expireIfStale(row: ProposalRow, now: Date): Promise<ProposalRow> {
+async function expireIfStale(
+  row: ProposalRow,
+  now: Date,
+): Promise<ProposalRow> {
   if (
     (row.status === "ready" || row.status === "draft") &&
     row.expiresAt &&
@@ -478,7 +483,10 @@ async function saveRecomputed(input: {
       )
       .returning();
     if (!updated) {
-      throw new ConciergeError("CONFLICT", "This send can no longer be changed.");
+      throw new ConciergeError(
+        "CONFLICT",
+        "This send can no longer be changed.",
+      );
     }
     await replaceRecipients(
       transaction,
@@ -586,7 +594,10 @@ export async function cancelConciergeSend(input: {
         )
         .returning();
       if (!updated) {
-        throw new ConciergeError("CONFLICT", "This send was already confirmed.");
+        throw new ConciergeError(
+          "CONFLICT",
+          "This send was already confirmed.",
+        );
       }
       await audit(transaction, {
         organizationId: input.organizationId,
@@ -628,7 +639,10 @@ export async function confirmConciergeSend(input: {
   if (row.status === "cancelled")
     throw new ConciergeError("CONFLICT", "This send was cancelled.");
   if (row.status === "expired")
-    throw new ConciergeError("CONFLICT", "This review expired. Review it again.");
+    throw new ConciergeError(
+      "CONFLICT",
+      "This review expired. Review it again.",
+    );
   if (row.contentHash !== input.contentHash) {
     throw new ConciergeError(
       "CONFLICT",
@@ -685,7 +699,10 @@ export async function confirmConciergeSend(input: {
     .returning();
   if (!claimed) {
     row = await loadProposalRow(input.organizationId, input.proposalId);
-    if (confirmedStatuses.has(row.status) && row.contentHash === input.contentHash)
+    if (
+      confirmedStatuses.has(row.status) &&
+      row.contentHash === input.contentHash
+    )
       return proposalOutput(row);
     throw new ConciergeError("CONFLICT", "This send changed. Review it again.");
   }

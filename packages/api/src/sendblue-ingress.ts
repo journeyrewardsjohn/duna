@@ -133,8 +133,7 @@ export async function receiveSendblueInbound(
       const routed = await routeConciergePhoneInbound({
         channel: "imessage",
         from: incoming.payload.from_number,
-        text:
-          disposition === "opted-out" ? "STOP" : incoming.payload.content,
+        text: disposition === "opted-out" ? "STOP" : incoming.payload.content,
         eventId: event.id,
         hasMedia:
           Boolean(incoming.payload.media_url) ||

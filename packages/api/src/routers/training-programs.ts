@@ -51,6 +51,7 @@ import {
   trainingProgramsSetSessionPlanInputSchema,
   trainingProgramsUpdateInputSchema,
 } from "../contracts/training-programs";
+import { handOffToConcierge } from "../services/concierge/handoff";
 import { usesDemoData } from "../services/data-source";
 import { organizationTimezone } from "../services/team-availability";
 import * as service from "../services/training-programs";
@@ -193,7 +194,28 @@ export const trainingProgramsOperatorRouter = router({
           cancellation: { cancelledAt: NOW, reason: input.reason },
         };
       }
-      return service.cancelProgram(trainingContext(ctx), input);
+      const program = await service.cancelProgram(trainingContext(ctx), input);
+      // B7: "notify athletes" prepares a Concierge Send review in the
+      // program's thread; a person confirms it there. Only for the call that
+      // cancelled (a repeat cancel prepares nothing new).
+      if (
+        !input.notifyAthletes ||
+        program.cancellation?.cancelledAt !== ctx.now.toISOString()
+      )
+        return program;
+      const conciergeDraft = await handOffToConcierge({
+        actor: ctx.actor,
+        organizationId: ctx.organizationId,
+        source: "training-programs.cancel",
+        contextType: "league",
+        contextId: program.id,
+        label: program.title,
+        suggestedText: `${program.title} is cancelled. ${input.reason.trim()}`,
+        kind: "operational",
+        requestId: ctx.requestId,
+        now: ctx.now,
+      });
+      return conciergeDraft ? { ...program, conciergeDraft } : program;
     }),
 
   /** Sessions in a window, for one program or the whole club (TR-Schedule). */
@@ -245,7 +267,33 @@ export const trainingProgramsOperatorRouter = router({
           cancellation: { cancelledAt: NOW, reason: input.reason },
         };
       }
-      return service.cancelSession(trainingContext(ctx), input);
+      const session = await service.cancelSession(trainingContext(ctx), input);
+      if (
+        !input.notifyAthletes ||
+        !session.programId ||
+        session.cancellation?.cancelledAt !== ctx.now.toISOString()
+      )
+        return session;
+      const when = new Intl.DateTimeFormat("en-US", {
+        timeZone: session.timezone,
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(session.startsAt));
+      const conciergeDraft = await handOffToConcierge({
+        actor: ctx.actor,
+        organizationId: ctx.organizationId,
+        source: "training-programs.cancelSession",
+        contextType: "league",
+        contextId: session.programId,
+        suggestedText: `${session.title} on ${when} is cancelled. ${input.reason.trim()}`,
+        kind: "operational",
+        requestId: ctx.requestId,
+        now: ctx.now,
+      });
+      return conciergeDraft ? { ...session, conciergeDraft } : session;
     }),
 
   assignSessionCoaches: write

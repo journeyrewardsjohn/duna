@@ -53,7 +53,10 @@ export function maskDestination(
 }
 
 function endpointOutput(row: EndpointRow) {
-  const hint = maskDestination(row.channel as ConciergeChannel, row.destination);
+  const hint = maskDestination(
+    row.channel as ConciergeChannel,
+    row.destination,
+  );
   return {
     endpointId: row.id,
     channel: row.channel as ConciergeChannel,
@@ -98,11 +101,16 @@ export async function loadConciergeChannels(actor: ApiActor) {
       latest.set(row.channel, row);
   }
   return {
-    preferredChannel: (preference?.preferredChannel ?? "duna") as ConciergeChannel,
+    preferredChannel: (preference?.preferredChannel ??
+      "duna") as ConciergeChannel,
     ...(preference?.operationalChannel
-      ? { operationalChannel: preference.operationalChannel as ConciergeChannel }
+      ? {
+          operationalChannel: preference.operationalChannel as ConciergeChannel,
+        }
       : {}),
-    ...(preference?.quietHoursStart && preference.quietHoursEnd && preference.timezone
+    ...(preference?.quietHoursStart &&
+    preference.quietHoursEnd &&
+    preference.timezone
       ? {
           quietHours: {
             start: preference.quietHoursStart.slice(0, 5),
@@ -145,7 +153,9 @@ export async function connectConciergeChannel(input: {
 }) {
   requireAdult(input.actor);
   const availability = (
-    await loadChannelAvailability({ organizationId: input.actor.organizationId })
+    await loadChannelAvailability({
+      organizationId: input.actor.organizationId,
+    })
   )[input.channel];
   if (availability !== "available") return { availability };
   const destination =
@@ -311,7 +321,11 @@ export async function verifyConciergeChannel(input: {
         .where(eq(conciergeChannelVerifications.id, verification.id));
       const [row] = await transaction
         .update(personChannelEndpoints)
-        .set({ status: "connected", verifiedAt: input.now, updatedAt: input.now })
+        .set({
+          status: "connected",
+          verifiedAt: input.now,
+          updatedAt: input.now,
+        })
         .where(
           and(
             eq(personChannelEndpoints.id, endpoint.id),
