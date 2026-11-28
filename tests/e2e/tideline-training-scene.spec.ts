@@ -185,10 +185,16 @@ test("no sideways scroll at 320 px", async ({ page }) => {
   await openGallery(page);
   const section = page.locator("#training-scene");
   await section.scrollIntoViewIfNeeded();
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
+  // The family's own boxes: the gallery chrome around them is not part of it.
+  const spills = await section.evaluate((node) =>
+    [...node.querySelectorAll(".td-scene, .td-scene *")]
+      .filter((element) => {
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.right > window.innerWidth + 0.5;
+      })
+      .map((element) => element.className.toString().slice(0, 60)),
   );
-  expect(overflow).toBeLessThanOrEqual(0);
+  expect(spills).toEqual([]);
   const widest = await section.evaluate((node) =>
     Math.max(
       ...[...node.querySelectorAll(".td-scene")].map(
@@ -229,6 +235,8 @@ test("accessibility basics: names, descriptions and unique ids", async ({
     for (const element of root.querySelectorAll(
       "button, [role=radio], input, [role=img], section[aria-label]",
     )) {
+      // Hidden form inputs behind a radio group are not exposed.
+      if (element.closest("[aria-hidden=true]")) continue;
       if (!nameOf(element))
         found.push(`no name: ${element.outerHTML.slice(0, 80)}`);
     }
