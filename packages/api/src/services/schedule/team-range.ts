@@ -22,10 +22,16 @@ export async function teamAvailabilityRange(input: {
 }) {
   requireDatabase();
   if (input.to < input.from) {
-    throw new ScheduleError("BAD_REQUEST", "The range must end after it starts.");
+    throw new ScheduleError(
+      "BAD_REQUEST",
+      "The range must end after it starts.",
+    );
   }
   if (addCalendarDays(input.from, 62) < input.to) {
-    throw new ScheduleError("BAD_REQUEST", "Ask for at most 62 days at a time.");
+    throw new ScheduleError(
+      "BAD_REQUEST",
+      "Ask for at most 62 days at a time.",
+    );
   }
   const [staff, timezone] = await Promise.all([
     loadOrganizationStaff(input.organizationId, { activeOnly: true }),
@@ -42,7 +48,9 @@ export async function teamAvailabilityRange(input: {
     from: input.from,
     to: input.to,
     staff: staff
-      .toSorted((left, right) => left.displayName.localeCompare(right.displayName))
+      .toSorted((left, right) =>
+        left.displayName.localeCompare(right.displayName),
+      )
       .map((member) => {
         const own = inputs.get(member.id);
         return {
@@ -53,7 +61,9 @@ export async function teamAvailabilityRange(input: {
             id: schedule.id,
             status: schedule.status,
             effectiveFrom: schedule.effectiveFrom,
-            ...(schedule.effectiveTo ? { effectiveTo: schedule.effectiveTo } : {}),
+            ...(schedule.effectiveTo
+              ? { effectiveTo: schedule.effectiveTo }
+              : {}),
             timezone: schedule.timezone,
             windows: schedule.windows.map((window) => ({
               weekday: window.weekday,

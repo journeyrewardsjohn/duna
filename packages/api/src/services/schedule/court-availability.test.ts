@@ -225,7 +225,10 @@ describe("the cancellation plan", () => {
       cause: "player-asked",
       now: at("2026-12-01T12:00:00Z"),
     });
-    expect(unpaid.lines[0]).toMatchObject({ action: "release", refundMinor: 0 });
+    expect(unpaid.lines[0]).toMatchObject({
+      action: "release",
+      refundMinor: 0,
+    });
     expect(unpaid.movesMoney).toBe(false);
   });
 });

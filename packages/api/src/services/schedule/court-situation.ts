@@ -222,7 +222,8 @@ export async function loadCourtFacts(
     // A session's own court reservation is the session, not a second item.
     ...reservationRows
       .filter(
-        (row) => !(row.sourceType === "session" && sessionIds.has(row.sourceId)),
+        (row) =>
+          !(row.sourceType === "session" && sessionIds.has(row.sourceId)),
       )
       .map((row) => ({
         id: row.sourceType === "session" ? row.sourceId : row.id,

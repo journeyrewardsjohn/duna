@@ -26,9 +26,5 @@ export {
   courtConflicts,
   type CourtFactsForRule,
 } from "./court-availability";
-export {
-  canSeeMoney,
-  ScheduleError,
-  type ScheduleCaller,
-} from "./shared";
+export { canSeeMoney, ScheduleError, type ScheduleCaller } from "./shared";
 export { teamAvailabilityRange } from "./team-range";

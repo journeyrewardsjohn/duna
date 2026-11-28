@@ -34,6 +34,8 @@ import {
   organizationParticipants,
   organizations,
   people,
+  pickupJoinRequests,
+  pickupParticipants,
   pickupSessions,
   refundRecords,
   venues,
@@ -41,7 +43,18 @@ import {
 import { log } from "@duna/observability";
 import { priceConsumerOrder, type CurrencyCode } from "@duna/pricing";
 import { localDateOf } from "@duna/scheduling";
-import { and, eq, gt, inArray, lt, ne, notInArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import { stableHash } from "../../canonical";
 import { refundOrganizationOrder } from "../../catalog-service";
 import type {
@@ -57,6 +70,7 @@ import {
   type CourtRate,
 } from "../../court-checkout";
 import { hasActiveDunaPlusMembership } from "../../membership";
+import { handOffToConcierge } from "../concierge";
 import { isStripeConfigured } from "../../payments";
 import { canonicalPublicWebUrl } from "../../public-web-url";
 import {
@@ -76,7 +90,6 @@ import {
 } from "./court-situation";
 import {
   canSeeMoney,
-  hasScope,
   minutesBetween,
   requireDatabase,
   requireScope,
@@ -275,7 +288,8 @@ async function recipientsFor(
       });
     }
   }
-  return recipients;
+  const order = { booker: 0, player: 1, guardian: 2 } as const;
+  return recipients.sort((left, right) => order[left.role] - order[right.role]);
 }
 
 /* ------------------------------------------------------------ create */
@@ -316,6 +330,7 @@ async function organizationPayments(
 }
 
 async function rateFor(input: {
+  readonly tx: Transaction;
   readonly court: CourtRow;
   readonly personId?: string;
   readonly startsAt: Date;
@@ -329,6 +344,9 @@ async function rateFor(input: {
         subjectPersonId: input.personId,
         localDate: localDateOf(input.startsAt.getTime(), input.court.timeZone),
         durationMinutes: minutesBetween(input.startsAt, input.endsAt),
+        database: input.tx as unknown as Parameters<
+          typeof priceCourtRate
+        >[0]["database"],
       }),
     };
   } catch (error) {
@@ -338,6 +356,8 @@ async function rateFor(input: {
 }
 
 async function priceFor(input: {
+  readonly tx: Transaction;
+  readonly isDunaPlus: boolean;
   readonly court: CourtRow;
   readonly personId?: string;
   readonly startsAt: Date;
@@ -379,9 +399,7 @@ async function priceFor(input: {
   }
   const priced = priceConsumerOrder({
     currency,
-    isDunaPlus: input.personId
-      ? await hasActiveDunaPlusMembership(input.personId, input.now)
-      : false,
+    isDunaPlus: input.isDunaPlus,
     items: [
       {
         id: input.court.courtId,
@@ -402,6 +420,16 @@ async function priceFor(input: {
   };
 }
 
+/** Duna Plus changes the online consumer fee; read before the transaction. */
+async function dunaPlus(
+  personId: string | undefined,
+  intent: "pay-at-desk" | "send-payment-link" | "free",
+  now: Date,
+): Promise<boolean> {
+  if (!personId || intent !== "send-payment-link") return false;
+  return hasActiveDunaPlusMembership(personId, now);
+}
+
 export async function previewCreateCourtBooking(
   caller: ScheduleCaller,
   input: CreateWho & {
@@ -415,6 +443,11 @@ export async function previewCreateCourtBooking(
   const startsAt = new Date(input.startsAt);
   const endsAt = new Date(input.endsAt);
   validateSlot(startsAt, endsAt, caller.now);
+  const isDunaPlus = await dunaPlus(
+    input.personId,
+    input.paymentIntent,
+    caller.now,
+  );
   return transactional(async (tx) => {
     const court = await loadCourt(tx, {
       organizationId: caller.organizationId,
@@ -448,6 +481,8 @@ export async function previewCreateCourtBooking(
     let priceUnavailable: string | undefined;
     try {
       price = await priceFor({
+        tx,
+        isDunaPlus,
         court,
         personId: input.personId,
         startsAt,
@@ -502,11 +537,17 @@ export async function createCourtBooking(
   },
 ) {
   requireDatabase();
-  if (input.priceMinor !== undefined) requireScope(caller.actor, "payments:write");
+  if (input.priceMinor !== undefined)
+    requireScope(caller.actor, "payments:write");
   const startsAt = new Date(input.startsAt);
   const endsAt = new Date(input.endsAt);
   validateSlot(startsAt, endsAt, caller.now);
   const bookingId = crypto.randomUUID();
+  const isDunaPlus = await dunaPlus(
+    input.personId,
+    input.paymentIntent,
+    caller.now,
+  );
   const keyHash = stableHash({
     organizationId: caller.organizationId,
     key: input.idempotencyKey,
@@ -535,6 +576,8 @@ export async function createCourtBooking(
       }
       const payments = await organizationPayments(tx, caller.organizationId);
       const price = await priceFor({
+        tx,
+        isDunaPlus,
         court,
         personId: member?.id,
         startsAt,
@@ -674,7 +717,8 @@ export async function createCourtBooking(
         bookingId,
         // The link is claimed by a member's own account, or by the phone a
         // walk-in gave; never by the walk-in's contact profile.
-        personId: intent === "send-payment-link" ? (member?.id ?? null) : personId,
+        personId:
+          intent === "send-payment-link" ? (member?.id ?? null) : personId,
         invitedName: member?.displayName ?? walkInName ?? "Walk-in",
         invitedPhoneE164: input.walkIn?.phoneE164 ?? null,
         inviteToken,
@@ -721,7 +765,9 @@ export async function createCourtBooking(
           action: "court-booking.price-set-by-staff",
           entityType: "court-booking",
           entityId: bookingId,
-          beforeHash: stableHash({ rateMinor: price.rate?.amountMinor ?? null }),
+          beforeHash: stableHash({
+            rateMinor: price.rate?.amountMinor ?? null,
+          }),
           afterHash: stableHash({ priceMinor: price.subtotalMinor }),
           reason: input.priceReason ?? "Staff price.",
           traceId: caller.requestId,
@@ -744,9 +790,7 @@ export async function createCourtBooking(
           ? ("held" as const)
           : ("confirmed" as const),
       paymentState:
-        result.intent === "free"
-          ? ("free" as const)
-          : ("unpaid" as const),
+        result.intent === "free" ? ("free" as const) : ("unpaid" as const),
       ...(result.intent === "send-payment-link" && result.holdExpiresAt
         ? {
             paymentLink: {
@@ -815,10 +859,11 @@ function assertLive(booking: BookingRow, now: Date): void {
   }
 }
 
-async function assertNoLinkedMatch(
+/** The player match (pickup) a player booking created with the court, if any. */
+async function linkedMatch(
   tx: Transaction,
   bookingId: string,
-): Promise<void> {
+): Promise<{ readonly id: string } | undefined> {
   const [linked] = await tx
     .select({ id: pickupSessions.id })
     .from(pickupSessions)
@@ -829,21 +874,7 @@ async function assertNoLinkedMatch(
       ),
     )
     .limit(1);
-  if (linked) {
-    throw new ScheduleError(
-      "CONFLICT",
-      "A player match is linked to this booking; change it from the match. Nothing was changed.",
-    );
-  }
-}
-
-async function courtName(
-  tx: Transaction,
-  organizationId: string,
-  courtId: string,
-): Promise<string> {
-  const court = await loadCourt(tx, { organizationId, courtId, lock: false });
-  return court.courtName;
+  return linked;
 }
 
 function draftBody(input: {
@@ -866,6 +897,8 @@ function draftBody(input: {
 
 interface MovePlan {
   readonly booking: BookingRow;
+  /** A linked player match moves with the court. */
+  readonly matchId?: string;
   readonly fromCourt: CourtRow;
   readonly toCourt: CourtRow;
   readonly startsAt: Date;
@@ -911,7 +944,7 @@ async function planMove(
       "This booking has already finished. Nothing was moved.",
     );
   }
-  await assertNoLinkedMatch(tx, booking.id);
+  const match = await linkedMatch(tx, booking.id);
   const fromCourt = await loadCourt(tx, {
     organizationId: caller.organizationId,
     courtId: booking.courtId,
@@ -970,12 +1003,19 @@ async function planMove(
     if (order?.status === "pending" && order.checkoutSurface === "desk") {
       const [before, after] = await Promise.all([
         rateFor({
+          tx,
           court: fromCourt,
           personId: booking.personId,
           startsAt: booking.startsAt,
           endsAt: booking.endsAt,
         }),
-        rateFor({ court: toCourt, personId: booking.personId, startsAt, endsAt }),
+        rateFor({
+          tx,
+          court: toCourt,
+          personId: booking.personId,
+          startsAt,
+          endsAt,
+        }),
       ]);
       if (
         before.rate &&
@@ -1009,6 +1049,7 @@ async function planMove(
   }).slice(0, 32);
   return {
     booking,
+    ...(match ? { matchId: match.id } : {}),
     fromCourt,
     toCourt,
     startsAt,
@@ -1111,7 +1152,10 @@ export async function moveCourtBooking(
           conflictMessage(plan.conflicts).replace("booked", "moved"),
         );
       }
-      if (plan.price.action === "reprice" && input.confirmedPriceChange !== true) {
+      if (
+        plan.price.action === "reprice" &&
+        input.confirmedPriceChange !== true
+      ) {
         throw new ScheduleError(
           "PRECONDITION_FAILED",
           `This move changes the price by ${money(plan.price.differenceMinor, plan.price.currency)}. Confirm the new price. Nothing was moved.`,
@@ -1143,13 +1187,31 @@ export async function moveCourtBooking(
           updatedAt: caller.now,
         })
         .where(eq(courtBookings.id, booking.id));
+      if (plan.matchId) {
+        await tx
+          .update(pickupSessions)
+          .set({
+            startsAt: plan.startsAt,
+            endsAt: plan.endsAt,
+            venueId: toCourt.venueId,
+            updatedAt: caller.now,
+          })
+          .where(eq(pickupSessions.id, plan.matchId));
+      }
       if (plan.price.action === "reprice" && plan.price.orderId) {
         const amount = plan.price.newTotalMinor;
         await tx
           .update(orders)
-          .set({ subtotalMinor: amount, totalMinor: amount, updatedAt: caller.now })
+          .set({
+            subtotalMinor: amount,
+            totalMinor: amount,
+            updatedAt: caller.now,
+          })
           .where(
-            and(eq(orders.id, plan.price.orderId), eq(orders.status, "pending")),
+            and(
+              eq(orders.id, plan.price.orderId),
+              eq(orders.status, "pending"),
+            ),
           );
         await tx
           .update(orderItems)
@@ -1199,6 +1261,21 @@ export async function moveCourtBooking(
       });
       return plan;
     });
+    const conciergeDraft =
+      input.notify && plan.recipients.length > 0
+        ? await handOffToConcierge({
+            actor: caller.actor,
+            organizationId: caller.organizationId,
+            source: "schedule.moveCourtBooking",
+            contextType: "rental",
+            contextId: plan.booking.id,
+            label: `${plan.toCourt.courtName} booking`,
+            suggestedText: moveDraft(plan).body,
+            kind: "operational",
+            requestId: caller.requestId,
+            now: caller.now,
+          })
+        : undefined;
     log.info("schedule.booking.moved", {
       bookingId: plan.booking.id,
       courtId: plan.toCourt.courtId,
@@ -1217,6 +1294,7 @@ export async function moveCourtBooking(
       toTell: input.notify ? plan.recipients.length : 0,
       sent: 0 as const,
       ...(input.notify ? { draft: moveDraft(plan) } : {}),
+      ...(conciergeDraft ? { conciergeDraft } : {}),
       repriced: plan.price.action === "reprice",
     };
   } catch (error) {
@@ -1234,6 +1312,7 @@ export async function moveCourtBooking(
 
 interface CancelPlan {
   readonly booking: BookingRow;
+  readonly matchId?: string;
   readonly court: CourtRow;
   readonly plan: ReturnType<typeof planCourtCancellation>;
   readonly policy: ReturnType<typeof normalizeCourtCancellationPolicy>;
@@ -1260,7 +1339,7 @@ async function loadCancelPlan(
     lock,
   );
   assertLive(booking, caller.now);
-  await assertNoLinkedMatch(tx, booking.id);
+  const match = await linkedMatch(tx, booking.id);
   const court = await loadCourt(tx, {
     organizationId: caller.organizationId,
     courtId: booking.courtId,
@@ -1279,11 +1358,33 @@ async function loadCancelPlan(
     .from(courtBookingParticipants)
     .leftJoin(people, eq(courtBookingParticipants.personId, people.id))
     .where(eq(courtBookingParticipants.bookingId, booking.id));
+  // Match players who paid for their own place (not through a court share).
+  const matchRows = match
+    ? await tx
+        .select({
+          id: pickupParticipants.id,
+          personId: pickupParticipants.personId,
+          displayName: people.displayName,
+          status: pickupParticipants.status,
+          orderId: pickupParticipants.orderId,
+        })
+        .from(pickupParticipants)
+        .innerJoin(people, eq(pickupParticipants.personId, people.id))
+        .where(
+          and(
+            eq(pickupParticipants.pickupSessionId, match.id),
+            isNull(pickupParticipants.courtBookingParticipantId),
+            isNotNull(pickupParticipants.orderId),
+          ),
+        )
+    : [];
   const orderIds = [
     ...new Set(
-      [booking.orderId, ...participantRows.map((row) => row.orderId)].filter(
-        (id): id is string => Boolean(id),
-      ),
+      [
+        booking.orderId,
+        ...participantRows.map((row) => row.orderId),
+        ...matchRows.map((row) => row.orderId),
+      ].filter((id): id is string => Boolean(id)),
     ),
   ];
   const [orderRows, refundRows] =
@@ -1326,14 +1427,24 @@ async function loadCancelPlan(
     ...row,
     refundedMinor: refunded.get(row.id) ?? 0,
   }));
-  const participants: PlanParticipant[] = participantRows.map((row) => ({
-    id: row.id,
-    personId: row.personId,
-    name: row.displayName ?? row.invitedName ?? "Player",
-    role: row.role,
-    status: row.status,
-    orderId: row.orderId,
-  }));
+  const participants: PlanParticipant[] = [
+    ...participantRows.map((row) => ({
+      id: row.id,
+      personId: row.personId,
+      name: row.displayName ?? row.invitedName ?? "Player",
+      role: row.role,
+      status: row.status,
+      orderId: row.orderId,
+    })),
+    ...matchRows.map((row) => ({
+      id: row.id,
+      personId: row.personId,
+      name: row.displayName,
+      role: "match-player",
+      status: row.status,
+      orderId: row.orderId,
+    })),
+  ];
   const policy = normalizeCourtCancellationPolicy(booking.policySnapshot);
   const plan = planCourtCancellation({
     booking: {
@@ -1369,6 +1480,7 @@ async function loadCancelPlan(
   }).slice(0, 32);
   return {
     booking,
+    ...(match ? { matchId: match.id } : {}),
     court,
     plan,
     policy,
@@ -1453,6 +1565,7 @@ export async function cancelCourtBooking(
     readonly refund: RefundChoice;
     readonly cause: CancelCause;
     readonly previewToken?: string;
+    readonly notify?: boolean;
     readonly idempotencyKey: string;
   },
 ) {
@@ -1477,9 +1590,49 @@ export async function cancelCourtBooking(
       .where(
         and(
           eq(courtBookingParticipants.bookingId, booking.id),
-          notInArray(courtBookingParticipants.status, ["cancelled", "declined"]),
+          notInArray(courtBookingParticipants.status, [
+            "cancelled",
+            "declined",
+          ]),
         ),
       );
+    if (loaded.matchId) {
+      // The player match made with this court goes with it.
+      await tx
+        .update(pickupSessions)
+        .set({ status: "cancelled", updatedAt: caller.now })
+        .where(eq(pickupSessions.id, loaded.matchId));
+      await tx
+        .update(pickupParticipants)
+        .set({ status: "cancelled", updatedAt: caller.now })
+        .where(
+          and(
+            eq(pickupParticipants.pickupSessionId, loaded.matchId),
+            ne(pickupParticipants.status, "cancelled"),
+          ),
+        );
+      await tx
+        .update(pickupJoinRequests)
+        .set({ status: "cancelled", updatedAt: caller.now })
+        .where(
+          and(
+            eq(pickupJoinRequests.pickupSessionId, loaded.matchId),
+            eq(pickupJoinRequests.status, "requested"),
+          ),
+        );
+      await tx.insert(auditLog).values({
+        organizationId: caller.organizationId,
+        actorPersonId: caller.actor.personId,
+        actorType: "person",
+        action: "pickup.cancelled-with-court-booking",
+        entityType: "pickup-session",
+        entityId: loaded.matchId,
+        reason: input.reason,
+        traceId: caller.requestId,
+        ipAddress: caller.ipAddress,
+        createdAt: caller.now,
+      });
+    }
     for (const line of loaded.plan.lines) {
       if (line.action === "release" && line.orderId) {
         await tx
@@ -1562,7 +1715,8 @@ export async function cancelCourtBooking(
         now: caller.now,
       });
       outcomes.set(line.orderId, {
-        outcome: result.status === "failed" ? "refund-failed" : "refund-submitted",
+        outcome:
+          result.status === "failed" ? "refund-failed" : "refund-submitted",
         refundId: result.id,
       });
     } catch (error) {
@@ -1574,6 +1728,21 @@ export async function cancelCourtBooking(
       outcomes.set(line.orderId, { outcome: "refund-failed" });
     }
   }
+  const conciergeDraft =
+    input.notify !== false && loaded.recipients.length > 0
+      ? await handOffToConcierge({
+          actor: caller.actor,
+          organizationId: caller.organizationId,
+          source: "schedule.cancelCourtBooking",
+          contextType: "rental",
+          contextId: loaded.booking.id,
+          label: `${loaded.court.courtName} booking`,
+          suggestedText: cancelDraft(loaded).body,
+          kind: "operational",
+          requestId: caller.requestId,
+          now: caller.now,
+        })
+      : undefined;
   const showMoney = canSeeMoney(caller.actor);
   log.info("schedule.booking.cancelled", {
     bookingId: loaded.booking.id,
@@ -1610,6 +1779,7 @@ export async function cancelCourtBooking(
     toTell: loaded.recipients.length,
     sent: 0 as const,
     draft: cancelDraft(loaded),
+    ...(conciergeDraft ? { conciergeDraft } : {}),
   };
 }
 
@@ -1700,7 +1870,10 @@ export async function recordDeskPayment(
     }
     await tx
       .update(courtBookings)
-      .set({ fundedAmountMinor: booking.totalAmountMinor, updatedAt: caller.now })
+      .set({
+        fundedAmountMinor: booking.totalAmountMinor,
+        updatedAt: caller.now,
+      })
       .where(eq(courtBookings.id, booking.id));
     await tx
       .update(courtBookingParticipants)
@@ -1757,7 +1930,11 @@ export async function recordDeskPayment(
 
 export async function bookingPayments(
   caller: ScheduleCaller,
-  input: { readonly from: string; readonly to: string; readonly venueId?: string },
+  input: {
+    readonly from: string;
+    readonly to: string;
+    readonly venueId?: string;
+  },
 ): Promise<{
   bookings: {
     bookingId: string;
@@ -1859,5 +2036,3 @@ export async function bookingPayments(
     };
   });
 }
-
-export { hasScope };

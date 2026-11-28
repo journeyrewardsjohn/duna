@@ -124,11 +124,11 @@ interface StoredCourtRateCandidate extends CourtRatePlanCandidate {
 
 async function loadCourtRateCandidates(
   courtIds: readonly string[],
+  database: ReturnType<typeof getDatabase> = getDatabase(),
 ): Promise<ReadonlyMap<string, readonly StoredCourtRateCandidate[]>> {
   const result = new Map<string, StoredCourtRateCandidate[]>();
   if (courtIds.length === 0) return result;
 
-  const database = getDatabase();
   const [courtRows, assignmentRows] = await Promise.all([
     database
       .select({ id: courts.id, primaryRatePlanId: courts.ratePlanId })
@@ -1155,11 +1155,13 @@ async function checkoutResource(courtId: string) {
   };
 }
 
-async function hasOrganizationMembership(input: {
-  readonly personId: string;
-  readonly organizationId: string;
-}): Promise<boolean> {
-  const database = getDatabase();
+async function hasOrganizationMembership(
+  input: {
+    readonly personId: string;
+    readonly organizationId: string;
+  },
+  database: ReturnType<typeof getDatabase> = getDatabase(),
+): Promise<boolean> {
   const [staff, member] = await Promise.all([
     database.query.organizationMemberships.findFirst({
       where: and(
@@ -1253,15 +1255,21 @@ export async function priceCourtRate(input: {
   /** The slot's local date in the place's time zone (YYYY-MM-DD). */
   readonly localDate: string;
   readonly durationMinutes: number;
+  /** A caller's transaction (the desk prices inside the write). */
+  readonly database?: ReturnType<typeof getDatabase>;
 }): Promise<CourtRate> {
+  const database = input.database ?? getDatabase();
   const [organizationMember, candidates] = await Promise.all([
     input.subjectPersonId
-      ? hasOrganizationMembership({
-          personId: input.subjectPersonId,
-          organizationId: input.organizationId,
-        })
+      ? hasOrganizationMembership(
+          {
+            personId: input.subjectPersonId,
+            organizationId: input.organizationId,
+          },
+          database,
+        )
       : Promise.resolve(false),
-    loadCourtRateCandidates([input.courtId]),
+    loadCourtRateCandidates([input.courtId], database),
   ]);
   const applicableCandidates = (candidates.get(input.courtId) ?? []).filter(
     (plan) => plan.organizationId === input.organizationId,

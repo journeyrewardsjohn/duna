@@ -63,7 +63,7 @@ const LA = "America/Los_Angeles";
 const staff = (
   personId: string,
   roles: Parameters<typeof scopesForRoles>[0],
-  organizationId = org,
+  organizationId: string = org,
 ): ApiActor => ({
   ...testActor(personId, organizationId),
   roles,
@@ -111,6 +111,16 @@ function slot(date: string, from: string, to: string, courtId = courtA) {
   return { courtId, startsAt: la(date, from), endsAt: la(date, to) };
 }
 
+/** A result line as its preview line (the refund path's answer removed). */
+function withoutOutcome<T extends { outcome?: unknown; refundId?: unknown }>(
+  line: T,
+): Omit<T, "outcome" | "refundId"> {
+  const copy: Partial<T> = { ...line };
+  delete copy.outcome;
+  delete copy.refundId;
+  return copy as Omit<T, "outcome" | "refundId">;
+}
+
 async function count(table: string, where = "true", params: unknown[] = []) {
   const result = await pg.query<{ count: number }>(
     `select count(*)::int as count from ${table} where ${where}`,
@@ -153,9 +163,9 @@ beforeEach(async () => {
       VALUES ('${org}', '${child}', 'player', 'active');
     INSERT INTO organizations (id, slug, name, currency, timezone)
       VALUES ('${otherOrg}', 'other-club', 'Other Club', 'USD', 'UTC');
-    INSERT INTO venues (id, organization_id, slug, name, timezone)
-      VALUES ('${venue}', '${org}', 'pier', 'Pier Courts', '${LA}'),
-             ('${otherVenue}', '${otherOrg}', 'other', 'Other Courts', 'UTC');
+    INSERT INTO venues (id, organization_id, slug, name, timezone, status)
+      VALUES ('${venue}', '${org}', 'pier', 'Pier Courts', '${LA}', 'active'),
+             ('${otherVenue}', '${otherOrg}', 'other', 'Other Courts', 'UTC', 'active');
     INSERT INTO rate_plans (id, organization_id, name, currency, base_amount_minor, rate_unit_minutes)
       VALUES ('${ratePlan}', '${org}', 'Court hire', 'USD', 4000, 60);
     INSERT INTO courts (id, venue_id, name, qr_token, rate_plan_id, cancellation_policy)
@@ -249,8 +259,7 @@ describe("creating a court booking at the desk", () => {
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     const refused = results.find((r) => r.status === "rejected") as
-      | PromiseRejectedResult
-      | undefined;
+      PromiseRejectedResult | undefined;
     expect(refused?.reason).toMatchObject({ code: "CONFLICT" });
     expect(await count("court_bookings")).toBe(1);
     // Overlapping by 15 minutes is refused too; the other court is free.
@@ -417,7 +426,9 @@ describe("creating a court booking at the desk", () => {
       deskBooking({ paymentIntent: "send-payment-link" }),
     );
     expect(created.status).toBe("held");
-    expect(created.paymentLink?.url).toMatch(/\/app\/booking-invite\/[0-9a-f-]{36}$/);
+    expect(created.paymentLink?.url).toMatch(
+      /\/app\/booking-invite\/[0-9a-f-]{36}$/,
+    );
     const row = await one<Record<string, unknown>>(
       `select b.payment_mode, b.participant_target, b.hold_expires_at, p.role, p.status, p.share_amount_minor, b.total_amount_minor
          from court_bookings b join court_booking_participants p on p.booking_id = b.id where b.id = $1`,
@@ -551,7 +562,8 @@ describe("moving a court booking", () => {
   });
 
   it("refuses a move onto something booked, re-checked when it writes", async () => {
-    const first = await api(frontDesk).schedule.createCourtBooking(deskBooking());
+    const first =
+      await api(frontDesk).schedule.createCourtBooking(deskBooking());
     await api(frontDesk).schedule.createCourtBooking(
       deskBooking(slot("2026-12-04", "20:00", "21:00")),
     );
@@ -575,9 +587,8 @@ describe("moving a court booking", () => {
 
 describe("desk payments and cancellations", () => {
   it("records the whole amount once, with no ledger movement", async () => {
-    const created = await api(frontDesk).schedule.createCourtBooking(
-      deskBooking(),
-    );
+    const created =
+      await api(frontDesk).schedule.createCourtBooking(deskBooking());
     const journalsBefore = await count("ledger_journals");
     await expect(
       api(frontDesk).schedule.recordDeskPayment({
@@ -611,11 +622,14 @@ describe("desk payments and cancellations", () => {
       amountMinor: 6000,
       ledgerRecorded: false,
     });
-    expect(
-      (await api(frontDesk).schedule.recordDeskPayment(input)).id,
-    ).toBe(paid.id);
+    expect((await api(frontDesk).schedule.recordDeskPayment(input)).id).toBe(
+      paid.id,
+    );
     await expect(
-      api(frontDesk).schedule.recordDeskPayment({ ...input, idempotencyKey: key() }),
+      api(frontDesk).schedule.recordDeskPayment({
+        ...input,
+        idempotencyKey: key(),
+      }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(await count("ledger_journals")).toBe(journalsBefore);
     expect(await count("payments")).toBe(0);
@@ -631,9 +645,8 @@ describe("desk payments and cancellations", () => {
   });
 
   it("cancels exactly as previewed: desk money handed back, card money refunded", async () => {
-    const created = await api(frontDesk).schedule.createCourtBooking(
-      deskBooking(),
-    );
+    const created =
+      await api(frontDesk).schedule.createCourtBooking(deskBooking());
     await api(frontDesk).schedule.recordDeskPayment({
       bookingId: created.id,
       amountMinor: 6000,
@@ -654,7 +667,9 @@ describe("desk payments and cancellations", () => {
     });
     expect(preview.policy.insideRefundWindow).toBe(true);
     expect(preview.needsMoneyPermission).toBe(true);
-    expect(preview.lines.map((line) => [line.action, line.refundMinor])).toEqual([
+    expect(
+      preview.lines.map((line) => [line.action, line.refundMinor]),
+    ).toEqual([
       ["hand-back-at-desk", 6000],
       ["refund-card", 2500],
     ]);
@@ -679,9 +694,7 @@ describe("desk payments and cancellations", () => {
       idempotencyKey: key(),
     });
     // Preview = result, line by line.
-    expect(
-      result.lines.map(({ outcome: _outcome, refundId: _refundId, ...line }) => line),
-    ).toEqual(preview.lines);
+    expect(result.lines.map(withoutOutcome)).toEqual(preview.lines);
     expect(result.totalRefundMinor).toBe(preview.totalRefundMinor);
     expect(result.lines.map((line) => line.outcome)).toEqual([
       "handed-back-recorded",
@@ -692,10 +705,94 @@ describe("desk payments and cancellations", () => {
       await one(`select status from orders where id = $1`, [created.orderId]),
     ).toMatchObject({ status: "refunded" });
     expect(
-      await one(`select status from court_bookings where id = $1`, [created.id]),
+      await one(`select status from court_bookings where id = $1`, [
+        created.id,
+      ]),
     ).toMatchObject({ status: "cancelled" });
     // The slot is free again.
     await api(frontDesk).schedule.createCourtBooking(deskBooking());
+  });
+
+  it("cancels a player's app booking, paid by card, with its match and invited players", async () => {
+    // What the Player app writes (court-checkout.ts): a confirmed booking,
+    // a paid card order, the organizer and an invited player, and the
+    // player match (pickup) linked to the court.
+    const booking = "69000000-0000-4000-8000-000000000001";
+    const order = "69000000-0000-4000-8000-000000000002";
+    const organizerRow = "69000000-0000-4000-8000-000000000003";
+    const invitedRow = "69000000-0000-4000-8000-000000000004";
+    const match = "69000000-0000-4000-8000-000000000005";
+    const startsAt = la("2026-12-05", "17:00");
+    const endsAt = la("2026-12-05", "18:30");
+    await pg.exec(`
+      INSERT INTO orders (id, organization_id, buyer_person_id, status, currency, subtotal_minor, fee_total_minor, total_minor, idempotency_key, stripe_payment_intent_id, checkout_surface)
+        VALUES ('${order}', '${org}', '${players[1]}', 'paid', 'USD', 6000, 450, 6450, 'app-order', 'pi_app_1', 'native');
+      INSERT INTO court_bookings (id, organization_id, venue_id, court_id, person_id, order_id, starts_at, ends_at, status, payment_mode, total_amount_minor, funded_amount_minor, create_match, policy_snapshot, idempotency_key)
+        VALUES ('${booking}', '${org}', '${venue}', '${courtA}', '${players[1]}', '${order}', '${startsAt}', '${endsAt}', 'confirmed', 'full', 6450, 6450, true, '{"title":"Reservation cancellation policy","markdown":"Cancel 24 hours ahead.","refundBeforeHours":24,"requireFullScroll":true}'::jsonb, 'app-booking');
+      INSERT INTO court_booking_participants (id, booking_id, person_id, invited_name, invite_token, role, status, share_amount_minor, order_id, paid_at)
+        VALUES ('${organizerRow}', '${booking}', '${players[1]}', 'Player 2', 'tok-org', 'organizer', 'paid', 6450, '${order}', '2026-11-30T12:00:00Z'),
+               ('${invitedRow}', '${booking}', '${players[2]}', 'Player 3', 'tok-inv', 'player', 'accepted', 0, NULL, NULL);
+      INSERT INTO pickup_sessions (id, host_person_id, organization_id, venue_id, court_booking_id, venue_label, title, starts_at, ends_at, capacity)
+        VALUES ('${match}', '${players[1]}', '${org}', '${venue}', '${booking}', 'Pier Courts', 'Saturday 2s', '${startsAt}', '${endsAt}', 4);
+      INSERT INTO pickup_participants (pickup_session_id, person_id, status, court_booking_participant_id)
+        VALUES ('${match}', '${players[1]}', 'confirmed', '${organizerRow}'),
+               ('${match}', '${players[2]}', 'confirmed', '${invitedRow}');
+    `);
+    const preview = await api(managerActor).schedule.cancelCourtBookingPreview({
+      bookingId: booking,
+      refund: "full",
+      cause: "club",
+    });
+    expect(preview.lines).toEqual([
+      expect.objectContaining({
+        participantId: organizerRow,
+        orderId: order,
+        method: "card",
+        action: "refund-card",
+        paidMinor: 6450,
+        refundMinor: 6450,
+      }),
+      expect.objectContaining({
+        participantId: invitedRow,
+        method: "nothing-paid",
+        action: "release",
+      }),
+    ]);
+    expect(preview.draft.recipients.map((row) => row.role)).toEqual([
+      "booker",
+      "player",
+    ]);
+    const result = await api(ownerActor).schedule.cancelCourtBooking({
+      bookingId: booking,
+      reason: "Court flooded",
+      refund: "full",
+      cause: "club",
+      confirmed: true,
+      previewToken: preview.previewToken,
+      idempotencyKey: key(),
+    });
+    expect(result.lines.map(withoutOutcome)).toEqual(preview.lines);
+    expect(result.sent).toBe(0);
+    expect(
+      await one(`select status from court_bookings where id = $1`, [booking]),
+    ).toMatchObject({ status: "cancelled" });
+    expect(
+      await one(`select status from pickup_sessions where id = $1`, [match]),
+    ).toMatchObject({ status: "cancelled" });
+    expect(
+      await count(
+        "pickup_participants",
+        "pickup_session_id = $1 and status <> 'cancelled'",
+        [match],
+      ),
+    ).toBe(0);
+    expect(
+      await count("refund_records", "order_id = $1", [order]),
+    ).toBeLessThanOrEqual(1);
+    // The court is free for the next booking.
+    await api(frontDesk).schedule.createCourtBooking(
+      deskBooking(slot("2026-12-05", "17:00", "18:30")),
+    );
   });
 
   it("keeps late cancellations by policy, but the club always refunds in full", async () => {
@@ -743,9 +840,8 @@ describe("desk payments and cancellations", () => {
 
   it("hides money from callers without a money permission", async () => {
     const scorekeeper = staff(players[4]!, ["scorekeeper"]);
-    const created = await api(frontDesk).schedule.createCourtBooking(
-      deskBooking(),
-    );
+    const created =
+      await api(frontDesk).schedule.createCourtBooking(deskBooking());
     const preview = await api(scorekeeper).schedule.cancelCourtBookingPreview({
       bookingId: created.id,
       refund: "full",
@@ -800,11 +896,18 @@ describe("removing blocks", () => {
     expect(removed).toMatchObject({ removed: true, stillCancelled: 1 });
     expect(await count("schedule_overrides", "id = $1", [closure])).toBe(0);
     expect(
-      await one(`select status from sessions where id = '65000000-0000-4000-8000-000000000002'`),
+      await one(
+        `select status from sessions where id = '65000000-0000-4000-8000-000000000002'`,
+      ),
     ).toMatchObject({ status: "cancelled" });
-    expect(await count("audit_log", "action = 'calendar.block-removed'")).toBe(1);
+    expect(await count("audit_log", "action = 'calendar.block-removed'")).toBe(
+      1,
+    );
     await expect(
-      api(otherDesk).schedule.removeCalendarBlockPreview({ id: weekly, scope: "all" }),
+      api(otherDesk).schedule.removeCalendarBlockPreview({
+        id: weekly,
+        scope: "all",
+      }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
       api(coachActor).schedule.removeCalendarBlock({
@@ -825,7 +928,10 @@ describe("removing blocks", () => {
       reason: "Court needed",
       idempotencyKey: key(),
     });
-    const rows = await pg.query<{ effective_from: string; effective_to: string }>(
+    const rows = await pg.query<{
+      effective_from: string;
+      effective_to: string;
+    }>(
       `select effective_from::text, effective_to::text from schedule_blocks where mode = 'maintenance' order by effective_from`,
     );
     expect(rows.rows).toEqual([
@@ -868,7 +974,10 @@ describe("removing blocks", () => {
       idempotencyKey: key(),
     });
     expect(
-      await one(`select effective_to::text from schedule_blocks where id = $1`, [weekly]),
+      await one(
+        `select effective_to::text from schedule_blocks where id = $1`,
+        [weekly],
+      ),
     ).toMatchObject({ effective_to: "2026-12-06" });
   });
 });
@@ -879,9 +988,9 @@ describe("attendance and the calendar's reads", () => {
       INSERT INTO sessions (id, venue_id, court_id, coach_person_id, title, slug, starts_at, ends_at, timezone, status, capacity)
         VALUES ('65000000-0000-4000-8000-000000000003', '${venue}', '${courtA}', '${coach}', 'Lesson', 'lesson-1', '${la("2026-12-01", "10:00")}', '${la("2026-12-01", "11:00")}', '${LA}', 'published', 2),
                ('65000000-0000-4000-8000-000000000004', '${venue}', '${courtB}', NULL, 'Other lesson', 'lesson-2', '${la("2026-12-01", "10:00")}', '${la("2026-12-01", "11:00")}', '${LA}', 'published', 2);
-      INSERT INTO registrations (id, session_id, person_id, status)
-        VALUES ('68000000-0000-4000-8000-000000000001', '65000000-0000-4000-8000-000000000003', '${players[1]}', 'confirmed'),
-               ('68000000-0000-4000-8000-000000000002', '65000000-0000-4000-8000-000000000004', '${players[2]}', 'confirmed');
+      INSERT INTO registrations (id, session_id, person_id, status, eligibility_decision)
+        VALUES ('68000000-0000-4000-8000-000000000001', '65000000-0000-4000-8000-000000000003', '${players[1]}', 'confirmed', '{}'::jsonb),
+               ('68000000-0000-4000-8000-000000000002', '65000000-0000-4000-8000-000000000004', '${players[2]}', 'confirmed', '{}'::jsonb);
     `);
     await expect(
       api(coachActor).recordSessionAttendance({
@@ -962,7 +1071,10 @@ describe("attendance and the calendar's reads", () => {
     expect(range.staff[0]).toMatchObject({ personId: coach });
     expect(range.staff[0]!.schedules[0]!.windows.length).toBeGreaterThan(0);
     await expect(
-      api(frontDesk).teamAvailability.range({ from: "2026-12-01", to: "2027-06-01" }),
+      api(frontDesk).teamAvailability.range({
+        from: "2026-12-01",
+        to: "2027-06-01",
+      }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });

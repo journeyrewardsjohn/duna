@@ -84,9 +84,7 @@ function toTrpcError(error: unknown): never {
   if (error instanceof ScheduleError) {
     throw new TRPCError({
       code:
-        error.code === "DATABASE_REQUIRED"
-          ? "PRECONDITION_FAILED"
-          : error.code,
+        error.code === "DATABASE_REQUIRED" ? "PRECONDITION_FAILED" : error.code,
       message: error.message,
       cause: error,
     });
@@ -272,8 +270,9 @@ export const scheduleOperatorRouter = router({
           },
           requiresPriceConfirmation: false,
           materialChange:
-            Math.abs(Date.parse(input.startsAt) - Date.parse(booking.startsAt)) >=
-            3_600_000,
+            Math.abs(
+              Date.parse(input.startsAt) - Date.parse(booking.startsAt),
+            ) >= 3_600_000,
           draft: demoDraft(
             `Your court booking at ${booking.venueName} · ${booking.courtName} has moved.`,
           ),
@@ -349,8 +348,7 @@ export const scheduleOperatorRouter = router({
               orderId: booking.orderId,
               name: booking.booker.name,
               method: "card" as const,
-              action:
-                refund > 0 ? ("refund-card" as const) : ("keep" as const),
+              action: refund > 0 ? ("refund-card" as const) : ("keep" as const),
               ...(showMoney
                 ? { paidMinor: booking.totalMinor, refundMinor: refund }
                 : {}),
@@ -400,15 +398,12 @@ export const scheduleOperatorRouter = router({
               orderId: booking.orderId,
               name: booking.booker.name,
               method: "card" as const,
-              action:
-                refund > 0 ? ("refund-card" as const) : ("keep" as const),
+              action: refund > 0 ? ("refund-card" as const) : ("keep" as const),
               ...(showMoney
                 ? { paidMinor: booking.totalMinor, refundMinor: refund }
                 : {}),
               outcome:
-                refund > 0
-                  ? ("refund-submitted" as const)
-                  : ("kept" as const),
+                refund > 0 ? ("refund-submitted" as const) : ("kept" as const),
               ...(refund > 0 ? { refundId: scheduleDemoIds.refund } : {}),
             },
           ],
@@ -542,4 +537,3 @@ export const scheduleOperatorRouter = router({
       return guarded(() => service.bookingPayments(caller(ctx), input));
     }),
 });
-

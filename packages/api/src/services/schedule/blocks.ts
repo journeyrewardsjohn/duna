@@ -82,7 +82,8 @@ async function loadBlock(
     return {
       kind: "one-off",
       id,
-      resourceType: override.schedule.resourceType === "coach" ? "coach" : "court",
+      resourceType:
+        override.schedule.resourceType === "coach" ? "coach" : "court",
       resourceId: override.schedule.resourceId,
       timeZone: override.schedule.timezone,
       mode: override.override.mode,
@@ -97,7 +98,10 @@ async function loadBlock(
     .from(scheduleBlocks)
     .innerJoin(schedules, eq(scheduleBlocks.scheduleId, schedules.id))
     .where(
-      and(eq(scheduleBlocks.id, id), eq(schedules.organizationId, organizationId)),
+      and(
+        eq(scheduleBlocks.id, id),
+        eq(schedules.organizationId, organizationId),
+      ),
     )
     .limit(1);
   const [weekly] = lock ? await blockQuery.for("update") : await blockQuery;
@@ -277,7 +281,9 @@ export async function removeCalendarBlock(
     let removed = true;
     if (block.kind === "one-off" || input.scope === "all") {
       if (block.kind === "one-off") {
-        await tx.delete(scheduleOverrides).where(eq(scheduleOverrides.id, block.id));
+        await tx
+          .delete(scheduleOverrides)
+          .where(eq(scheduleOverrides.id, block.id));
       } else {
         await tx.delete(scheduleBlocks).where(eq(scheduleBlocks.id, block.id));
       }
@@ -286,7 +292,8 @@ export async function removeCalendarBlock(
       const date = input.date!;
       const before = addCalendarDays(date, -1);
       const after = addCalendarDays(date, 1);
-      const hasEarlier = !weekly.effectiveFrom || before >= weekly.effectiveFrom;
+      const hasEarlier =
+        !weekly.effectiveFrom || before >= weekly.effectiveFrom;
       if (input.scope === "this-and-following") {
         if (hasEarlier) {
           await tx
@@ -294,7 +301,9 @@ export async function removeCalendarBlock(
             .set({ effectiveTo: before })
             .where(eq(scheduleBlocks.id, block.id));
         } else {
-          await tx.delete(scheduleBlocks).where(eq(scheduleBlocks.id, block.id));
+          await tx
+            .delete(scheduleBlocks)
+            .where(eq(scheduleBlocks.id, block.id));
         }
       } else {
         // This date only: keep the dates before and after it.
@@ -305,7 +314,9 @@ export async function removeCalendarBlock(
             .set({ effectiveTo: before })
             .where(eq(scheduleBlocks.id, block.id));
         } else {
-          await tx.delete(scheduleBlocks).where(eq(scheduleBlocks.id, block.id));
+          await tx
+            .delete(scheduleBlocks)
+            .where(eq(scheduleBlocks.id, block.id));
         }
         if (hasLater) {
           await tx.insert(scheduleBlocks).values({
@@ -326,7 +337,8 @@ export async function removeCalendarBlock(
       actorPersonId: caller.actor.personId,
       actorType: "person",
       action: "calendar.block-removed",
-      entityType: block.kind === "one-off" ? "schedule-override" : "schedule-block",
+      entityType:
+        block.kind === "one-off" ? "schedule-override" : "schedule-block",
       entityId: block.id,
       beforeHash: stableHash({
         resourceType: block.resourceType,

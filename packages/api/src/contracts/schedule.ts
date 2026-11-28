@@ -28,7 +28,10 @@ const w3CurrencySchema = z
 const e164Schema = z
   .string()
   .trim()
-  .regex(/^\+[1-9]\d{6,14}$/, "Use the international format, e.g. +13105550100.");
+  .regex(
+    /^\+[1-9]\d{6,14}$/,
+    "Use the international format, e.g. +13105550100.",
+  );
 
 /** A person at the desk without a Duna profile. A phone only if given. */
 export const scheduleWalkInSchema = z.object({
@@ -175,6 +178,12 @@ export const scheduleRecipientSchema = z.object({
   forName: z.string().optional(),
 });
 
+/** The Concierge thread and its Send review (nothing has been sent). */
+export const scheduleConciergeDraftSchema = z.object({
+  conversationId: w3IdSchema,
+  proposalId: w3IdSchema.optional(),
+});
+
 /** Handed to Inbox by the screen; never sent by these procedures. */
 export const scheduleMessageDraftSchema = z.object({
   recipients: z.array(scheduleRecipientSchema),
@@ -242,6 +251,8 @@ export const scheduleMoveCourtBookingSchema = z.object({
   toTell: z.number().int().nonnegative(),
   sent: z.literal(0),
   draft: scheduleMessageDraftSchema.optional(),
+  /** With `notify`: the Concierge Send review for the people told. */
+  conciergeDraft: scheduleConciergeDraftSchema.optional(),
   repriced: z.boolean(),
 });
 
@@ -265,13 +276,7 @@ export const scheduleCancelLineSchema = z.object({
   orderId: w3IdSchema.optional(),
   name: z.string(),
   /** How their money comes back. */
-  method: z.enum([
-    "card",
-    "desk",
-    "unpaid",
-    "free",
-    "nothing-paid",
-  ]),
+  method: z.enum(["card", "desk", "unpaid", "free", "nothing-paid"]),
   action: z.enum([
     /** An unpaid order or invitation is cancelled; nothing to return. */
     "release",
@@ -314,6 +319,8 @@ export const scheduleCancelCourtBookingInputSchema = z.object({
   cause: z.enum(["club", "player-asked"]).default("player-asked"),
   confirmed: z.literal(true),
   previewToken: z.string().min(8).max(128).optional(),
+  /** Prepare a Concierge Send review for the people booked (never sent). */
+  notify: z.boolean().default(true),
   idempotencyKey: w3IdempotencyKeySchema,
 });
 
@@ -338,6 +345,7 @@ export const scheduleCancelCourtBookingSchema = z.object({
   toTell: z.number().int().nonnegative(),
   sent: z.literal(0),
   draft: scheduleMessageDraftSchema,
+  conciergeDraft: scheduleConciergeDraftSchema.optional(),
 });
 
 /* -------------------------------------------------------- desk payment */

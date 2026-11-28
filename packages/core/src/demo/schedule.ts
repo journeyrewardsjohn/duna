@@ -33,7 +33,10 @@ export const scheduleDemoIds = {
 } as const;
 
 /** The court-rate price of a slot, as the demo court is priced. */
-export function scheduleDemoRateMinor(startsAt: string, endsAt: string): number {
+export function scheduleDemoRateMinor(
+  startsAt: string,
+  endsAt: string,
+): number {
   const minutes = (Date.parse(endsAt) - Date.parse(startsAt)) / 60_000;
   return Math.max(0, Math.round((scheduleDemoRatePerHourMinor * minutes) / 60));
 }
