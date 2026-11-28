@@ -63,6 +63,8 @@ const payout = "93000000-0000-4000-8000-000000000001";
 // approval (@duna/core/demo/team-pay).
 const coach = "10000000-0000-4000-8000-000000000011";
 const payRun = "d0040000-0000-4000-8000-000000000201";
+// The demo club's live tournament (apps/hq/components/events/events-demo.ts).
+const liveEvent = "7e000000-0000-4000-8000-000000000001";
 // The demo club's weekly clinic (apps/hq/components/offerings/offerings-demo.ts).
 const offering = "d0130000-0000-4000-8000-000000000102";
 
@@ -109,7 +111,23 @@ const dynamicPaths: Readonly<Record<string, readonly string[]>> = {
   ],
   [hqRoutes.trainingDrill]: [`/training/drills/${drill}`],
   [hqRoutes.trainingDrillEdit]: [`/training/drills/${drill}/edit`],
-  [hqRoutes.event]: [`/events/${clinic}`, `/events/${tournament}`],
+  [hqRoutes.event]: [
+    `/events/${clinic}`,
+    `/events/${tournament}`,
+    `/events/${liveEvent}`,
+  ],
+  [hqRoutes.eventEntries]: [
+    `/events/${clinic}/entries`,
+    `/events/${liveEvent}/entries`,
+  ],
+  [hqRoutes.eventSchedule]: [`/events/${liveEvent}/schedule`],
+  [hqRoutes.eventBrackets]: [`/events/${liveEvent}/brackets`],
+  [hqRoutes.eventMoney]: [`/events/${liveEvent}/money`],
+  [hqRoutes.eventNotes]: [`/events/${clinic}/notes`],
+  [hqRoutes.eventSettings]: [
+    `/events/${clinic}/settings`,
+    `/events/${liveEvent}/settings`,
+  ],
   [hqRoutes.eventDivision]: [`/events/${tournament}/divisions/${missing}`],
   [hqRoutes.eventCourtBooking]: [`/events/court-bookings/${missing}`],
   [hqRoutes.eventMatch]: [`/events/matches/${missing}`],

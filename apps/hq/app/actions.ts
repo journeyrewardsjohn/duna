@@ -60,21 +60,6 @@ function optionalField(formData: FormData, name: string): string | undefined {
   return field(formData, name) || undefined;
 }
 
-function optionalE164Field(
-  formData: FormData,
-  name: string,
-): string | undefined {
-  const value = optionalField(formData, name);
-  if (!value) return undefined;
-  const normalized = `${value.startsWith("+") ? "+" : ""}${value.replaceAll(/\D/g, "")}`;
-  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
-    throw new Error(
-      "Enter the mobile number with country code, such as +1 310 555 0123.",
-    );
-  }
-  return normalized;
-}
-
 function courtSurfaceField(formData: FormData): CourtSurface {
   const value = field(formData, "surface");
   if (!COURT_SURFACE_IDS.includes(value as CourtSurface)) {
@@ -388,98 +373,6 @@ export async function updateOrganizationProfileAction(
   }
 }
 
-export async function createSessionNoteAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const visibility = field(formData, "visibility");
-    if (visibility !== "private" && visibility !== "player") {
-      throw new Error(
-        "Choose whether this note is private or player-shareable.",
-      );
-    }
-    const source = field(formData, "source");
-    if (source !== "typed" && source !== "livekit-voice") {
-      throw new Error("Choose a valid note source.");
-    }
-    const caller = await getServerCaller();
-    const created = await caller.operator.createSessionNote({
-      sessionId: field(formData, "sessionId"),
-      subject: optionalField(formData, "subject"),
-      visibility,
-      source,
-      transcript: optionalField(formData, "transcript"),
-      summary: optionalField(formData, "summary"),
-      recipientPersonIds: formData
-        .getAll("recipientPersonIds")
-        .map(String)
-        .filter(Boolean),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      visibility === "private"
-        ? "Private session note saved. Players cannot see it."
-        : "Shareable note saved as a draft. Review it before publishing.",
-      undefined,
-      created.id,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function publishSessionNoteAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.publishSessionNote({
-      noteId: field(formData, "noteId"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result("success", "Reviewed note shared with the selected players.");
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function recordSessionAttendanceAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const status = field(formData, "status");
-    if (
-      status !== "scheduled" &&
-      status !== "attended" &&
-      status !== "no-show" &&
-      status !== "cancelled"
-    ) {
-      throw new Error("Choose a valid attendance state.");
-    }
-    const caller = await getServerCaller();
-    await caller.operator.recordSessionAttendance({
-      registrationId: field(formData, "registrationId"),
-      status,
-      note: optionalField(formData, "note"),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      `Attendance marked ${status.replaceAll("-", " ")}.`,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
 export async function recordActivityAttendanceAction(
   _previous: OperatorActionState,
   formData: FormData,
@@ -539,168 +432,6 @@ export async function addCalendarParticipantAction(
     return result(
       "success",
       "Player added. Their in-app and push updates are queued.",
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function addEventPlayerEntryAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const sessionId = field(formData, "sessionId");
-    const identityKind = field(formData, "identityKind");
-    if (identityKind !== "duna" && identityKind !== "guest") {
-      throw new Error("Choose a Duna player or create a guest player.");
-    }
-    const paymentTreatment = field(formData, "paymentTreatment");
-    if (
-      paymentTreatment !== "complimentary" &&
-      paymentTreatment !== "to-be-paid"
-    ) {
-      throw new Error("Choose complimentary entry or payment due.");
-    }
-    const caller = await getServerCaller();
-    const entry = await caller.operator.addEventPlayerEntry({
-      sessionId,
-      divisionId: field(formData, "divisionId"),
-      identity:
-        identityKind === "duna"
-          ? {
-              kind: "duna",
-              personId: field(formData, "personId"),
-            }
-          : {
-              kind: "guest",
-              givenName: field(formData, "givenName"),
-              familyName: field(formData, "familyName"),
-              email: optionalField(formData, "email"),
-              phoneE164: optionalE164Field(formData, "phoneE164"),
-            },
-      paymentTreatment,
-      reason:
-        field(formData, "reason") ||
-        "Organizer added a player and confirmed the entry treatment.",
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    revalidatePath(`/events/${sessionId}`);
-    return {
-      status: "success",
-      message:
-        entry.identityStatus === "guest-invited"
-          ? entry.deliveryStatus === "sent"
-            ? `${entry.displayName} is registered and the claim invitation was sent.`
-            : `${entry.displayName} is registered. Copy the claim link to invite them.`
-          : entry.paymentTreatment === "complimentary"
-            ? `${entry.displayName} is registered with a complimentary entry.`
-            : `${entry.displayName} is registered with payment due.`,
-      invitationUrl: entry.invitationUrl,
-      deliveryStatus: entry.deliveryStatus,
-      personName: entry.displayName,
-      entryPaymentTreatment: entry.paymentTreatment,
-    };
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function cancelCalendarSessionAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    const cancelled = await caller.operator.cancelCalendarSession({
-      sessionId: field(formData, "sessionId"),
-      reason: field(formData, "reason"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      cancelled.status === "refund-attention" ? "error" : "success",
-      cancelled.status === "refund-attention"
-        ? "The event is cancelled, but one or more refunds need attention. No successful refund was repeated."
-        : "Event cancelled, cash refunds submitted, credits restored, reservations released, and player updates queued.",
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function updateEventSessionAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.updateEventSession({
-      sessionId: field(formData, "sessionId"),
-      title: field(formData, "title"),
-      localStartsAt: field(formData, "localStartsAt"),
-      localEndsAt: field(formData, "localEndsAt"),
-      timezone: field(formData, "timezone"),
-      capacity: numberField(formData, "capacity"),
-      localRegistrationClosesAt: optionalField(
-        formData,
-        "localRegistrationClosesAt",
-      ),
-      reason: field(formData, "reason") || "Updated event operations.",
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result("success", "Event details and registration window updated.");
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function refundEventRegistrationAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    const refunded = await caller.operator.refundEventRegistration({
-      registrationId: field(formData, "registrationId"),
-      orderId: optionalField(formData, "orderId"),
-      reason: field(formData, "reason"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      refunded.status === "failed" ? "error" : "success",
-      refunded.status === "failed"
-        ? "Stripe could not complete this refund. The registration was not removed."
-        : "Refund submitted, ledger reversal posted, credits restored when applicable, and the next eligible team promoted.",
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function closeEventRegistrationAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.closeEventRegistration({
-      sessionId: field(formData, "sessionId"),
-      reason: field(formData, "reason"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      "Registration is closed. Review and finalize seeding for each division.",
     );
   } catch (error) {
     return errorState(error);
@@ -769,31 +500,6 @@ export async function swapDivisionPoolTeamsAction(
     return result(
       "success",
       "Pool override saved with its note. Review and finalize the pools again.",
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function publishTournamentLiveAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.publishTournamentLive({
-      sessionId: field(formData, "sessionId"),
-      participantMessage: field(formData, "participantMessage"),
-      reason:
-        field(formData, "reason") ||
-        "Director published the finalized tournament field.",
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      "Tournament is live. Participants were alerted with the pools and schedule link.",
     );
   } catch (error) {
     return errorState(error);
@@ -1123,28 +829,6 @@ export async function updateEventDraftAction(
       "Event settings saved. Existing paid registrations kept their original price.",
       undefined,
       updated.id,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function approveTicketOrderAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    const approved = await caller.operator.approveTicketOrder({
-      orderId: field(formData, "orderId"),
-      ticketTypeId: field(formData, "ticketTypeId"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      `${approved.quantity} ticket${approved.quantity === 1 ? "" : "s"} approved and ready to scan.`,
     );
   } catch (error) {
     return errorState(error);
@@ -1840,27 +1524,6 @@ export async function createProgramSessionAction(
     return result(
       "success",
       "Session draft created. Publishing remains a separate confirmation.",
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function publishSessionAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.publishSession({
-      sessionId: field(formData, "sessionId"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      "Registration opened and the session is now player-facing.",
     );
   } catch (error) {
     return errorState(error);

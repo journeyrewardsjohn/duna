@@ -1,7 +1,6 @@
 import { hqHref } from "@duna/core/hq-routes";
 import { localMinuteOf } from "@duna/scheduling";
 import { Button, Chip } from "@duna/ui/tideline";
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PageSection } from "@/components/shell/page-header";
 import {
@@ -33,8 +32,6 @@ import {
   TrainingBlockState,
   TrainingScreen,
 } from "@/components/training/training-screen";
-
-export const metadata: Metadata = { title: "Practice" };
 
 const DAY = 86_400_000;
 

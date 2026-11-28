@@ -22,8 +22,8 @@ export const hqRoutes = {
   /** Schedule (H-SCHEDULE): the club calendar, its filters in the query string. */
   schedule: "/schedule",
 
-  // People and play. Events, Marketing and Reports
-  // lists are served by the generic module page; see hqModuleHref.
+  // People and play. Marketing and Reports lists are served by the
+  // generic module page; see hqModuleHref.
   /** People (H-PEOPLE): the list, adding, importing, merging, each person. */
   people: "/people",
   /** Add a person (the old "Invite a person" address). */
@@ -78,13 +78,23 @@ export const hqRoutes = {
   trainingDrillEdit: "/training/drills/[drillId]/edit",
   /** Old address: opens Training › Programs. */
   programs: "/programs",
+  /** Events (H-EVENTS): live, upcoming, past and drafts; `?type=` filters. */
+  events: "/events",
+  /** The event studio (create and full edit), not rebuilt yet. */
   eventCreate: "/events/create",
   event: "/events/[sessionId]",
+  eventEntries: "/events/[sessionId]/entries",
+  eventSchedule: "/events/[sessionId]/schedule",
+  eventBrackets: "/events/[sessionId]/brackets",
+  eventMoney: "/events/[sessionId]/money",
+  eventNotes: "/events/[sessionId]/notes",
+  eventSettings: "/events/[sessionId]/settings",
+  /** A division's advanced controls (draw, format, pool swaps), not rebuilt yet. */
   eventDivision: "/events/[sessionId]/divisions/[divisionId]",
   /** Opens the booking in Schedule's side panel (the old operations page). */
   eventCourtBooking: "/events/court-bookings/[activityId]",
   eventMatch: "/events/matches/[activityId]",
-  /** Becomes an in-page filter of Events in package H9. */
+  /** Old type pages: redirect to the Events list's `?type=` filter. */
   eventType: "/events/types/[eventType]",
   /** Offerings (H-OFFER): every offering as an object, filtered in-page by kind. */
   offerings: "/offerings",
@@ -190,11 +200,7 @@ export function isHqDevOnlyRoute(path: string): boolean {
  * Operator module slugs that have no page of their own and are served by
  * apps/hq/app/[module]/page.tsx (slugs from apps/hq/components/navigation.ts).
  */
-export const hqOperatorModuleSlugs = [
-  "events",
-  "marketing",
-  "reports",
-] as const;
+export const hqOperatorModuleSlugs = ["marketing", "reports"] as const;
 
 /** Admin module slugs served by apps/hq/app/admin/[module]/page.tsx. */
 export const hqAdminModuleSlugs = [
