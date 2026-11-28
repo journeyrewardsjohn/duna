@@ -115,7 +115,6 @@
       display: block;
       width: 100%;
       max-width: var(--td-mcard-max);
-      aspect-ratio: 1.586;
       container-type: inline-size;
       color: var(--td-mcard-on);
       text-align: start;
@@ -148,8 +147,7 @@
     }
 
     .td-mcard__face {
-      position: absolute;
-      inset: 0;
+      position: relative;
       display: block;
       overflow: hidden;
       border-radius: 5.2cqi;
@@ -158,13 +156,17 @@
     }
 
     .td-mcard[data-size="strip"] .td-mcard__face {
-      bottom: auto;
+      position: absolute;
+      inset: 0 0 auto;
       height: calc(100cqi / 1.586);
       border-radius: 0;
     }
 
-    /* Depth: contact, lift, and a glow in the art's own tone on the ground. */
+    /* Depth: contact, lift, and a glow in the art's own tone on the ground.
+       The front is always the ID-1 object; the pass behind it may grow taller
+       so nothing on it is ever cut off (larger text, long names). */
     .td-mcard__front {
+      aspect-ratio: 1.586;
       background: var(--td-brand-night-court);
       box-shadow:
         0 1px 2px
@@ -462,16 +464,14 @@
     /* ---------- The flip ---------- */
 
     .td-cardflip {
-      position: absolute;
-      inset: 0;
-      display: block;
+      position: relative;
+      display: grid;
       perspective: 1400px;
     }
 
     .td-cardflip__inner {
-      position: absolute;
-      inset: 0;
-      display: block;
+      position: relative;
+      display: grid;
       transform-style: preserve-3d;
       transition: transform 620ms var(--td-ease-rise);
     }
@@ -481,10 +481,15 @@
     }
 
     .td-cardflip__face {
-      position: absolute;
-      inset: 0;
-      display: block;
+      position: relative;
+      display: grid;
+      grid-area: 1 / 1;
+      align-self: start;
       backface-visibility: hidden;
+    }
+
+    .td-cardflip__back {
+      align-self: stretch;
     }
 
     .td-cardflip__back {
@@ -503,10 +508,12 @@
           color-mix(in srgb, var(--td-brand-night-court) 55%, transparent);
     }
 
+    /* The pass is text first: at least the card's height, taller when the
+       text needs it. Sizes are in rem so they follow the person's text size. */
     .td-mpass {
-      position: absolute;
-      inset: 0;
+      position: relative;
       display: flex;
+      min-height: calc(100cqi / 1.586);
       flex-direction: column;
       background: var(--td-brand-salt);
       color: var(--td-brand-night-court);
@@ -517,27 +524,26 @@
       flex: none;
       gap: 2.2cqi;
       align-items: center;
-      height: 24%;
-      padding-inline: 5cqi;
+      min-height: calc(100cqi / 1.586 * 0.24);
+      padding: 2cqi 5cqi;
       background: var(--td-mpass-club);
       color: var(--td-mpass-on-club);
     }
 
     .td-mpass__club {
       min-width: 0;
-      overflow: hidden;
       font-family: var(--td-font-ui);
-      font-size: 13px;
+      font-size: 0.8125rem;
       font-weight: 600;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
     }
 
     .td-mpass__kicker {
       flex: none;
       margin-inline-start: auto;
       font-family: var(--td-font-mono);
-      font-size: 12px;
+      font-size: 0.75rem;
       font-weight: 500;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -555,8 +561,22 @@
       flex: 1;
       gap: 4.5cqi;
       align-items: center;
-      min-height: 0;
       padding: 3.8cqi 5cqi;
+    }
+
+    /* Too narrow for the code and the text side by side (a small card, or
+       large text): the code sits above the text. */
+    @container (max-width: 20em) {
+      .td-mpass__body {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .td-mpass .td-mpass__qr {
+        align-self: center;
+        width: min(56cqi, 180px);
+        height: min(56cqi, 180px);
+      }
     }
 
     .td-qr {
@@ -586,12 +606,11 @@
     }
 
     .td-mpass__member {
-      overflow: hidden;
       font-family: var(--td-font-ui);
-      font-size: clamp(13px, 3.9cqi, 16px);
+      font-size: 0.9375rem;
       font-weight: 600;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
     }
 
     .td-mpass__status {
@@ -599,24 +618,20 @@
       gap: 5px;
       align-items: center;
       font-family: var(--td-font-ui);
-      font-size: 12px;
+      font-size: 0.75rem;
       font-weight: 600;
+      line-height: 1.3;
     }
 
     .td-mpass__meta {
       display: grid;
       font-family: var(--td-font-mono);
-      font-size: 12px;
+      font-size: 0.75rem;
       font-weight: 500;
       line-height: 1.4;
       letter-spacing: 0.02em;
+      overflow-wrap: anywhere;
       user-select: text;
-
-      > span {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
     }
 
     .td-mpass__note {
@@ -625,8 +640,9 @@
       align-items: center;
       margin-top: 2px;
       font-family: var(--td-font-mono);
-      font-size: 12px;
+      font-size: 0.75rem;
       line-height: 1.3;
+      overflow-wrap: anywhere;
     }
 
     .td-mpass__crest {
@@ -641,19 +657,22 @@
       flex: 1;
       gap: 6px;
       align-content: center;
-      padding: 0 6cqi;
+      padding: 4cqi 6cqi;
     }
 
     .td-mpass__title {
       font-family: var(--td-font-ui);
-      font-size: clamp(13px, 3.9cqi, 16px);
+      font-size: 0.9375rem;
       font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
     }
 
     .td-mpass__text {
       font-family: var(--td-font-ui);
-      font-size: clamp(12px, 3.3cqi, 13px);
+      font-size: 0.8125rem;
       line-height: 1.4;
+      overflow-wrap: anywhere;
     }
 
     /* ---------- The wallet: a Night Court band, then the sheet ---------- */
@@ -811,6 +830,7 @@
       );
       display: flex;
       gap: 12px;
+      align-items: flex-start;
       margin-bottom: -56px;
       padding: 12px calc((100cqi - var(--td-wallet-card)) / 2) 72px;
       overflow-x: auto;
