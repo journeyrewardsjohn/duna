@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { waitForHydration } from "./gallery-hydration";
 
 /**
  * Keyboard operation of the Tideline components, in the gallery.
@@ -26,8 +27,7 @@ async function openGallery(page: Page) {
   await expect(
     page.getByRole("heading", { level: 1, name: "Tideline gallery" }),
   ).toBeVisible();
-  // Wait for hydration: the Next dev overlay mounts after the app does.
-  await page.waitForLoadState("networkidle");
+  await waitForHydration(page);
 }
 
 const focused = (page: Page) => page.locator(":focus");
@@ -493,7 +493,7 @@ test.describe("Tideline gallery, layout", () => {
       test.skip(testInfo.project.name !== "desktop", "Sets its own viewport");
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(`${base}/tideline?theme=${theme}`);
-      await page.waitForLoadState("networkidle");
+      await waitForHydration(page);
       const overflow = await page.evaluate(
         () =>
           document.documentElement.scrollWidth -
@@ -520,7 +520,7 @@ test.describe("Tideline gallery, Book a lesson", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: "Book a lesson." }),
     ).toBeVisible();
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     await page.getByRole("radio", { name: "0ms", exact: true }).click();
   });
 
@@ -673,7 +673,7 @@ test.describe("Tideline gallery, Book a lesson", () => {
       page,
     }) => {
       await page.goto(`${base}/tideline?theme=${theme}`);
-      await page.waitForLoadState("networkidle");
+      await waitForHydration(page);
       // A hostile host page: unlayered link and button rules, as HQ and Web
       // have. The legacy bridge hands the colour back to Tideline.
       await page.addStyleTag({
@@ -702,7 +702,7 @@ test.describe("Tideline gallery, foundations", () => {
     page,
   }) => {
     await page.goto(`${base}/tideline`);
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     const foundations = page.locator("section#foundations");
     await expect(
       foundations.getByRole("heading", { name: "Foundations" }),
@@ -731,7 +731,7 @@ test.describe("Tideline gallery, foundations", () => {
     page,
   }) => {
     await page.goto(`${base}/tideline`);
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     const shown = await page.evaluate(() =>
       [
         ...document.querySelectorAll(
@@ -746,7 +746,7 @@ test.describe("Tideline gallery, foundations", () => {
 
   test("Solar appears only on live states", async ({ page }) => {
     await page.goto(`${base}/tideline`);
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     const offenders = await page.evaluate(() => {
       const solar = "rgb(242, 84, 45)";
       return [...document.querySelectorAll(".td *")]
@@ -984,7 +984,7 @@ test.describe("Tideline gallery, interaction kit", () => {
   }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
-    await page.waitForLoadState("networkidle");
+    await waitForHydration(page);
     const section = page.locator("section#motion");
     await section.getByRole("button", { name: "Play Rise" }).click();
     const rise = section.locator(".td-rise").first();
