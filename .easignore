@@ -51,7 +51,10 @@ artifacts/
 # generate packages/api/src/generated/duna-feature-knowledge.ts (the manifest
 # is no longer committed; without these the install phase fails on EAS).
 /docs/*
-!/docs/surfaces/
+# No trailing slash: EAS tests directory paths without one, so a pattern
+# ending in / never re-includes the directory.
+!/docs/surfaces
+!/docs/surfaces/**
 !/docs/BUILD_MATRIX.md
 /tests/
 /.agents/
