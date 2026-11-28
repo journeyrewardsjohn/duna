@@ -62,6 +62,13 @@ import { WatchScoreInbox } from "../features/matches/WatchScoreInbox";
 import { styles } from "../legacy/styles";
 import { DevicePostureProvider } from "@duna/expo-device-posture";
 import { PlayerLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
+import { devLaunchUrl } from "../features/dev/dev-launch";
+import {
+  PlayerFoundations,
+  foundationsAutostart,
+  parseFoundationsUrl,
+  type FoundationsOptions,
+} from "../features/dev/Foundations";
 
 type OrganizationModalDestination =
   | { readonly kind: "coach"; readonly coach: MobileCoach }
@@ -148,6 +155,10 @@ export function DunaApp() {
   const [layoutLabOpen, setLayoutLabOpen] = useState(
     Boolean(layoutLabAutostart),
   );
+  // Development-only Foundations gallery (preview builds only).
+  const [foundations, setFoundations] = useState<FoundationsOptions | null>(
+    foundationsAutostart,
+  );
   const previewRef = useRef(runtime.mode === "preview");
   previewRef.current = runtime.mode === "preview";
 
@@ -175,6 +186,11 @@ export function DunaApp() {
 
   useEffect(() => {
     const openLiveActivity = (url: string | null) => {
+      const foundationsLink = parseFoundationsUrl(url);
+      if (foundationsLink) {
+        if (previewRef.current) setFoundations(foundationsLink);
+        return;
+      }
       if (url?.startsWith("duna://dev/layout-lab")) {
         if (previewRef.current) setLayoutLabOpen(true);
         return;
@@ -233,7 +249,9 @@ export function DunaApp() {
       setEventIndex(null);
       setTab(link.tab);
     };
-    void Linking.getInitialURL().then((url) => openLiveActivity(url ?? null));
+    void Linking.getInitialURL().then((url) =>
+      openLiveActivity(url ?? devLaunchUrl()),
+    );
     const subscription = Linking.addEventListener("url", ({ url }) =>
       openLiveActivity(url),
     );
@@ -957,6 +975,12 @@ export function DunaApp() {
       {shell}
       {layoutLabOpen && runtime.mode === "preview" ? (
         <PlayerLayoutLab onClose={() => setLayoutLabOpen(false)} />
+      ) : null}
+      {foundations && runtime.mode === "preview" ? (
+        <PlayerFoundations
+          initial={foundations}
+          onClose={() => setFoundations(null)}
+        />
       ) : null}
     </DevicePostureProvider>
   );

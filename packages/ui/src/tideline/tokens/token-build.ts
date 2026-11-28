@@ -892,3 +892,318 @@ export function buildTidelineTokensTs(source: TidelineTokenSource): string {
     ``,
   ].join("\n");
 }
+
+/*
+ * React Native output (`packages/ui/src/native/tokens/tokens.native.ts`).
+ *
+ * The same source as the web files, resolved for React Native: colours as
+ * `#rrggbb` / `#rrggbbaa` strings (OKLCH converted to sRGB, aliases
+ * resolved), lengths and times as numbers, easings as cubic-bezier control
+ * points, shadows as `boxShadow` layer objects, type styles in pixels with em
+ * tracking resolved against the font size. Group prefixes are dropped
+ * (`space-4` is `space["4"]`, `duration-rise` is `motion.duration.rise`).
+ */
+
+const OKLCH = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/i;
+
+/** `oklch(L C H)` (L 0..1) to an opaque `#rrggbb`, clipped to sRGB. */
+export function oklchToHex(value: string): string {
+  const match = OKLCH.exec(value.trim());
+  if (!match) throw new Error(`Cannot read OKLCH colour "${value}"`);
+  const [l, c, h] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const radians = (h * Math.PI) / 180;
+  const a = c * Math.cos(radians);
+  const b = c * Math.sin(radians);
+  const l1 = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m1 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s1 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const linear = [
+    4.0767416621 * l1 - 3.3077115913 * m1 + 0.2309699292 * s1,
+    -1.2684380046 * l1 + 2.6097574011 * m1 - 0.3413193965 * s1,
+    -0.0041960863 * l1 - 0.7034186147 * m1 + 1.707614701 * s1,
+  ];
+  return `#${linear
+    .map((channel) => {
+      const clipped = Math.min(1, Math.max(0, channel));
+      const encoded =
+        clipped <= 0.0031308
+          ? 12.92 * clipped
+          : 1.055 * clipped ** (1 / 2.4) - 0.055;
+      return Math.round(encoded * 255)
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
+}
+
+/** A colour React Native can parse: hex stays, OKLCH becomes hex. */
+function nativeColor(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (HEX.test(trimmed)) return trimmed;
+  if (OKLCH.test(trimmed)) return oklchToHex(trimmed);
+  throw new Error(`Colour "${value}" has no React Native form`);
+}
+
+const CUBIC = /^cubic-bezier\(\s*([^)]+)\)$/;
+
+/** `cubic-bezier(.2, .8, .2, 1)` to its four control points. */
+export function cubicBezierPoints(
+  value: string,
+): [number, number, number, number] {
+  const match = CUBIC.exec(value.trim());
+  const points = match?.[1]?.split(",").map((part) => Number(part.trim()));
+  if (!points || points.length !== 4 || points.some(Number.isNaN)) {
+    throw new Error(`Easing "${value}" is not a cubic-bezier()`);
+  }
+  return points as [number, number, number, number];
+}
+
+/** One React Native `boxShadow` layer (New Architecture). */
+export interface NativeShadowLayer {
+  offsetX: number;
+  offsetY: number;
+  blurRadius: number;
+  spreadDistance: number;
+  color: string;
+  inset?: true;
+}
+
+/** A CSS `box-shadow` list (`0 4px 12px -2px #0b122014, …`) as layers. */
+export function nativeShadowLayers(value: string): NativeShadowLayer[] {
+  return value.split(/,(?![^(]*\))/).map((layer) => {
+    const parts = layer.trim().split(/\s+/);
+    const inset = parts[0] === "inset";
+    const rest = inset ? parts.slice(1) : parts;
+    const color = rest.find((part) => !/^-?\d/.test(part));
+    const lengths = rest
+      .filter((part) => part !== color)
+      .map((part) => {
+        const px = PX.exec(part) ?? NUMBER.exec(part);
+        if (!px) throw new Error(`Shadow length "${part}" in "${value}"`);
+        return Number(px[1] ?? px[0]);
+      });
+    if (!color || lengths.length < 2 || lengths.length > 4) {
+      throw new Error(`Cannot read shadow "${layer}"`);
+    }
+    const [offsetX = 0, offsetY = 0, blurRadius = 0, spreadDistance = 0] =
+      lengths;
+    return {
+      offsetX,
+      offsetY,
+      blurRadius,
+      spreadDistance,
+      color: nativeColor(color),
+      ...(inset ? { inset: true as const } : {}),
+    };
+  });
+}
+
+/** `space-4` → `4` inside the `space` group; names without the prefix stay. */
+function withoutPrefix(name: string, prefix: string): string {
+  return name.startsWith(`${prefix}-`) ? name.slice(prefix.length + 1) : name;
+}
+
+function groupOf(source: TidelineTokenSource, name: string): TokenGroup {
+  const group = source[name];
+  if (!isTokenGroup(group)) throw new Error(`The source has no ${name} group`);
+  return group;
+}
+
+/** Plain (theme-independent) pixel or number tokens of a group, prefix dropped. */
+function nativeScale(
+  source: TidelineTokenSource,
+  group: string,
+  prefix: string,
+): Record<string, number> {
+  return Object.fromEntries(
+    groupOf(source, group)
+      .tokens.filter((token) => !isThemed(token.value))
+      .map((token) => {
+        const value = nativeValue(token.value as string);
+        if (typeof value !== "number") {
+          throw new Error(`Token "${token.name}" is not a number: ${value}`);
+        }
+        return [withoutPrefix(token.name, prefix), value];
+      }),
+  );
+}
+
+/** The generated React Native token module. */
+export function buildTidelineNativeTokensTs(
+  source: TidelineTokenSource,
+): string {
+  const themes = themeIds(source);
+  const colors = resolveTidelineColors(source);
+  const colorTokens = source.color.tokens;
+  const roleNames = colorTokens
+    .filter((token) => isThemed(token.value))
+    .map((token) => token.name);
+  const brand = Object.fromEntries(
+    colorTokens
+      .filter((token) => token.name.startsWith("brand-"))
+      .map((token) => [
+        withoutPrefix(token.name, "brand"),
+        nativeColor(colors[DEFAULT_THEME]![token.name]!),
+      ]),
+  );
+  const ramp = Object.fromEntries(
+    colorTokens
+      .filter(
+        (token) => !isThemed(token.value) && !token.name.startsWith("brand-"),
+      )
+      .map((token) => [
+        token.name,
+        nativeColor(colors[DEFAULT_THEME]![token.name]!),
+      ]),
+  );
+  const roles = (values: Record<string, string>) =>
+    Object.fromEntries(
+      roleNames.map((role) => [role, nativeColor(values[role]!)]),
+    );
+  const zones = resolveTidelineZoneColors(source);
+
+  const easing = Object.fromEntries(
+    groupOf(source, "easing").tokens.map((token) => [
+      withoutPrefix(token.name, "ease"),
+      cubicBezierPoints(token.value as string),
+    ]),
+  );
+  const duration = Object.fromEntries(
+    groupOf(source, "duration").tokens.map((token) => [
+      withoutPrefix(token.name, "duration"),
+      nativeValue(token.value as string),
+    ]),
+  );
+  const reduced = Object.fromEntries(
+    Object.entries(source.reducedMotion ?? {})
+      .filter(([name]) =>
+        groupOf(source, "duration").tokens.some((token) => token.name === name),
+      )
+      .map(([name, value]) => [
+        withoutPrefix(name, "duration"),
+        nativeValue(value),
+      ]),
+  );
+
+  const shadow = Object.fromEntries(
+    themes.map((theme) => [
+      theme,
+      Object.fromEntries(
+        groupOf(source, "shadow").tokens.map((token) => [
+          withoutPrefix(token.name, "shadow"),
+          nativeShadowLayers(
+            isThemed(token.value)
+              ? themedValue(token, theme, token.value)
+              : token.value,
+          ),
+        ]),
+      ),
+    ]),
+  );
+
+  const size = nativeScale(source, "size", "size");
+  const icon = Object.fromEntries(
+    groupOf(source, "icon").tokens.map((token) => [
+      withoutPrefix(token.name, "icon"),
+      nativeValue(token.value as string),
+    ]),
+  );
+
+  const styles = typeStyles(source);
+  const weights: Record<string, Set<number>> = {};
+  const type = Object.fromEntries(
+    styles.map((style) => {
+      const resolved = nativeTypeStyle(style);
+      (weights[resolved.family] ??= new Set()).add(resolved.fontWeight);
+      return [style.name, resolved];
+    }),
+  );
+  const brandType = source.type.brand;
+  if (brandType) (weights.brand ??= new Set()).add(brandType.weight);
+
+  const tokens = {
+    name: source.name,
+    version: source.version,
+    themes,
+    brand,
+    ramp,
+    color: Object.fromEntries(
+      themes.map((theme) => [theme, roles(colors[theme]!)]),
+    ),
+    zone: Object.fromEntries(
+      Object.entries(zones).map(([zone, byTheme]) => [
+        zone,
+        Object.fromEntries(
+          themes.map((theme) => [theme, roles(byTheme[theme]!)]),
+        ),
+      ]),
+    ),
+    space: nativeScale(source, "spacing", "space"),
+    radius: nativeScale(source, "radius", "radius"),
+    size,
+    icon: {
+      ...icon,
+      size: {
+        chip: size["icon-chip"],
+        inline: size["icon-inline"],
+        control: size["icon-control"],
+        nav: size["icon-nav"],
+      },
+      brandMarkMax: size["brand-mark-max"],
+    },
+    layer: nativeScale(source, "layer", "z"),
+    font: source.type.families,
+    fontWeights: Object.fromEntries(
+      Object.entries(weights).map(([family, set]) => [
+        family,
+        [...set].sort((a, b) => a - b),
+      ]),
+    ),
+    type,
+    ...(brandType
+      ? {
+          brandType: {
+            family: "brand",
+            fontWeight: brandType.weight,
+            letterSpacingEm: Number(EM.exec(brandType.tracking)?.[1] ?? 0),
+            minFontSize: nativeValue(brandType.min),
+          },
+        }
+      : {}),
+    motion: { duration, easing, reduced },
+    shadow,
+  };
+
+  return [
+    `/* Tideline ${source.version} tokens for React Native. ${GENERATED_NOTE} */`,
+    ``,
+    `export const nativeTokens = ${JSON.stringify(tokens, null, 2)} as const;`,
+    ``,
+    `export type NativeTokens = typeof nativeTokens;`,
+    `export type NativeTheme = NativeTokens["themes"][number];`,
+    `export type NativeColorRole = keyof NativeTokens["color"]["${DEFAULT_THEME}"];`,
+    `export type NativeColors = Readonly<Record<NativeColorRole, string>>;`,
+    `export type NativeZone = "live" | keyof NativeTokens["zone"];`,
+    `export type NativeTypeStyle = keyof NativeTokens["type"];`,
+    `export type NativeFontFamily = keyof NativeTokens["fontWeights"];`,
+    `export type NativeShadow = keyof NativeTokens["shadow"]["${DEFAULT_THEME}"];`,
+    `export type NativeEasing = keyof NativeTokens["motion"]["easing"];`,
+    `export type NativeDuration = keyof NativeTokens["motion"]["duration"];`,
+    ``,
+    `/**`,
+    ` * The resolved colour roles for a theme and zone. The live zone wins over the`,
+    ` * preference; another zone (HQ) repaints its roles on top of the theme.`,
+    ` */`,
+    `export function nativeColors(`,
+    `  theme: NativeTheme = "${DEFAULT_THEME}",`,
+    `  zone?: NativeZone | null,`,
+    `): NativeColors {`,
+    `  if (zone === "live") return nativeTokens.color.live;`,
+    `  if (zone && zone in nativeTokens.zone) {`,
+    `    return nativeTokens.zone[zone as keyof NativeTokens["zone"]][theme];`,
+    `  }`,
+    `  return nativeTokens.color[theme];`,
+    `}`,
+    ``,
+  ].join("\n");
+}

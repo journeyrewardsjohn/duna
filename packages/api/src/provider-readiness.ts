@@ -104,3 +104,39 @@ export function loadProviderReadiness(
     }),
   };
 }
+
+/**
+ * The HTTP convention for "this provider is not set up in this runtime":
+ * status 200 (it is an honest state, not a failure, so nothing logs an error
+ * and clients do not retry) with this body. Clients check `state`.
+ */
+export const PROVIDER_NOT_CONFIGURED_STATE = "provider-not-configured";
+
+export interface ProviderNotConfiguredBody {
+  readonly state: typeof PROVIDER_NOT_CONFIGURED_STATE;
+  readonly status: "not-configured";
+  /** A `ProviderKey` where the registry has one, else the feature name. */
+  readonly provider: string;
+  readonly message?: string;
+}
+
+export function providerNotConfiguredBody(
+  provider: string,
+  message?: string,
+): ProviderNotConfiguredBody {
+  return {
+    state: PROVIDER_NOT_CONFIGURED_STATE,
+    status: "not-configured",
+    provider,
+    ...(message ? { message } : {}),
+  };
+}
+
+export function providerNotConfiguredResponse(
+  provider: string,
+  message?: string,
+): Response {
+  return Response.json(providerNotConfiguredBody(provider, message), {
+    headers: { "cache-control": "no-store" },
+  });
+}

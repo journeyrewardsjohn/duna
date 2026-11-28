@@ -4,46 +4,34 @@ import type {
   ReactElement,
   SVGProps,
 } from "react";
+import { glyphAliases, type MarkShape } from "./glyphs";
 import {
-  glyphAliases,
-  glyphGroups,
-  type Glyph,
-  type MarkShape,
-} from "./glyphs";
+  glyphAliasNames,
+  glyphFamilies,
+  glyphNames,
+  glyphTable as glyphs,
+  iconSizes,
+  iconStroke,
+  resolveGlyph,
+  type GlyphName,
+  type IconSize,
+} from "./glyph-index";
 
-/**
- * Icon sizes by role. Nothing else is allowed: 14 in chips and dense rows,
- * 16 inline with text, 20 in buttons, rows and inputs, 24 in navigation. A
- * brand mark is never above 24 inside a control.
- */
-export const iconSizes = {
-  chip: 14,
-  inline: 16,
-  control: 20,
-  nav: 24,
-} as const;
-export type IconSize = keyof typeof iconSizes;
+// The sizes, stroke, names and lookup live in the pure `glyph-index.ts`, which
+// the React Native icon shares; they are re-exported here unchanged.
+export {
+  glyphAliasNames,
+  glyphFamilies,
+  glyphNames,
+  iconSizes,
+  iconStroke,
+  type GlyphName,
+  type IconSize,
+};
 
 /** Sizes the Tideline `Icon` used before the role names; they still resolve. */
 const legacySizes = { sm: "inline", md: "control", lg: "nav" } as const;
 export type LegacyIconSize = keyof typeof legacySizes;
-
-/** The brand stroke, shared by every line glyph. */
-export const iconStroke = {
-  width: 1.75,
-  linecap: "square",
-  linejoin: "miter",
-} as const;
-
-const glyphs: Record<string, Glyph> = Object.assign(
-  {},
-  ...Object.values(glyphGroups),
-) as Record<string, Glyph>;
-
-export type GlyphName = keyof typeof glyphAliases | GlyphKey;
-type GlyphKey = {
-  [G in keyof typeof glyphGroups]: keyof (typeof glyphGroups)[G];
-}[keyof typeof glyphGroups];
 
 /**
  * Names other icon sets add through `registerIcons` (for example the existing
@@ -53,20 +41,6 @@ type GlyphKey = {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ExternalIcons {}
 export type IconName = GlyphName | Extract<keyof ExternalIcons, string>;
-
-/** The canonical drawn names (aliases excluded), in a stable order. */
-export const glyphNames = Object.keys(glyphs).sort() as GlyphKey[];
-/** Older names that resolve to a canonical glyph. */
-export const glyphAliasNames = Object.keys(glyphAliases).sort() as Array<
-  keyof typeof glyphAliases
->;
-/** Which family each canonical name belongs to (for the gallery). */
-export const glyphFamilies = Object.fromEntries(
-  Object.entries(glyphGroups).map(([group, items]) => [
-    group,
-    Object.keys(items).sort(),
-  ]),
-) as Record<keyof typeof glyphGroups, string[]>;
 
 const external = new Map<string, ComponentType<SVGProps<SVGSVGElement>>>();
 
@@ -112,11 +86,6 @@ function resolveSize(size: IconProps["size"]): IconSize {
   return size in legacySizes
     ? legacySizes[size as LegacyIconSize]
     : (size as IconSize);
-}
-
-function resolveGlyph(name: string): Glyph | undefined {
-  const canonical = (glyphAliases as Record<string, string>)[name] ?? name;
-  return glyphs[canonical];
 }
 
 function Shape({ shape }: { shape: MarkShape }): ReactElement {

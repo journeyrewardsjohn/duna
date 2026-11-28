@@ -17,6 +17,7 @@
     "@duna/messaging-client": "workspace:*",
     "@duna/observability": "workspace:*",
     "@duna/scheduling": "workspace:*",
+    "@duna/tideline-core": "workspace:*",
     "@duna/ui": "workspace:*",
     "@higgsfield/client": "0.2.1",
     "@livekit/protocol": "1.50.4",

@@ -155,6 +155,56 @@ describe("CursorSyncEngine", () => {
     vi.useRealTimers();
   });
 
+  it("stops opening streams when live updates are not configured", async () => {
+    vi.useFakeTimers();
+    const sources: Array<{ onerror: ((event: Event) => void) | null }> = [];
+    const probeAccepts: string[] = [];
+    const engine = new CursorSyncEngine({
+      baseUrl: "https://duna.test/api/messaging",
+      eventSourceFactory: () => {
+        const source = {
+          onopen: null,
+          onmessage: null,
+          onerror: null,
+          close: () => undefined,
+        };
+        sources.push(source);
+        return source;
+      },
+      fetchClient: vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input).endsWith("/updates")) {
+            probeAccepts.push(
+              String((init?.headers as Record<string, string>).accept),
+            );
+            return jsonResponse({
+              state: "provider-not-configured",
+              status: "not-configured",
+              provider: "messagingWakeups",
+            });
+          }
+          return jsonResponse({
+            items: [],
+            nextCursor: null,
+            serverTime: "2026-08-11T10:00:01.000Z",
+          });
+        },
+      ) as typeof fetch,
+      pollIntervalMs: 1_000_000,
+      reconnectBaseMs: 1_000,
+      reconnectMaxMs: 30_000,
+    });
+    engine.connect();
+    expect(sources).toHaveLength(1);
+    // The browser ends the stream (the server answered 204).
+    sources[0]!.onerror?.(new Event("error"));
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(probeAccepts).toEqual(["application/json"]);
+    expect(sources).toHaveLength(1);
+    engine.disconnect();
+    vi.useRealTimers();
+  });
+
   it("reconciles a same-sequence tombstone without an SSE hint", async () => {
     const conversationId = "10000000-0000-4000-8000-000000000001";
     let messageUpdatedAt = "2026-08-11T10:00:00.000Z";

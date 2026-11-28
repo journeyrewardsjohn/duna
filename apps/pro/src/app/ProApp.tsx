@@ -1,7 +1,7 @@
 import { useProRuntime } from "../../runtime";
 import { useColorScheme, Animated, Linking, Easing, View } from "react-native";
 import { useState, useRef, useEffect } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useTheme } from "@duna/ui/native/theme";
 import { listenForMessagingNotificationResponses } from "../../messaging-notifications";
 import { SessionNotesScreen } from "../../session-notes";
 import { DunaAiScreen } from "../../duna-ai-screen";
@@ -42,6 +42,13 @@ import { MoreScreen } from "../features/more";
 import { TabBar } from "./TabBar";
 import { DevicePostureProvider } from "@duna/expo-device-posture";
 import { ProLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
+import { devLaunchUrl } from "../features/dev/dev-launch";
+import {
+  ProFoundations,
+  foundationsAutostart,
+  parseFoundationsUrl,
+  type FoundationsOptions,
+} from "../features/dev/Foundations";
 
 export function ProApp() {
   const {
@@ -74,8 +81,10 @@ export function ProApp() {
   const [sessionNotePersonId, setSessionNotePersonId] = useState<string>();
   const [scoreMatchId, setScoreMatchId] = useState<string>();
   const [calendarEntryId, setCalendarEntryId] = useState<string>();
-  const [themePreference, setThemePreference] =
-    useState<ThemePreference>("light");
+  // The saved choice ("duna-theme": light, dark or system) lives in the
+  // design system's ThemeProvider at the app root; it persists it too.
+  const { preference: themePreference, setPreference: setThemePreference } =
+    useTheme();
   const theme = themePreference === "system" ? deviceTheme : themePreference;
   // v3 ground inversion: operational browsing follows the chosen appearance,
   // while courtside scoring is always the rare, high-focus live ground.
@@ -85,6 +94,10 @@ export function ProApp() {
   // Development-only Layout lab: preview builds only, never production navigation.
   const [layoutLabOpen, setLayoutLabOpen] = useState(
     Boolean(layoutLabAutostart),
+  );
+  // Development-only Foundations gallery (preview builds only).
+  const [foundations, setFoundations] = useState<FoundationsOptions | null>(
+    foundationsAutostart,
   );
   const previewRef = useRef(mode === "preview");
   previewRef.current = mode === "preview";
@@ -120,15 +133,12 @@ export function ProApp() {
   };
 
   useEffect(() => {
-    void AsyncStorage.getItem("duna-theme").then((stored) => {
-      if (stored === "dark" || stored === "light" || stored === "system") {
-        setThemePreference(stored);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
     const openActivity = (url: string | null) => {
+      const foundationsLink = parseFoundationsUrl(url);
+      if (foundationsLink) {
+        if (previewRef.current) setFoundations(foundationsLink);
+        return;
+      }
       if (url?.startsWith("duna-pro://dev/layout-lab")) {
         if (previewRef.current) setLayoutLabOpen(true);
         return;
@@ -182,7 +192,9 @@ export function ProApp() {
         void refresh();
       }
     };
-    void Linking.getInitialURL().then((url) => openActivity(url ?? null));
+    void Linking.getInitialURL().then((url) =>
+      openActivity(url ?? devLaunchUrl()),
+    );
     const subscription = Linking.addEventListener("url", ({ url }) =>
       openActivity(url),
     );
@@ -233,7 +245,6 @@ export function ProApp() {
                   ? "dark"
                   : "system";
             setThemePreference(next);
-            void AsyncStorage.setItem("duna-theme", next);
           },
         }}
       >
@@ -491,6 +502,12 @@ export function ProApp() {
       {shell}
       {layoutLabOpen && mode === "preview" ? (
         <ProLayoutLab onClose={() => setLayoutLabOpen(false)} />
+      ) : null}
+      {foundations && mode === "preview" ? (
+        <ProFoundations
+          initial={foundations}
+          onClose={() => setFoundations(null)}
+        />
       ) : null}
     </DevicePostureProvider>
   );

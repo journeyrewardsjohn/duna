@@ -1,28 +1,43 @@
+import {
+  nativeColors,
+  nativeTokens as generated,
+} from "./native/tokens/tokens.native";
+
 export type DunaTheme = "light" | "dark";
 export type DunaThemePreference = DunaTheme | "system";
 export type DunaZone = "editorial" | "athletic" | "live";
 export type DunaContrast = "ambient" | "bright" | "glare";
 
+const role = generated.color.light;
+const ramp = generated.ramp;
+const brand = generated.brand;
+
+/**
+ * The older environmental palette, re-pointed at the 4.1.1 token values by
+ * meaning (sand to Dune, marine to the tide ramp, ink to Night Court, fog to
+ * Salt). Kept for screens that have not migrated.
+ */
 export const environmentalColors = {
-  sand100: "#EFE6D3",
-  sand300: "#E2CFA6",
-  sand500: "#C9A96A",
-  marine200: "#B5CCD3",
-  marine400: "#8FB0BC",
-  marine900: "#22343B",
-  ink: "#1B1B19",
-  inkSoft: "#3A3A36",
-  fog50: "#F6F5F1",
-  fog100: "#EDECE6",
-  white: "#FFFFFF",
-  flare: "#E8683A",
-  flareDeep: "#B84A20",
-  signal: "#C9E265",
-  dusk: "#FBF3F4",
-  duskDeep: "#EDD3D9",
-  gain: "#2F6B3A",
-  loss: "#9A4A2E",
-  pending: "#8A8578",
+  sand100: role["sun-wash"],
+  sand300: ramp["dune-300"],
+  sand500: ramp["dune-500"],
+  marine200: ramp["tide-200"],
+  marine400: ramp["tide-400"],
+  marine900: brand["night-court"],
+  ink: brand["night-court"],
+  inkSoft: role["text-2"],
+  fog50: brand.salt,
+  fog100: role["surface-sunken"],
+  white: ramp["haze-0"],
+  /** Was the retired flare orange: Hardwood (a warm category colour, not live). */
+  flare: ramp["hardwood-400"],
+  flareDeep: ramp["hardwood-500"],
+  signal: ramp["dune-400"],
+  dusk: ramp["dusk-100"],
+  duskDeep: ramp["dusk-300"],
+  gain: role.positive,
+  loss: role.danger,
+  pending: role["text-3"],
 } as const;
 
 export type ResolvedDunaTokens = {
@@ -56,193 +71,65 @@ export type ResolvedDunaTokens = {
   readonly focusRing: string;
 };
 
+/**
+ * The legacy context names, re-pointed at Tideline 4.1.1 roles (work package
+ * M-F0/M-F1): every value comes from the generated tokens, never a literal.
+ * The retired flare orange maps by meaning: the warm signal (`sun-ink` on
+ * light, Dune on dark) everywhere, and Solar (`live`) only in the live zone.
+ * Screens move to `@duna/ui/native` as they migrate.
+ */
+function legacyContext(
+  theme: "light" | "dark",
+  zone: DunaZone,
+): ResolvedDunaTokens {
+  const live = zone === "live";
+  const role = nativeColors(live ? "live" : theme);
+  const dark = live || theme === "dark";
+  return {
+    ground: role.ground,
+    groundWarm: role["sun-wash"],
+    groundCool: role["surface-sunken"],
+    surface1: role.surface,
+    surface2: role["surface-sunken"],
+    surface3: role["surface-raised"],
+    hairline: role.line,
+    hairlineStrong: role["line-strong"],
+    edgeLight: "transparent",
+    scrim: role.scrim,
+    text1: role.text,
+    text2: role["text-2"],
+    text3: role["text-3"],
+    textOnAccent: role["on-action"],
+    flare: live ? role.live : dark ? role.sun : role["sun-ink"],
+    flareText: live ? role["live-ink"] : role["sun-ink"],
+    flareFill: live ? role["live-wash"] : role["sun-wash"],
+    flareBorder: live ? role.live : role.sun,
+    signal: role.energy,
+    gold: dark ? role.sun : role["sun-ink"],
+    gain: role.positive,
+    loss: role.danger,
+    imageVeil: dark ? role.scrim : "transparent",
+    dissolve: role.ground,
+    buttonPrimaryBackground: role.action,
+    buttonPrimaryForeground: role["on-action"],
+    buttonGhostBorder: role["line-strong"],
+    focusRing: role.focus,
+  };
+}
+
 const resolvedContexts: Record<
   DunaTheme,
   Record<DunaZone, ResolvedDunaTokens>
 > = {
   light: {
-    editorial: {
-      ground: "#F6F5F1",
-      groundWarm: "#EFE6D3",
-      groundCool: "#B5CCD3",
-      surface1: "#FFFFFF",
-      surface2: "#EDECE6",
-      surface3: "#FFFFFF",
-      hairline: "rgba(27,27,25,0.08)",
-      hairlineStrong: "rgba(27,27,25,0.18)",
-      edgeLight: "transparent",
-      scrim: "rgba(27,27,25,0.44)",
-      text1: "#1B1B19",
-      text2: "#3A3A36",
-      text3: "#766F61",
-      textOnAccent: "#FFFFFF",
-      flare: "#E8683A",
-      flareText: "#B84A20",
-      flareFill: "rgba(232,104,58,0.13)",
-      flareBorder: "rgba(232,104,58,0.26)",
-      signal: "#C9E265",
-      gold: "#C9A96A",
-      gain: "#2F6B3A",
-      loss: "#9A4A2E",
-      imageVeil: "transparent",
-      dissolve: "#F6F5F1",
-      buttonPrimaryBackground: "#1B1B19",
-      buttonPrimaryForeground: "#F6F5F1",
-      buttonGhostBorder: "rgba(27,27,25,0.22)",
-      focusRing: "#E8683A",
-    },
-    athletic: {
-      ground: "#F6F5F1",
-      groundWarm: "#EFE6D3",
-      groundCool: "#B5CCD3",
-      surface1: "#FFFFFF",
-      surface2: "#EDECE6",
-      surface3: "#FFFFFF",
-      hairline: "rgba(27,27,25,0.08)",
-      hairlineStrong: "rgba(27,27,25,0.18)",
-      edgeLight: "transparent",
-      scrim: "rgba(27,27,25,0.44)",
-      text1: "#1B1B19",
-      text2: "#3A3A36",
-      text3: "#766F61",
-      textOnAccent: "#FFFFFF",
-      flare: "#E8683A",
-      flareText: "#B84A20",
-      flareFill: "rgba(232,104,58,0.13)",
-      flareBorder: "rgba(232,104,58,0.26)",
-      signal: "#C9E265",
-      gold: "#C9A96A",
-      gain: "#2F6B3A",
-      loss: "#9A4A2E",
-      imageVeil: "transparent",
-      dissolve: "#F6F5F1",
-      buttonPrimaryBackground: "#1B1B19",
-      buttonPrimaryForeground: "#F6F5F1",
-      buttonGhostBorder: "rgba(27,27,25,0.22)",
-      focusRing: "#E8683A",
-    },
-    live: {
-      ground: "#1B1B19",
-      groundWarm: "#231F19",
-      groundCool: "#22343B",
-      surface1: "rgba(246,245,241,0.05)",
-      surface2: "rgba(246,245,241,0.08)",
-      surface3: "#232320",
-      hairline: "rgba(246,245,241,0.10)",
-      hairlineStrong: "rgba(246,245,241,0.22)",
-      edgeLight: "rgba(246,245,241,0.06)",
-      scrim: "rgba(10,10,9,0.62)",
-      text1: "#F2F0EA",
-      text2: "rgba(242,240,234,0.72)",
-      text3: "rgba(242,240,234,0.52)",
-      textOnAccent: "#FFFFFF",
-      flare: "#E8683A",
-      flareText: "#F28A64",
-      flareFill: "rgba(232,104,58,0.16)",
-      flareBorder: "rgba(232,104,58,0.34)",
-      signal: "#C9E265",
-      gold: "#C9A96A",
-      gain: "#75B982",
-      loss: "#D28365",
-      imageVeil: "rgba(13,17,20,0.08)",
-      dissolve: "#1B1B19",
-      buttonPrimaryBackground: "#F2F0EA",
-      buttonPrimaryForeground: "#1B1B19",
-      buttonGhostBorder: "rgba(242,240,234,0.26)",
-      focusRing: "#F4794C",
-    },
+    editorial: legacyContext("light", "editorial"),
+    athletic: legacyContext("light", "athletic"),
+    live: legacyContext("light", "live"),
   },
   dark: {
-    editorial: {
-      ground: "#141310",
-      groundWarm: "#1E1A14",
-      groundCool: "#16232A",
-      surface1: "#1C1A16",
-      surface2: "#24211C",
-      surface3: "#2C2823",
-      hairline: "rgba(239,230,211,0.10)",
-      hairlineStrong: "rgba(239,230,211,0.20)",
-      edgeLight: "transparent",
-      scrim: "rgba(10,10,9,0.62)",
-      text1: "#F2F0EA",
-      text2: "#B8B4A8",
-      text3: "#918B80",
-      textOnAccent: "#141310",
-      flare: "#F4794C",
-      flareText: "#F4794C",
-      flareFill: "rgba(244,121,76,0.16)",
-      flareBorder: "rgba(244,121,76,0.34)",
-      signal: "#A8C44E",
-      gold: "#D4B77C",
-      gain: "#6BAE78",
-      loss: "#C4785C",
-      imageVeil: "rgba(13,17,20,0.16)",
-      dissolve: "#141310",
-      buttonPrimaryBackground: "#F2F0EA",
-      buttonPrimaryForeground: "#141310",
-      buttonGhostBorder: "rgba(242,240,234,0.26)",
-      focusRing: "#F4794C",
-    },
-    athletic: {
-      ground: "#141310",
-      groundWarm: "#1E1A14",
-      groundCool: "#16232A",
-      surface1: "#1C1A16",
-      surface2: "#24211C",
-      surface3: "#2C2823",
-      hairline: "rgba(239,230,211,0.10)",
-      hairlineStrong: "rgba(239,230,211,0.20)",
-      edgeLight: "transparent",
-      scrim: "rgba(10,10,9,0.62)",
-      text1: "#F2F0EA",
-      text2: "#B8B4A8",
-      text3: "#918B80",
-      textOnAccent: "#141310",
-      flare: "#F4794C",
-      flareText: "#F4794C",
-      flareFill: "rgba(244,121,76,0.16)",
-      flareBorder: "rgba(244,121,76,0.34)",
-      signal: "#A8C44E",
-      gold: "#D4B77C",
-      gain: "#6BAE78",
-      loss: "#C4785C",
-      imageVeil: "rgba(13,17,20,0.16)",
-      dissolve: "#141310",
-      buttonPrimaryBackground: "#F2F0EA",
-      buttonPrimaryForeground: "#141310",
-      buttonGhostBorder: "rgba(242,240,234,0.26)",
-      focusRing: "#F4794C",
-    },
-    live: {
-      ground: "#0D1114",
-      groundWarm: "#171410",
-      groundCool: "#101A20",
-      surface1: "#141A1E",
-      surface2: "#1B2429",
-      surface3: "#22343B",
-      hairline: "rgba(181,204,211,0.12)",
-      hairlineStrong: "rgba(181,204,211,0.24)",
-      edgeLight: "rgba(181,204,211,0.09)",
-      scrim: "rgba(6,8,9,0.70)",
-      text1: "#EDF1F2",
-      text2: "#A9B4B8",
-      text3: "#87959B",
-      textOnAccent: "#0D1114",
-      flare: "#F4794C",
-      flareText: "#F4794C",
-      flareFill: "rgba(244,121,76,0.16)",
-      flareBorder: "rgba(244,121,76,0.34)",
-      signal: "#A8C44E",
-      gold: "#D4B77C",
-      gain: "#6BAE78",
-      loss: "#C4785C",
-      imageVeil: "rgba(13,17,20,0.16)",
-      dissolve: "#0D1114",
-      buttonPrimaryBackground: "#EDF1F2",
-      buttonPrimaryForeground: "#0D1114",
-      buttonGhostBorder: "rgba(237,241,242,0.26)",
-      focusRing: "#F4794C",
-    },
+    editorial: legacyContext("dark", "editorial"),
+    athletic: legacyContext("dark", "athletic"),
+    live: legacyContext("dark", "live"),
   },
 };
 
@@ -290,14 +177,14 @@ export function resolveDunaTokens(
 function legacyPalette(theme: DunaTheme) {
   const token = resolveDunaTokens(theme, "editorial");
   return {
-    ink: theme === "light" ? "#1B1B19" : "#0D1114",
+    ink: generated.brand["night-court"],
     depth: token.surface1,
     navy: token.groundCool,
     navyLift: token.surface2,
     bone: token.text1,
     boneMuted: token.text2,
     sand: token.gold,
-    sandLight: theme === "light" ? "#EFE6D3" : "#1E1A14",
+    sandLight: token.groundWarm,
     aqua: token.buttonPrimaryBackground,
     aquaDeep: token.text2,
     flare: token.flare,
@@ -335,11 +222,12 @@ export const radii = {
   pill: 999,
 } as const;
 
+/** Native font faces (embedded; see `@duna/ui/native/type`). */
 export const typography = {
-  display: "Satoshi",
-  body: "Satoshi",
-  data: "Satoshi",
-  mono: "Satoshi",
+  display: "Jost-Medium",
+  body: "Geist-Regular",
+  data: "Geist-SemiBold",
+  mono: "GeistMono-Regular",
 } as const;
 
 export const numericTiers = {
