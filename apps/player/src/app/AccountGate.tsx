@@ -6,7 +6,6 @@
  */
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,15 +14,19 @@ import {
 import {
   DunaMark,
   DunaWordmark,
+  Rally,
   RallyLoader,
+  Rise,
   Text,
   ThemeOverride,
   Title,
+  useHaptics,
   useTheme,
 } from "@duna/ui/native";
 import { StatusBar } from "expo-status-bar";
 import type { ReactNode } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PersonAvatar } from "../shared/PersonAvatar";
 
 function GateAction({
   label,
@@ -152,12 +155,26 @@ export function SignedOutGate({
   );
 }
 
-/** Returning on this device: continue as the saved account, or switch. */
+/** "Good evening" for the hour on this device. Pure. */
+export function greetingFor(hour: number): string {
+  if (hour < 5) return "Late one";
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+/**
+ * Returning on this device, after sign-in (owner feedback 28 Nov, image 36):
+ * ONE person, centred and prominent on Night Court, the same Crest lockup the
+ * launch sequence turns its page onto, a warm line, Continue as the one
+ * action (Dune, 56 pt, a confirming haptic) and "Use a different account"
+ * quiet underneath. The parts Rally in once; reduced motion shows them at
+ * rest. Nothing here can be selected: it is not a list of accounts.
+ */
 export function ReturningAccountGate({
   busy,
   error,
   name,
-  initials,
   photoUrl,
   onContinue,
   onUseDifferentAccount,
@@ -165,60 +182,94 @@ export function ReturningAccountGate({
   readonly busy: boolean;
   readonly error?: string;
   readonly name: string;
-  readonly initials: string;
+  /** Kept for callers; the avatar derives its own initials from the name. */
+  readonly initials?: string;
   readonly photoUrl?: string;
   readonly onContinue: () => void;
   readonly onUseDifferentAccount: () => void;
 }) {
-  const { colors } = useTheme();
+  const haptics = useHaptics();
+  const firstName = name.trim().split(/\s+/)[0] ?? name;
+  const greeting = greetingFor(new Date().getHours());
   return (
-    <GateFrame
-      footer={
-        <>
-          {error ? (
-            <Text accessibilityRole="alert" tone="danger" variant="phone-meta">
-              {error}
+    <ThemeOverride theme="dark">
+      <GateFrame
+        footer={
+          <Rise delay={420}>
+            <View style={styles.actions}>
+              {error ? (
+                <Text
+                  accessibilityRole="alert"
+                  style={styles.center}
+                  tone="danger"
+                  variant="phone-meta"
+                >
+                  {error}
+                </Text>
+              ) : null}
+              <GateAction
+                busy={busy}
+                label={`Continue as ${firstName}`}
+                onPress={() => {
+                  haptics.confirmed(1);
+                  onContinue();
+                }}
+              />
+              <GateLink
+                disabled={busy}
+                label="Use a different account"
+                onPress={() => {
+                  haptics.selection();
+                  onUseDifferentAccount();
+                }}
+              />
+            </View>
+          </Rise>
+        }
+      >
+        <View style={styles.identity} testID="returning-account">
+          <Rise mode="grow">
+            <PersonAvatar name={name} photoUrl={photoUrl} ring size={128} />
+          </Rise>
+          <Rally itemStyle={styles.centerItem}>
+            <Text family="mono" tone="text-2" variant="micro">
+              {`${greeting.toUpperCase()}`}
             </Text>
-          ) : null}
-          <GateAction busy={busy} label="Continue" onPress={onContinue} />
-          <GateAction
-            disabled={busy}
-            kind="quiet"
-            label="Use a different account"
-            onPress={onUseDifferentAccount}
-          />
-        </>
-      }
+            <Title>{name}</Title>
+            <Text style={styles.center} tone="text-2" variant="phone-body">
+              Your games, plans and film are where you left them.
+            </Text>
+          </Rally>
+        </View>
+      </GateFrame>
+    </ThemeOverride>
+  );
+}
+
+/** A quiet text action under the primary one (44 pt target). */
+function GateLink({
+  label,
+  onPress,
+  disabled = false,
+}: {
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [styles.link, { opacity: pressed ? 0.6 : 1 }]}
     >
-      <Text family="mono" tone="text-2" variant="micro">
-        LOG IN AS
+      <Text tone="text-2" variant="phone-body" weight={500}>
+        {label}
       </Text>
-      <View style={styles.identity}>
-        {photoUrl ? (
-          <Image
-            accessibilityIgnoresInvertColors
-            source={{ uri: photoUrl }}
-            style={styles.photo}
-          />
-        ) : (
-          <View
-            style={[
-              styles.photo,
-              styles.initials,
-              { backgroundColor: colors.action },
-            ]}
-          >
-            <Text
-              style={{ color: colors["on-action"] }}
-              variant="phone-heading"
-            >
-              {initials}
-            </Text>
-          </View>
-        )}
-        <Title>{name}</Title>
-      </View>
-    </GateFrame>
+    </Pressable>
   );
 }
 
@@ -281,8 +332,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 24,
   },
-  identity: { alignItems: "flex-start", gap: 12 },
-  photo: { width: 72, height: 72, borderRadius: 36 },
-  initials: { alignItems: "center", justifyContent: "center" },
+  identity: { alignItems: "center", gap: 20 },
+  centerItem: { alignItems: "center", marginTop: 6 },
+  actions: { gap: 8 },
+  link: { minHeight: 44, alignItems: "center", justifyContent: "center" },
   loading: { alignItems: "center", justifyContent: "center" },
 });

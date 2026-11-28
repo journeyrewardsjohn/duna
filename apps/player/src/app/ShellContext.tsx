@@ -32,8 +32,12 @@ export interface ShellNavigation {
   /** The film, private notes and conversation of a match (a sheet). */
   readonly openMatchDetails: (match: MatchSummary) => void;
   readonly openOrganization: (slug: string) => void;
+  /** A venue's court times (route `court`). */
   readonly openVenue: (venueId: string) => void;
-  readonly openCourtBooking: (request: CourtBookingRequest) => void;
+  /** Court times at a venue; the booking flow opens from there (M-P3). */
+  readonly openCourtBooking: (
+    request: Partial<CourtBookingRequest> & { readonly venueId: string },
+  ) => void;
   readonly createMatch: () => void;
   readonly editProfile: () => void;
   readonly openArtwork: () => void;

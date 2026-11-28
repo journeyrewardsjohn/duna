@@ -49,7 +49,6 @@ import { VisionSecondScreen } from "../../vision-second-screen";
 import { CoachProfileModal } from "../features/coaches/CoachProfileModal";
 import type { MobileCoach } from "../features/coaches/coach-format";
 import type { CourtBookingRequest } from "../features/courts/court-types";
-import { VenueBookingModal } from "../features/courts/VenueBookingModal";
 import { VenueFinderModal } from "../features/courts/VenueFinderModal";
 import { devLaunchUrl } from "../features/dev/dev-launch";
 import {
@@ -154,10 +153,7 @@ export function DunaApp() {
   }>();
   const [bookingId, setBookingId] = useState<string>();
   const [courtFinderOpen, setCourtFinderOpen] = useState(false);
-  const [courtBookingRequest, setCourtBookingRequest] =
-    useState<CourtBookingRequest>();
   const [organizationSlug, setOrganizationSlug] = useState<string>();
-  const [organizationVenueId, setOrganizationVenueId] = useState<string>();
   const [createMatchOpen, setCreateMatchOpen] = useState(false);
   const [organizationCoach, setOrganizationCoach] = useState<MobileCoach>();
   const [profileEditorOpen, setProfileEditorOpen] = useState(false);
@@ -198,7 +194,11 @@ export function DunaApp() {
             );
           }
           if (destination.kind === "venue")
-            setOrganizationVenueId(destination.venueId);
+            dispatch({
+              type: "open",
+              route: "court",
+              targetId: destination.venueId,
+            });
         },
       });
   }
@@ -404,6 +404,24 @@ export function DunaApp() {
     setSelectedMatchShareToken(undefined);
   }, []);
 
+  /** Every way into court booking lands on the venue's court times (M-P3). */
+  const openCourt = useCallback(
+    (request: Partial<CourtBookingRequest> & { readonly venueId: string }) =>
+      dispatch({
+        type: "open",
+        route: "court",
+        targetId: request.venueId,
+        court: {
+          ...(request.date ? { date: request.date } : {}),
+          ...(request.durationMinutes
+            ? { durationMinutes: request.durationMinutes }
+            : {}),
+          ...(request.intent ? { intent: request.intent } : {}),
+        },
+      }),
+    [],
+  );
+
   const runAction = useCallback((action: HomeQuickAction) => {
     if (action === "upload-score") setScoreDraft(undefined);
     const navigation = quickActionNavigation(action);
@@ -428,7 +446,7 @@ export function DunaApp() {
           break;
         }
         case "venue":
-          setOrganizationVenueId(target.venueId);
+          openCourt({ venueId: target.venueId });
           return;
         case "club":
           setOrganizationSlug(target.slug);
@@ -465,7 +483,7 @@ export function DunaApp() {
           : `${dunaWebUrl}${href.startsWith("/") ? href : `/${href}`}`,
       );
     },
-    [events, matches, openEventAtIndex, openMatch],
+    [events, matches, openCourt, openEventAtIndex, openMatch],
   );
 
   const shell = useMemo<ShellNavigation>(
@@ -485,8 +503,8 @@ export function DunaApp() {
       openMatch,
       openMatchDetails,
       openOrganization: setOrganizationSlug,
-      openVenue: setOrganizationVenueId,
-      openCourtBooking: setCourtBookingRequest,
+      openVenue: (venueId: string) => openCourt({ venueId }),
+      openCourtBooking: openCourt,
       createMatch: () => setCreateMatchOpen(true),
       editProfile: () => setProfileEditorOpen(true),
       openArtwork: () => setArtworkStudioOpen(true),
@@ -508,6 +526,7 @@ export function DunaApp() {
       },
     }),
     [
+      openCourt,
       openEvent,
       openEventAtIndex,
       openMatch,
@@ -538,26 +557,6 @@ export function DunaApp() {
       )
     : undefined;
   const windowRoute = state.window?.entry;
-  const openFromVenue = (
-    matchId: string,
-    matchSlug: string,
-    close: () => void,
-  ) => {
-    const index = (runtime.dashboard?.events ?? []).findIndex(
-      (event) => event.id === matchId,
-    );
-    close();
-    setTimeout(() => {
-      if (index >= 0) {
-        setEventIndex(index);
-        return;
-      }
-      void WebBrowser.openBrowserAsync(
-        `${dunaWebUrl}/events/${encodeURIComponent(matchSlug)}`,
-      );
-    }, 280);
-  };
-
   return (
     <DevicePostureProvider>
       <ShellContext.Provider value={shell}>
@@ -666,7 +665,7 @@ export function DunaApp() {
                     dispatch({ type: "open", route: "messages" })
                   }
                   onOpenPath={openPath}
-                  onOpenVenue={setOrganizationVenueId}
+                  onOpenVenue={(venueId) => openCourt({ venueId })}
                   palette={{
                     canvas: dunaAppColors.card,
                     surface: dunaAppColors.card,
@@ -768,22 +767,9 @@ export function DunaApp() {
                 onClose={() => setCourtFinderOpen(false)}
                 onSelect={(request) => {
                   setCourtFinderOpen(false);
-                  setCourtBookingRequest(request);
+                  openCourt(request);
                 }}
                 visible={courtFinderOpen}
-              />
-              <VenueBookingModal
-                initialDate={courtBookingRequest?.date}
-                initialDurationMinutes={courtBookingRequest?.durationMinutes}
-                initialIntent={courtBookingRequest?.intent}
-                onClose={() => setCourtBookingRequest(undefined)}
-                onOpenMatch={(matchId, matchSlug) =>
-                  openFromVenue(matchId, matchSlug, () =>
-                    setCourtBookingRequest(undefined),
-                  )
-                }
-                venueId={courtBookingRequest?.venueId}
-                visible={Boolean(courtBookingRequest)}
               />
               <OrganizationExperienceModal
                 onClose={() => setOrganizationSlug(undefined)}
@@ -810,21 +796,11 @@ export function DunaApp() {
                 slug={organizationSlug}
                 theme="light"
               />
-              <VenueBookingModal
-                onClose={() => setOrganizationVenueId(undefined)}
-                onOpenMatch={(matchId, matchSlug) =>
-                  openFromVenue(matchId, matchSlug, () =>
-                    setOrganizationVenueId(undefined),
-                  )
-                }
-                venueId={organizationVenueId}
-                visible={Boolean(organizationVenueId)}
-              />
               <PickupModal
                 onClose={() => setCreateMatchOpen(false)}
                 onReserveCourtVenue={(request) => {
                   setCreateMatchOpen(false);
-                  setCourtBookingRequest(request);
+                  openCourt(request);
                 }}
                 visible={createMatchOpen}
               />
