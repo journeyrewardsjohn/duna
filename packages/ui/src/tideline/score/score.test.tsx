@@ -40,7 +40,7 @@ function srText(renderer: ReactTestRenderer): string {
 }
 
 describe("NetScore states", () => {
-  it("designs every match_status plus not-finished, and nothing else", () => {
+  it("designs every match_status value, and nothing else", () => {
     // A new enum value lands in MATCH_STATUSES (tested against the schema)
     // and fails here until NET_SCORE_LOOK designs it.
     expect(Object.keys(NET_SCORE_LOOK).sort()).toEqual(
