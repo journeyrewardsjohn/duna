@@ -13,7 +13,7 @@ import { useState, useTransition } from "react";
 import {
   cancelAccountDeletionAction,
   requestAccountDeletionAction,
-} from "@/app/app/settings/actions";
+} from "@/app/(legacy)/app/settings/actions";
 
 type Request = PlayerSettings["privacyRequests"][number];
 

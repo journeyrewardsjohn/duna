@@ -8,7 +8,7 @@ import { useMemo, useState, useTransition } from "react";
 import {
   predictProEventAction,
   predictProMatchAction,
-} from "@/app/events/[slug]/actions";
+} from "@/app/(legacy)/events/[slug]/actions";
 import { CountryCode } from "@/components/country-code";
 
 type ProMatch = PublicProEvent["matches"][number];

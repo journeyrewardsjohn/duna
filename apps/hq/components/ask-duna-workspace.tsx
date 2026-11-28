@@ -30,13 +30,21 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { defaultComponents, Streamdown, type Components } from "streamdown";
 import { getAskDunaInternalHref } from "../lib/ask-duna-links";
 import {
   askDunaFetch,
   notifyAskDunaHistory,
   type AskAction,
+  type AskActionControls,
   type AskConversation,
 } from "./ask-duna-client";
 
@@ -295,7 +303,6 @@ export function AskDunaWorkspace({
     <section
       className={`ask-duna ${history ? "ask-duna--history" : "ask-duna--new"}`}
       data-zone="editorial"
-      role="main"
     >
       <header className="ask-duna-header">
         <span>
@@ -470,6 +477,7 @@ export function AskDunaThread({
   pageLabel,
   visible = true,
   onBusy,
+  renderAction,
 }: {
   conversation: AskConversation;
   initialMessage: UserContent | null;
@@ -481,6 +489,12 @@ export function AskDunaThread({
   pageLabel?: string;
   visible?: boolean;
   onBusy?: (busy: boolean) => void;
+  /**
+   * Renders a proposal in place of the built-in review card (the new HQ
+   * shell's docked panel uses the design system's ProposalCard). The review
+   * itself, its receipt and the follow-up turn stay here.
+   */
+  renderAction?: (action: AskAction, controls: AskActionControls) => ReactNode;
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -834,79 +848,93 @@ export function AskDunaThread({
             ))}
           </fieldset>
         ))}
-        {actions.map((action) => (
-          <article className="ask-duna-review" key={action.id}>
-            <header>
-              <SlidersHorizontal size={18} aria-hidden />
-              <strong>
-                {action.status === "pending"
-                  ? "Ready for your review"
-                  : action.status === "succeeded"
-                    ? "Action receipt"
-                    : action.status === "uncertain"
-                      ? "Check the outcome"
-                      : action.status === "declined"
-                        ? "Change declined"
-                        : action.status === "executing"
-                          ? "Action in progress"
-                          : "Action needs attention"}
-              </strong>
-              <span>{action.status}</span>
-            </header>
-            <p>{action.summary}</p>
-            <details>
-              <summary>View exact change</summary>
-              <strong>
-                {action.operation
-                  .replace("operator.", "")
-                  .replace(/([a-z])([A-Z])/g, "$1 $2")}
-              </strong>
-              <pre>
-                {JSON.stringify(
-                  Object.fromEntries(
-                    Object.entries(action.input).filter(
-                      ([key]) => key !== "idempotencyKey",
-                    ),
-                  ),
-                  null,
-                  2,
-                )}
-              </pre>
-            </details>
-            {action.result && (
+        {actions.map((action) =>
+          renderAction ? (
+            <Fragment key={action.id}>
+              {renderAction(action, {
+                review: (decision) => review(action, decision),
+                disabled: reviewing !== null || archived || busy || resuming,
+                reviewing: reviewing === action.id,
+              })}
+            </Fragment>
+          ) : (
+            <article className="ask-duna-review" key={action.id}>
+              <header>
+                <SlidersHorizontal size={18} aria-hidden />
+                <strong>
+                  {action.status === "pending"
+                    ? "Ready for your review"
+                    : action.status === "succeeded"
+                      ? "Action receipt"
+                      : action.status === "uncertain"
+                        ? "Check the outcome"
+                        : action.status === "declined"
+                          ? "Change declined"
+                          : action.status === "executing"
+                            ? "Action in progress"
+                            : "Action needs attention"}
+                </strong>
+                <span>{action.status}</span>
+              </header>
+              <p>{action.summary}</p>
               <details>
-                <summary>View saved result</summary>
-                <pre>{JSON.stringify(action.result, null, 2)}</pre>
+                <summary>View exact change</summary>
+                <strong>
+                  {action.operation
+                    .replace("operator.", "")
+                    .replace(/([a-z])([A-Z])/g, "$1 $2")}
+                </strong>
+                <pre>
+                  {JSON.stringify(
+                    Object.fromEntries(
+                      Object.entries(action.input).filter(
+                        ([key]) => key !== "idempotencyKey",
+                      ),
+                    ),
+                    null,
+                    2,
+                  )}
+                </pre>
               </details>
-            )}
-            {action.status === "pending" && (
-              <footer>
-                <small>
-                  Review expires{" "}
-                  {new Date(action.expiresAt).toLocaleTimeString(undefined, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </small>
-                <button
-                  type="button"
-                  disabled={reviewing !== null || archived || busy || resuming}
-                  onClick={() => void review(action, "decline")}
-                >
-                  Decline
-                </button>
-                <button
-                  className="ask-duna-primary"
-                  type="button"
-                  disabled={reviewing !== null || archived || busy || resuming}
-                  onClick={() => void review(action, "approve")}
-                >
-                  {reviewing === action.id ? "Saving…" : "Approve change"}
-                </button>
-              </footer>
-            )}
-          </article>
-        ))}
+              {action.result && (
+                <details>
+                  <summary>View saved result</summary>
+                  <pre>{JSON.stringify(action.result, null, 2)}</pre>
+                </details>
+              )}
+              {action.status === "pending" && (
+                <footer>
+                  <small>
+                    Review expires{" "}
+                    {new Date(action.expiresAt).toLocaleTimeString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </small>
+                  <button
+                    type="button"
+                    disabled={
+                      reviewing !== null || archived || busy || resuming
+                    }
+                    onClick={() => void review(action, "decline")}
+                  >
+                    Decline
+                  </button>
+                  <button
+                    className="ask-duna-primary"
+                    type="button"
+                    disabled={
+                      reviewing !== null || archived || busy || resuming
+                    }
+                    onClick={() => void review(action, "approve")}
+                  >
+                    {reviewing === action.id ? "Saving…" : "Approve change"}
+                  </button>
+                </footer>
+              )}
+            </article>
+          ),
+        )}
         <div ref={end} />
       </div>
       {turnFailure && !busy && !resuming && (

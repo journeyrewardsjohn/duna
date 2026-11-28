@@ -5,7 +5,7 @@ import { Badge } from "@duna/ui";
 import { Plus, ShieldCheck, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState, useTransition } from "react";
-import { addDependentAction } from "@/app/app/settings/actions";
+import { addDependentAction } from "@/app/(legacy)/app/settings/actions";
 
 type Household = PlayerSettings["household"];
 

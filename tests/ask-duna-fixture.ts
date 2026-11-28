@@ -32,6 +32,14 @@ export async function installAskDunaFixture(
     expiresAt: new Date(Date.now() + 900_000).toISOString(),
     result: null as Record<string, unknown> | null,
   };
+  // The new HQ shell asks the server whether Ask Duna can run; on the test
+  // servers this cookie says "yes, against this fixture" (hq-session.ts).
+  const hqBaseUrl =
+    process.env.PLAYWRIGHT_HQ_BASE_URL ??
+    `http://127.0.0.1:${process.env.PLAYWRIGHT_HQ_PORT ?? "3001"}`;
+  await page
+    .context()
+    .addCookies([{ name: "duna-demo-ask", value: "fixture", url: hqBaseUrl }]);
   await page.route("**/api/ask-duna/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname.replace("/api/ask-duna/", "");

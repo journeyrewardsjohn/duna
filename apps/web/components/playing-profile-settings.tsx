@@ -14,7 +14,7 @@ import {
   retryPlayerSourceAction,
   startIdentityVerificationAction,
   updatePlayingProfileAction,
-} from "@/app/app/settings/actions";
+} from "@/app/(legacy)/app/settings/actions";
 import { HeightInput } from "@/components/height-input";
 
 type PlayerSourceConnection = PlayerSettings["sourceConnections"][number];

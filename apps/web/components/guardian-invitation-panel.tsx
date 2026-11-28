@@ -5,7 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { Check, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { claimGuardianInvitationAction } from "@/app/join/guardian/[token]/actions";
+import { claimGuardianInvitationAction } from "@/app/(legacy)/join/guardian/[token]/actions";
 
 type Invitation = NonNullable<
   inferRouterOutputs<AppRouter>["public"]["guardianInvitation"]

@@ -32,7 +32,7 @@ import {
   revokeComplimentaryDunaPlusAction,
   updateVideoQuotaPolicyAction,
   type VideoAdminActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: VideoAdminActionState = {
   status: "idle",

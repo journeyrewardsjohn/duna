@@ -6,8 +6,8 @@ import { formatMoney } from "@duna/core";
 import { Badge, Numeric } from "@duna/ui";
 import { Check, Clock3, CreditCard, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { startShareCheckoutAction } from "@/app/app/booking-invite/[inviteToken]/actions";
-import { courtCheckoutStatusAction } from "@/app/app/venues/[venueId]/actions";
+import { startShareCheckoutAction } from "@/app/(legacy)/app/booking-invite/[inviteToken]/actions";
+import { courtCheckoutStatusAction } from "@/app/(legacy)/app/venues/[venueId]/actions";
 
 type BookingInvite =
   inferRouterOutputs<AppRouter>["public"]["courtBookingInvite"];

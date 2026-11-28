@@ -21,7 +21,7 @@ import {
 import {
   refreshVisionRemoteAction,
   updateVisionRemoteAction,
-} from "@/app/vision/remote/[token]/actions";
+} from "@/app/(legacy)/vision/remote/[token]/actions";
 
 const defaultCorners = [
   { x: 0.33, y: 0.26 },

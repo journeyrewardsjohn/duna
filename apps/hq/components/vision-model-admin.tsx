@@ -27,7 +27,7 @@ import {
   requestVisionTrainingAction,
   reviewVisionModelAction,
   type VisionAdminActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: VisionAdminActionState = { status: "idle", message: "" };
 

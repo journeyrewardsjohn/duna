@@ -134,7 +134,7 @@ the team, talks to members. Lives in HQ on a laptop and in Pro on the phone.
 | Step    | The person does → expected result                                        | Surface | Packages | Status  |
 | ------- | ------------------------------------------------------------------------ | ------- | -------- | ------- |
 | CO-11.1 | Today offers "What would you like Duna to do?"                           | HQ      | H1       | Main    |
-| CO-11.2 | Opens Ask Duna as a docked panel from the top bar or ⌘J                  | HQ      | S1       | Planned |
+| CO-11.2 | Opens Ask Duna as a docked panel from the top bar or ⌘J                  | HQ      | S1       | Main    |
 | CO-11.3 | Ask Duna fills the same form a person uses; applies only after a confirm | HQ      | S4       | Planned |
 
 ### CO-12 Grow: reports, marketing and the website
@@ -147,10 +147,10 @@ the team, talks to members. Lives in HQ on a laptop and in Pro on the phone.
 
 ### CO-13 Identity chrome and access
 
-| Step    | The person does → expected result                                                   | Surface | Packages | Status  |
-| ------- | ----------------------------------------------------------------------------------- | ------- | -------- | ------- |
-| CO-13.1 | Switches organisation; creates a new one from the switcher                          | HQ      | S1       | Planned |
-| CO-13.2 | A coach or player who opens an owner page sees "You need access", not an error page | HQ      | S1       | Planned |
+| Step    | The person does → expected result                                                   | Surface | Packages | Status |
+| ------- | ----------------------------------------------------------------------------------- | ------- | -------- | ------ |
+| CO-13.1 | Switches organisation; creates a new one from the switcher                          | HQ      | S1       | Main   |
+| CO-13.2 | A coach or player who opens an owner page sees "You need access", not an error page | HQ      | S1       | Main   |
 
 ### CO-14 Pay the team
 
@@ -278,21 +278,21 @@ approves requests, stops play for weather.
 Arrives from search or a link, looks around, decides to book or to run a
 club, and signs up without losing their place.
 
-| Step   | The person does → expected result                                                            | Surface | Packages   | Status  |
-| ------ | -------------------------------------------------------------------------------------------- | ------- | ---------- | ------- |
-| VI-1.1 | Opens the home page → leads with clubs; audience selector; no layout jump or sideways scroll | Web     | P2         | Main    |
-| VI-1.2 | Chooses For Players → the player landing page with "Find a game"                             | Web     | P2         | Main    |
-| VI-2.1 | Discovers play without signing in                                                            | Web     | P3         | Main    |
-| VI-2.2 | Opens a public event page                                                                    | Web     | P2         | Main    |
-| VI-2.3 | Opens a club's public page                                                                   | Web     | P4         | Main    |
-| VI-2.4 | Reads the rankings                                                                           | Web     | P2         | Main    |
-| VI-3.1 | Opens a public checkout → what happens next is explained                                     | Web     | P5         | Main    |
-| VI-3.2 | Booking asks them to sign in and returns them to the same place                              | Web     | P1         | Planned |
-| VI-4.1 | Opens sign-up → a secure account hand-off                                                    | Web     | P2         | Main    |
-| VI-4.2 | After sign-up, onboarding asks who the account is for (me, my junior, my club)               | Web     | P1         | Planned |
-| VI-4.n | Installs the app; first open (Crest sequence) and sign-in                                    | Player  | M-C6, M-P0 | Native  |
-| VI-5.1 | A club organiser starts an event without an account                                          | Web     | P2         | Main    |
-| VI-5.2 | A machine reads the Markdown companion of a public page (`/index.md`)                        | Web     | P2         | Main    |
+| Step   | The person does → expected result                                                                                                  | Surface | Packages   | Status  |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------- | ------- |
+| VI-1.1 | Opens the home page → leads with the Where · When · What search; "I play / I run a club" switch; no layout jump or sideways scroll | Web     | SITE-1     | Main    |
+| VI-1.2 | Chooses "I run a club" → the call to action becomes "Start your club" and is remembered                                            | Web     | SITE-1     | Main    |
+| VI-2.1 | Discovers play without signing in                                                                                                  | Web     | P3         | Main    |
+| VI-2.2 | Opens a public event page                                                                                                          | Web     | P2         | Main    |
+| VI-2.3 | Opens a club's public page                                                                                                         | Web     | P4         | Main    |
+| VI-2.4 | Reads the rankings                                                                                                                 | Web     | P2         | Main    |
+| VI-3.1 | Opens a public checkout → what happens next is explained                                                                           | Web     | P5         | Main    |
+| VI-3.2 | Booking asks them to sign in and returns them to the same place                                                                    | Web     | P1         | Planned |
+| VI-4.1 | Opens sign-up → a secure account hand-off                                                                                          | Web     | P2         | Main    |
+| VI-4.2 | After sign-up, onboarding asks who the account is for (me, my junior, my club)                                                     | Web     | P1         | Planned |
+| VI-4.n | Installs the app; first open (Crest sequence) and sign-in                                                                          | Player  | M-C6, M-P0 | Native  |
+| VI-5.1 | A club organiser starts an event without an account                                                                                | Web     | P2         | Main    |
+| VI-5.2 | A machine reads the Markdown companion of a public page (`/index.md`)                                                              | Web     | P2         | Main    |
 
 ## Gaps for the orchestrator
 
@@ -337,18 +337,18 @@ Found in demo mode by the persona suite and its probe of every HQ and web route
 for each persona. Each is recorded with its owner in
 `tests/e2e/personas/support/known-issues.ts` or as the evidence in a `fixme`.
 
-| Page                                  | Evidence                                                                                                       | Owner  |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------ |
-| Every HQ page                         | `GET /api/ask-duna/conversations` answers 401 to the demo actor; the console logs an error on every page       | S1     |
-| HQ `/messages`, web `/app/messages`   | `GET /api/messaging/updates` answers 503 in demo mode instead of an honest "live updates not configured" state | H3, P7 |
-| Web `/discover/map`                   | `GET /api/mapbox/token` answers 503 without a token, instead of a normal "not configured yet" response         | C3     |
-| HQ `/promo-codes`                     | "This page couldn't load": a Server Components error for every persona                                         | H13    |
-| Web `/app/video`                      | "This page couldn't load": a Server Components error (React error 419 for the player)                          | P9     |
-| HQ `/payments/*` as a coach           | "This page couldn't load" instead of a permission-denied state                                                 | H10    |
-| Every HQ page as a player or guardian | "This page couldn't load" instead of "You need access" (a member who is not staff)                             | S1     |
-| HQ `/training/practice-plans/create`  | Block search field has no accessible name                                                                      | H7     |
-| HQ `/audiences`                       | Search field has no accessible name                                                                            | H13    |
-| HQ `/ask`, `/account`                 | No main landmark                                                                                               | S1     |
+| Page                                  | Evidence                                                                                                                                  | Owner  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Every HQ page                         | `GET /api/ask-duna/conversations` answers 401 to the demo actor; the console logs an error on every page                                  | S1     |
+| HQ `/inbox`, web `/app/messages`      | `GET /api/messaging/updates` answers 503 in demo mode instead of an honest "live updates not configured" state                            | H3, P7 |
+| Web `/discover/map`                   | `GET /api/mapbox/token` answers 503 without a token, instead of a normal "not configured yet" response                                    | C3     |
+| HQ `/marketing/promo-codes`           | "This page couldn't load": a Server Components error for every persona                                                                    | H13    |
+| Web `/app/video`                      | "This page couldn't load": a Server Components error (React error 419 for the player)                                                     | P9     |
+| HQ `/money/*` as a coach              | "This page couldn't load" instead of a permission-denied state                                                                            | H10    |
+| Every HQ page as a player or guardian | "This page couldn't load" instead of "You need access" (a member who is not staff); fixed on Today (S1), the rest move with their screens | S1     |
+| HQ `/training/practice-plans/create`  | Block search field has no accessible name                                                                                                 | H7     |
+| HQ `/marketing/audiences`             | Search field has no accessible name                                                                                                       | H13    |
+| HQ `/ask`, `/account`                 | No main landmark                                                                                                                          | S1     |
 
 Not counted as app defects: third-party CDN fonts (the legacy Satoshi and DM
 Mono loads) failing to load in a sandboxed browser; F3 removes those loads.

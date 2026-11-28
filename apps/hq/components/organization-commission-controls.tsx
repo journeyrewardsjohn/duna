@@ -7,7 +7,7 @@ import { useActionState } from "react";
 import {
   updateOrganizationCommissionAction,
   type OrganizationCommissionActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: OrganizationCommissionActionState = {
   status: "idle",

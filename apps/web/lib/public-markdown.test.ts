@@ -8,6 +8,7 @@ import {
   renderDiscoveryMarkdown,
   renderSitemapMarkdown,
   renderStaticPageMarkdown,
+  staticPublicPages,
   renderVenueSummaryMarkdown,
 } from "./public-markdown";
 
@@ -59,15 +60,15 @@ describe("public Markdown representations", () => {
     );
   });
 
-  it("separates Clubs and Players in canonical Markdown and the public index", () => {
-    const clubs = renderStaticPageMarkdown("/");
-    const players = renderStaticPageMarkdown("/players");
-    expect(clubs).toContain("Duna for Clubs");
-    expect(clubs).toContain("Courts & scheduling");
-    expect(players).toContain("Duna for Players");
-    expect(players).toContain("Find your next game");
-    expect(players).toContain("https://duna.coach/players");
-    expect(markdownPathForCanonical("/players")).toBe("/players.md");
+  it("describes the home page for both audiences in its Markdown companion", () => {
+    const home = renderStaticPageMarkdown("/");
+    expect(home).toContain("Beach and indoor volleyball near you");
+    expect(home).toContain("Sand Rating");
+    expect(home).toContain("For clubs and coaches");
+    // The player landing page redirects home (proxy.ts), so it has no page.
+    expect(
+      staticPublicPages.some((page) => (page.path as string) === "/players"),
+    ).toBe(false);
   });
 
   it("preserves event geography, timezone, pricing, and action links", () => {
