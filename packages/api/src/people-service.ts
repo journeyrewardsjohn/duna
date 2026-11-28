@@ -4,7 +4,6 @@ import {
   eventTypes,
   getDatabase,
   guardianships,
-  healthConnections,
   membershipTiers,
   memberships,
   messages,
@@ -49,11 +48,7 @@ import {
   organizationViewerRolesFor,
   type HealthAgeBand,
 } from "./services/health/policy";
-import {
-  HealthServiceError,
-  healthSummaryVisibleTo,
-  loadHealthProfile,
-} from "./health-service";
+import { healthSummaryVisibleTo, loadHealthProfile } from "./health-service";
 import {
   loadEventCancellationPreview,
   loadOperatorDivisionDetail,
@@ -551,47 +546,27 @@ export async function loadOperatorMemberProfile(input: {
   ]);
 
   const orderIds = orderRows.map((order) => order.id);
-  const [itemRows, refundRows, notes, healthProfile, healthConnection] =
-    await Promise.all([
-      orderIds.length
-        ? database
-            .select()
-            .from(orderItems)
-            .where(inArray(orderItems.orderId, orderIds))
-        : Promise.resolve([]),
-      orderIds.length
-        ? database
-            .select()
-            .from(refundRecords)
-            .where(
-              and(
-                eq(refundRecords.organizationId, organizationId),
-                inArray(refundRecords.orderId, orderIds),
-              ),
-            )
-            .orderBy(desc(refundRecords.createdAt))
-        : Promise.resolve([]),
-      loadSessionNotes({ organizationId, personId }),
-      healthAccess
-        ? loadHealthProfile({
-            actor: input.actor,
-            subjectPersonId: personId,
-            now: input.now,
-            requestId: input.requestId,
-            ipAddress: input.ipAddress,
-          }).catch((error: unknown) => {
-            // Fail closed: a refusal between the check and the read omits
-            // the block instead of failing the whole profile.
-            if (error instanceof HealthServiceError) return undefined;
-            throw error;
-          })
-        : Promise.resolve(undefined),
-      healthAccess
-        ? database.query.healthConnections.findFirst({
-            where: eq(healthConnections.personId, personId),
-          })
-        : Promise.resolve(undefined),
-    ]);
+  const [itemRows, refundRows, notes] = await Promise.all([
+    orderIds.length
+      ? database
+          .select()
+          .from(orderItems)
+          .where(inArray(orderItems.orderId, orderIds))
+      : Promise.resolve([]),
+    orderIds.length
+      ? database
+          .select()
+          .from(refundRecords)
+          .where(
+            and(
+              eq(refundRecords.organizationId, organizationId),
+              inArray(refundRecords.orderId, orderIds),
+            ),
+          )
+          .orderBy(desc(refundRecords.createdAt))
+      : Promise.resolve([]),
+    loadSessionNotes({ organizationId, personId }),
+  ]);
   const noteCountBySession = new Map<string, number>();
   for (const note of notes) {
     noteCountBySession.set(
@@ -763,41 +738,19 @@ export async function loadOperatorMemberProfile(input: {
     purchases,
     notes,
     videos: mappedVideos,
-    // PRIV-1: the key is absent, not undefined or null, for a non-viewer.
-    ...(healthAccess && healthProfile
+    // PRIV-1: no health value ever leaves this read; values come only from
+    // memberHealthProfile, which records the view. `health` is the
+    // deprecated marker (absent for a non-viewer, never with metrics).
+    ...(healthAccess
       ? {
           health: {
-            source: "apple-healthkit",
+            source: "apple-healthkit" as const,
             scopes: [...healthAccess.categories],
             grantedAt: healthAccess.grantedAt,
-            observedAt: healthConnection?.lastSyncedAt?.toISOString(),
-            metrics: {
-              readinessScore: healthProfile.intelligence.readiness.score,
-              readinessLabel: healthProfile.intelligence.readiness.label,
-              readinessConfidence:
-                healthProfile.intelligence.readiness.confidence,
-              readinessSummary: healthProfile.intelligence.readiness.summary,
-              strainScore: healthProfile.intelligence.strain.score,
-              sleepContinuityPercent:
-                healthProfile.intelligence.sleep?.efficiencyPercent,
-              restingHeartRate: healthProfile.summary.restingHeartRate,
-              heartRateVariabilityMs:
-                healthProfile.summary.heartRateVariabilityMs,
-              sleepHours: healthProfile.summary.lastSleepHours,
-              steps:
-                healthProfile.daily[0]?.steps === undefined
-                  ? undefined
-                  : Math.round(healthProfile.daily[0].steps),
-              activeEnergyKcal:
-                healthProfile.daily[0]?.activeEnergyKcal ??
-                healthProfile.summary.sevenDayActiveEnergyKcal,
-              latestWorkoutAt: healthProfile.timeline.find(
-                (entry) => entry.metric === "workout",
-              )?.startedAt,
-            },
           },
         }
       : {}),
+    healthAccess: { canView: Boolean(healthAccess) },
     timeline,
   };
 }
@@ -845,6 +798,8 @@ export async function loadDemoOperatorMemberProfile(
     personId,
     true,
   );
+  const demoHealthShared =
+    relationship.displayName === "Maya Chen" && demoHealthVisibleTo(viewer);
   const sessionsForPerson = workspace.eventRegistrations
     .filter((registration) => registration.personId === personId)
     .flatMap((registration) => {
@@ -1065,27 +1020,18 @@ export async function loadDemoOperatorMemberProfile(
     purchases,
     notes,
     videos,
-    ...(relationship.displayName === "Maya Chen" && demoHealthVisibleTo(viewer)
+    ...(demoHealthShared
       ? {
           health: {
-            source: "apple-healthkit",
-            scopes: ["activity", "heart-rate", "sleep", "workouts"],
+            source: "apple-healthkit" as const,
+            scopes: ["activity", "heart"],
             grantedAt: new Date(
               Date.now() - 30 * 24 * 60 * 60_000,
             ).toISOString(),
-            observedAt: new Date(Date.now() - 4 * 60 * 60_000).toISOString(),
-            metrics: {
-              restingHeartRate: 58,
-              heartRateVariabilityMs: 67,
-              sleepHours: 7.7,
-              steps: 8_942,
-              activeEnergyKcal: 614,
-              exerciseMinutes: 71,
-              latestWorkoutAt: completedSession?.endsAt,
-            },
           },
         }
       : {}),
+    healthAccess: { canView: demoHealthShared },
     timeline,
   };
 }

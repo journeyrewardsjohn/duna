@@ -173,62 +173,119 @@ async function profileFor(viewer: ApiActor, personId: string) {
   return caller(viewer).operator.memberProfile({ personId });
 }
 
-function expectNoHealth(profile: object) {
-  expect(Object.keys(profile)).not.toContain("health");
+/** No health value, for anyone: values come only from memberHealthProfile. */
+function expectNoValues(profile: object) {
   const json = JSON.stringify(profile);
   expect(json).not.toContain(String(STEPS));
   expect(json).not.toContain(String(ACTIVE_ENERGY));
-  expect(json).not.toContain("apple-healthkit");
-  expect(json).not.toMatch(/restingHeartRate|readinessScore|heartRate/);
+  expect(json).not.toContain(`:${RESTING_HEART_RATE}`);
+  expect(json).not.toMatch(
+    /metrics|restingHeartRate|readinessScore|heartRate|observedAt|steps/,
+  );
 }
 
-describe("operator.memberProfile health block (PRIV-1)", () => {
+type Profile = Awaited<ReturnType<typeof profileFor>>;
+
+/** A viewer the Health rule names: canView, the deprecated marker, no values. */
+function expectViewer(profile: Profile) {
+  expect(profile.healthAccess).toEqual({ canView: true });
+  expect(profile.health?.source).toBe("apple-healthkit");
+  expect(profile.health?.metrics).toBeUndefined();
+  expectNoValues(profile);
+}
+
+/** Anyone else: canView false and no `health` key at all. */
+function expectNonViewer(profile: Profile) {
+  expect(profile.healthAccess).toEqual({ canView: false });
+  expect(Object.keys(profile)).not.toContain("health");
+  expect(JSON.stringify(profile)).not.toContain("apple-healthkit");
+  expectNoValues(profile);
+}
+
+async function accessRecords(): Promise<number> {
+  const result = await pg.query<{ count: number }>(
+    `select count(*)::int as count from audit_log where action like 'health.%'`,
+  );
+  return result.rows[0]?.count ?? 0;
+}
+
+describe("operator.memberProfile health (PRIV-1)", () => {
   const owner = actor(ids.owner, ["owner"]);
   const manager = actor(ids.manager, ["manager"]);
   const coachShared = actor(ids.coachShared, ["coach"]);
   const coachOther = actor(ids.coachOther, ["coach"]);
   const frontDesk = actor(ids.frontDesk, ["front-desk"]);
 
-  it("a club-wide grant reaches the owner, a manager and the club's coaches", async () => {
+  it("a club-wide grant: owner, manager and the club's coaches may view; front desk may not", async () => {
     for (const viewer of [owner, manager, coachShared, coachOther]) {
       const profile = await profileFor(viewer, ids.adultClubGrant);
-      expect(profile.health?.metrics?.steps).toBe(STEPS);
+      expectViewer(profile);
       expect(profile.health?.scopes).toEqual(
         expect.arrayContaining(["activity", "heart"]),
       );
     }
+    expectNonViewer(await profileFor(frontDesk, ids.adultClubGrant));
   }, 60_000);
 
-  it("never reaches front desk, even with a club-wide grant", async () => {
-    expectNoHealth(await profileFor(frontDesk, ids.adultClubGrant));
-  }, 60_000);
-
-  it("a grant to one coach reaches that coach and nobody else", async () => {
-    const shared = await profileFor(coachShared, ids.adultCoachGrant);
-    expect(shared.health?.metrics?.restingHeartRate).toBe(RESTING_HEART_RATE);
+  it("a share to one coach by name: that coach may view, nobody else", async () => {
+    expectViewer(await profileFor(coachShared, ids.adultCoachGrant));
     for (const viewer of [owner, manager, coachOther, frontDesk]) {
-      expectNoHealth(await profileFor(viewer, ids.adultCoachGrant));
+      expectNonViewer(await profileFor(viewer, ids.adultCoachGrant));
     }
   }, 60_000);
 
-  it("a junior's club grant reaches coaches only, never owners or managers", async () => {
-    const coachView = await profileFor(coachOther, ids.junior);
-    expect(coachView.health?.metrics?.activeEnergyKcal).toBe(ACTIVE_ENERGY);
-    // The minor metric list still applies: steps never leave for a junior.
-    expect(coachView.health?.metrics?.steps).toBeUndefined();
+  it("a junior's guardian-approved club grant: coaches only, never owners or managers", async () => {
+    expectViewer(await profileFor(coachOther, ids.junior));
     for (const viewer of [owner, manager, frontDesk]) {
-      expectNoHealth(await profileFor(viewer, ids.junior));
+      expectNonViewer(await profileFor(viewer, ids.junior));
     }
   }, 60_000);
 
-  it("a grant to another club does not show in this club, even to staff of both", async () => {
-    // ids.owner owns both clubs; the person shared with the other club only.
-    expectNoHealth(await profileFor(owner, ids.adultOtherClubGrant));
+  it("a junior's grant without guardian approval reaches nobody", async () => {
+    await pg.query(
+      `update health_sharing_grants set approval_status = 'pending' where owner_person_id = $1`,
+      [ids.junior],
+    );
+    try {
+      for (const viewer of [owner, manager, coachShared, coachOther]) {
+        expectNonViewer(await profileFor(viewer, ids.junior));
+      }
+    } finally {
+      await pg.query(
+        `update health_sharing_grants set approval_status = 'approved' where owner_person_id = $1`,
+        [ids.junior],
+      );
+    }
   }, 60_000);
 
-  it("a minor viewer never sees another person's health", async () => {
+  it("a grant to another club does not count in this club, even for staff of both", async () => {
+    // ids.owner owns this club and manages the other one.
+    expectNonViewer(await profileFor(owner, ids.adultOtherClubGrant));
+  }, 60_000);
+
+  it("a minor viewer may never view another person's health", async () => {
     const teenCoach = { ...coachOther, ageBand: "teen" as const };
-    expectNoHealth(await profileFor(teenCoach, ids.adultClubGrant));
+    expectNonViewer(await profileFor(teenCoach, ids.adultClubGrant));
+  }, 60_000);
+
+  it("reading memberProfile writes no Health access record for any role", async () => {
+    const before = await accessRecords();
+    for (const viewer of [owner, manager, coachShared, coachOther, frontDesk]) {
+      for (const personId of [
+        ids.adultClubGrant,
+        ids.adultCoachGrant,
+        ids.junior,
+      ]) {
+        await profileFor(viewer, personId);
+      }
+    }
+    expect(await accessRecords()).toBe(before);
+    // The recording read is still the one place values come from.
+    const history = await caller(coachShared).operator.memberHealthProfile({
+      personId: ids.adultCoachGrant,
+    });
+    expect(JSON.stringify(history)).toContain(String(STEPS));
+    expect(await accessRecords()).toBe(before + 1);
   }, 60_000);
 
   it("roles without members:read cannot read the profile at all", async () => {
@@ -251,7 +308,7 @@ describe("operator.memberProfile health block (PRIV-1)", () => {
     ).rejects.toThrow();
   }, 60_000);
 
-  it("Ask Duna never receives the health block, even for a permitted viewer", async () => {
+  it("Ask Duna never receives the marker, even for a permitted viewer", async () => {
     await pg.query(
       `INSERT INTO ask_duna_controls (id, enabled) VALUES ('global', true) ON CONFLICT (id) DO NOTHING`,
     );
@@ -262,6 +319,7 @@ describe("operator.memberProfile health block (PRIV-1)", () => {
         personId: ids.adultClubGrant,
       },
     )) as object;
-    expectNoHealth(result);
+    expect(Object.keys(result)).not.toContain("health");
+    expectNoValues(result);
   }, 60_000);
 });

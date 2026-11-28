@@ -316,15 +316,19 @@ and pays nobody here.
   accepting policies, or moving money still requires the normal user checkout.
 - Provider provenance, source URLs, evidence weights, and dispute state must
   survive every repair.
-- `operator.memberProfile` carries a `health` key only when the caller passes
-  the Health service's own viewer rule for that person
-  (`healthSummaryVisibleTo` in `health-service.ts`): an adult viewer with an
-  effective grant to them, to them as the person's coach at this club, or to
-  this club for the roles `organizationViewerRolesFor` names (owner, manager,
-  coach for adults; coaches only for a junior). A grant to another club or to
-  a peer player never counts inside a club workspace. Everyone else (front
-  desk, coaches the person did not share with) gets no `health` key at all.
-  Ask Duna never receives the block (PRIV-1).
+- `operator.memberProfile` never returns a health value (PRIV-1). It returns
+  `healthAccess: { canView }`, computed for this viewer and this person by the
+  Health service's own non-recording check (`healthSummaryVisibleTo` in
+  `health-service.ts`, built on `resolveHealthAccess`; it writes no access
+  record): an adult viewer with an effective grant to them by name, to them as
+  the person's coach at this club, or to this club for the roles
+  `organizationViewerRolesFor` names (owner, manager, coach for adults;
+  coaches only for a junior, and only with guardian approval). A grant to
+  another club or to a peer player never counts inside a club workspace.
+  Values come only from `operator.memberHealthProfile`, which records
+  "health.profile_viewed". Deprecated: the `health` key is still present (no
+  `metrics`) exactly when `canView` is true, until HQ reads `healthAccess`.
+  Ask Duna never receives that key.
 
 ## Versioning
 

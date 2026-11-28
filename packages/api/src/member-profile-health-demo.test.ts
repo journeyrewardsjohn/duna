@@ -30,15 +30,18 @@ async function profileAs(roles: readonly PersonRole[]) {
 }
 
 describe("demo operator.memberProfile health (PRIV-1)", () => {
-  it("shows the shared summary to owner, manager and coach", async () => {
+  it("owner, manager and coach may view; no values for anyone", async () => {
     for (const role of ["owner", "manager", "coach"] as const) {
       const profile = await profileAs([role]);
-      expect(profile.health?.metrics?.steps).toBe(8_942);
+      expect(profile.healthAccess).toEqual({ canView: true });
+      expect(profile.health?.metrics).toBeUndefined();
+      expect(JSON.stringify(profile)).not.toContain("8942");
     }
   });
 
   it("omits the block entirely for front desk", async () => {
     const profile = await profileAs(["front-desk"]);
+    expect(profile.healthAccess).toEqual({ canView: false });
     expect(Object.keys(profile)).not.toContain("health");
     expect(JSON.stringify(profile)).not.toContain("8942");
   });

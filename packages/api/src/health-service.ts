@@ -1826,9 +1826,9 @@ function healthSummaryAccessible(
 
 /**
  * The Health service's own viewer rule, for reads that sit inside a club
- * workspace (operator.memberProfile, PRIV-1). Returns the categories the
- * viewer may see in a summary, or undefined: never throws, never reads a
- * value. Same rule as `loadHealthProfile` (adult viewer; an effective grant
+ * workspace (operator.memberProfile `healthAccess.canView`, PRIV-1).
+ * Returns the categories the viewer may see in a summary, or undefined:
+ * never throws, never reads a value, writes no access record. Same rule as `loadHealthProfile` (adult viewer; an effective grant
  * to this viewer, to them as the person's coach, or to the club for the roles
  * `organizationViewerRolesFor` names), narrowed to one club: a grant to
  * another club, a peer-player grant and a coach relationship at another club
