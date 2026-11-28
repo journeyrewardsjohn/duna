@@ -46,14 +46,13 @@ import {
   type LedgerPosting,
 } from "@duna/core";
 import {
-  calculateOrganizationCommissionFee,
-  calculateOperatorProcessingFee,
-  priceConsumerOrder,
+  quoteCheckoutFees,
   type CurrencyCode,
   type OrderItemKind,
 } from "@duna/pricing";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
+import { recordCheckoutFeeQuote } from "./services/fees/quote";
 import { evaluateCatalogSessionParticipation } from "./catalog-participation";
 import {
   bookingParticipationSnapshot,
@@ -1164,60 +1163,38 @@ export async function startCatalogCheckout(input: {
     }
   }
   const chargeableSubtotalMinor = promoQuote?.netSubtotalMinor ?? amountMinor;
-  const priced =
-    input.paymentMethod === "card"
-      ? priceConsumerOrder({
-          currency: orderCurrency,
-          isDunaPlus: hasDunaPlus,
-          items: [
-            {
-              id: row.variant.id,
-              kind: itemKind,
-              description: row.item.title,
-              quantity: 1,
-              unitAmountMinor: chargeableSubtotalMinor,
-            },
-          ],
-        })
-      : {
-          subtotalMinor: amountMinor,
-          fees: [],
-          totalMinor: amountMinor,
-          currency: orderCurrency,
-          dunaPlusSavingsMinor: 0,
-        };
-  const serviceFeeMinor = priced.fees.reduce(
-    (total, fee) => total + fee.amountMinor,
-    0,
-  );
-  const operatorFee =
-    input.paymentMethod === "card" && priced.subtotalMinor > 0
-      ? calculateOperatorProcessingFee({
-          amountMinor: priced.subtotalMinor,
-          currency: orderCurrency,
-          method: "online-card",
-        })
-      : undefined;
   const commissionPolicy = resolveOrganizationCommissionPolicy(
     row.organization,
   );
-  const organizationCommissionFee =
-    input.paymentMethod === "card" && priced.subtotalMinor > 0
-      ? calculateOrganizationCommissionFee({
-          amountMinor: priced.subtotalMinor,
-          currency: orderCurrency,
-          rateBps: commissionPolicy.rateBps,
-          organizationId: row.organization.id,
-          plan: commissionPolicy.effectivePlan,
-          source: commissionPolicy.source,
-        })
-      : undefined;
-  const applicationFeeMinor = Math.min(
-    priced.totalMinor,
-    serviceFeeMinor +
-      (operatorFee?.amountMinor ?? 0) +
-      (organizationCommissionFee?.amountMinor ?? 0),
-  );
+  // B2: the one checkout fee composition (also behind player.fees.quote).
+  const feeQuote = quoteCheckoutFees({
+    currency: orderCurrency,
+    isDunaPlus: hasDunaPlus,
+    tender: input.paymentMethod === "card" ? "online-card" : "credits",
+    items: [
+      {
+        id: row.variant.id,
+        kind: itemKind,
+        description: row.item.title,
+        quantity: 1,
+        unitAmountMinor:
+          input.paymentMethod === "card"
+            ? chargeableSubtotalMinor
+            : amountMinor,
+      },
+    ],
+    commission: {
+      rateBps: commissionPolicy.rateBps,
+      organizationId: row.organization.id,
+      plan: commissionPolicy.effectivePlan,
+      source: commissionPolicy.source,
+    },
+  });
+  const priced = feeQuote.priced;
+  const serviceFeeMinor = feeQuote.serviceFeeMinor;
+  const operatorFee = feeQuote.processingFee;
+  const organizationCommissionFee = feeQuote.organizationFee;
+  const applicationFeeMinor = feeQuote.applicationFeeMinor;
 
   const orderId = crypto.randomUUID();
   const orderItemId = crypto.randomUUID();
@@ -1445,6 +1422,21 @@ export async function startCatalogCheckout(input: {
         }),
       ),
   ]);
+  if (input.paymentMethod === "card" && priced.totalMinor > 0) {
+    // B2: the fees charged, stored with the order (receipt evidence).
+    await recordCheckoutFeeQuote({
+      organizationId: row.organization.id,
+      buyerPersonId: input.actor.personId,
+      orderId,
+      catalogItemId: row.item.id,
+      surface: "web-checkout",
+      currency: orderCurrency,
+      itemLabel: row.item.title,
+      quote: feeQuote,
+      premiumApplied: hasDunaPlus && priced.dunaPlusSavingsMinor > 0,
+      now: input.now,
+    });
+  }
 
   if (promoQuote) {
     try {

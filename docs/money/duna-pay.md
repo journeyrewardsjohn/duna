@@ -187,6 +187,68 @@ explicit confirmation and owner scope: submit dispute evidence, ask for a
 reserve review, refund an order (existing refund flow), pay out now (existing
 manual payout). Automatic releases follow the policy without a person.
 
+## Account status and onboarding
+
+`organization_pay_accounts.status` is derived from the processor's account
+facts on every `account.updated` webhook (`syncPayAccount`), never set by
+hand (`derivePayAccountStatus`, pure, tested):
+
+| Status          | When                                              |
+| --------------- | ------------------------------------------------- |
+| `not-started`   | No connected account                              |
+| `in-progress`   | Account exists, details not submitted             |
+| `verifying`     | Submitted; the processor is checking              |
+| `action-needed` | Requirements due now (labels in plain words)      |
+| `restricted`    | Requirements past due, or the account is disabled |
+| `ready`         | Charges and payouts enabled, nothing due          |
+
+`operator.pay.startOnboarding` returns a hosted link (creating the connected
+account on first use) or, for `embedded`, an account session's client
+secret created server side. Without processor keys or `NEXT_PUBLIC_HQ_URL`
+it answers `not-configured` and calls nothing. `publishGate` /
+`assertPaymentsReady` require business facts, a verified account and a
+verified payout bank.
+
+## Fees and the up-front quote
+
+Every amount comes from `@duna/pricing`. `quoteCheckoutFees` is the one
+composition of the player Service Fee, the processing estimate and the
+Organization Fee (version `checkout-fees-v1`). `player.fees.quote` prices a
+catalog purchase with it before commitment and records `pay_fee_quotes`;
+catalog checkout charges with the same function and records the quote it
+charged, linked to the order, so a receipt can be reproduced. Sales tax is
+calculated by the processor at checkout; the quote's tax line is 0. Event,
+court and in-person checkouts still compose the same pricing functions
+inline (same rules, same amounts); moving them onto `quoteCheckoutFees` is
+listed below.
+
+Recurring charges: a subscription created with an application-fee
+percentage already pays Duna's fee on each invoice; the renewal webhook now
+withholds only what the charge did not already collect (defect 3).
+
+## Promise in the legal drafts → where the code keeps it
+
+| Promise (draft, section)                                                                                       | Where the code keeps it                                                                     | Status                                                                                         |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Paid within 3 business days once settled and delivered (duna-pay §6, §8)                                       | `release-rules.ts` (releasable), daily schedule default, `pay.release.overdue` monitor      | Kept (daily); weekly/monthly slower by the club's choice                                       |
+| One-time bookings released after the event (duna-pay §6.1)                                                     | `scheduled-end` rule; delivery sweep checks the booking/session was not cancelled           | Kept                                                                                           |
+| Programs pro rata per session; weekly without a schedule; 25% start tranche (§6.2–6.3)                         | `pro-rata-sessions`, `pro-rata-weekly`, start tranche with good-standing check              | Kept                                                                                           |
+| Events ≤ 7 days at the end of the last day (§6.2)                                                              | `event-last-day`                                                                            | Kept (end of the last session, not midnight local time)                                        |
+| Memberships after settlement + 3 business days and the full-refund window (§6.4)                               | `membership-period`                                                                         | Kept                                                                                           |
+| Credit packs on settlement with a 20% Unredeemed Credit Reserve; redemption-based for the first 90 days (§7.4) | `credit-pack-reserve`, `refreshCreditReserve`                                               | Kept                                                                                           |
+| Goods on fulfilment; buyer may cancel after the ship-by date (booking §2.5)                                    | `goods-fulfilment`, `goods-cancel-offered` fact                                             | Partly: the buyer's cancel action and tracking-number capture are not built                    |
+| First payout 7 days after the first payment (§7.1)                                                             | `organization_pay_accounts.first_payout_not_before`                                         | Kept                                                                                           |
+| Rolling reserve 10% / 90 days, max 180, reviewed every 30, with notice (§7.3)                                  | `refreshRollingReserve`, `activateRollingReserve` (person confirms notice), review requests | Kept; Duna staff screen to activate is not built (service function only)                       |
+| Disputes: hold, evidence within 7 days, re-transfer on win (§10)                                               | `disputes.ts`                                                                               | Kept; evidence files are sent as labels in the explanation, not uploaded as processor files    |
+| Refunds from held funds, then balance, then future proceeds, then bank (§9.3)                                  | `refunds.ts`, `balances.ts` recovery                                                        | Kept; bank debit is the processor's `debit_negative_balances` (owner setting)                  |
+| Fees on refunds by cause (§9.4; fees-and-premium §2.6)                                                         | `refund-fees.ts` (`policy` rule)                                                            | **Not yet**: the refund executor returns every fee share pro rata (`refundFeeRule = pro-rata`) |
+| Purchases paid with credits refunded in credits (§9.5)                                                         | catalog refund restores credits; operator refund of a credit order (defect 5 fixed)         | Kept; operator "refund as credits" without the player's choice is still possible (P14)         |
+| Service Fee and total shown before paying (fees-and-premium §2.4)                                              | `player.fees.quote` → `pay_fee_quotes`                                                      | Kept for catalog items; all-in display on every surface is the UI's job                        |
+| Negative balance recovered by set-off, bank debit, then invoice in 15 days (§11)                               | `reconcileRecovery`                                                                         | Kept; the invoice is opened for a person to send                                               |
+| Closure: 60 days for credit refunds, remainder after 120 days (§17)                                            | settings only                                                                               | **Not yet** (suspension/closure workflow, P11)                                                 |
+| Court bookings refunded per policy on player cancellation (booking §2)                                         | player-bookings (not B2)                                                                    | **Not yet** (P6)                                                                               |
+| Refunds started within 5 business days (§9.6)                                                                  | none                                                                                        | **Not yet** (no SLA monitor on refund requests)                                                |
+
 ## How to read a club's balance
 
 - **Releasable now**: tranches with status `releasable` and no payout.
@@ -241,8 +303,10 @@ settings override as `pay.settings.invalid`. Payout creation goes through
 
 ## Status of this work
 
-Pull request 1 (B2): rules, obligations, delivery facts, the release job,
-payouts from tranches, invariants, the delivery fix. Pull request 2: disputes,
-refund funding, reserves, recovery, reconciliation drift, defects 2 and 5.
-Pull request 3: fees, account status, the publish gate, the bootstrap script
-and the legal promise table.
+B2 pull requests: (1) rules, obligations, delivery facts, release job,
+payouts from tranches, defect 1; (2) disputes, refund funding, reserves,
+recovery, reconciliation drift, defects 2 and 5; (3) account status,
+onboarding, publish gate, payout settings, the fee quote, defects 3, 4 and 6.
+Still stubs: `refundPolicies`, `upsertRefundPolicy`, `taxSettings`,
+`updateTaxSettings`, `balance`, `moneyHome` (they answer "not configured
+yet"); `operator.fees.platformSummary` and the Premium procedures.
