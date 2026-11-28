@@ -1328,6 +1328,7 @@ main[data-zone="editorial"] > .site-header .site-header__enter small {
   }
 
   .discover-map-results .discover-v2-map__loading,
+  .discover-map-results .discover-v2-map__nc,
   .discover-map-results .discover-v2-map__fallback {
     right: var(--discover-sheet-width);
   }

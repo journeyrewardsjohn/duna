@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  isMapNotConfigured,
+  MapNotConfigured,
+} from "@/components/map-not-configured";
 import { bearing, destination, featureCollection, point } from "@turf/turf";
 import type { VenueLayoutAsset, VenueLayoutGeoGeometry } from "@duna/api";
 import { MapPinned, Move3D, RotateCw, Satellite } from "lucide-react";
@@ -130,6 +134,7 @@ export function VenueLayoutMap({
   const dragRef = useRef<DragState | undefined>(undefined);
   const frameRef = useRef<number | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [notConfigured, setNotConfigured] = useState(false);
 
   assetsRef.current = assets;
   selectedRef.current = selectedAssetId;
@@ -212,6 +217,10 @@ export function VenueLayoutMap({
           readonly token?: string;
           readonly error?: string;
         };
+        if (isMapNotConfigured(payload)) {
+          if (!cancelled) setNotConfigured(true);
+          return;
+        }
         if (!tokenResponse.ok || !payload.token) {
           throw new Error(payload.error || "Satellite map is unavailable.");
         }
@@ -500,6 +509,7 @@ export function VenueLayoutMap({
           </span>
         </div>
       )}
+      {notConfigured ? <MapNotConfigured feature="The satellite map" /> : null}
       {error && (
         <div className="venue-layout-map__error" role="status">
           <MapPinned aria-hidden size={28} />

@@ -182,7 +182,7 @@ parents, gets paid. Mostly on the phone (Pro, Watch); plans in HQ.
 | CH-5.n | Writes notes and messages from the phone (voice notes kept)                                | Pro        | M-R3       | Native  |
 | CH-6.1 | Sees sessions, pay period and expected pay                                                 | HQ         | H5, B3b    | Planned |
 | CH-6.2 | Receives contractor payouts to their own connected account                                 | HQ         | B3c        | Planned |
-| CH-6.3 | Opens Money without permission → "You need access", not an error page                      | HQ         | H10        | Planned |
+| CH-6.3 | Opens Money without permission → "You need access", not an error page                      | HQ         | H10        | Main    |
 | CH-6.n | Gets paid on the phone: Tap to Pay for a lesson (hidden where unsupported), see pay        | Pro        | M-R4       | Native  |
 | CH-7.1 | Opens the practice plan builder                                                            | HQ         | H7         | Main    |
 | CH-7.2 | Starts a drill from a description                                                          | HQ         | H8         | Main    |

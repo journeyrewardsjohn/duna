@@ -1,6 +1,10 @@
 "use client";
 
 import {
+  isMapNotConfigured,
+  MapNotConfigured,
+} from "@/components/map-not-configured";
+import {
   bbox,
   circle,
   destination,
@@ -140,6 +144,7 @@ function PlayerLayoutMap({
   const frameRef = useRef<number | undefined>(undefined);
   const selectedRef = useRef(selectedAssetId);
   const [error, setError] = useState(false);
+  const [notConfigured, setNotConfigured] = useState(false);
   selectedRef.current = selectedAssetId;
 
   useEffect(() => {
@@ -158,6 +163,10 @@ function PlayerLayoutMap({
       try {
         const response = await fetch("/api/mapbox/token");
         const payload = (await response.json()) as { readonly token?: string };
+        if (isMapNotConfigured(payload)) {
+          if (!cancelled) setNotConfigured(true);
+          return;
+        }
         if (!response.ok || !payload.token) throw new Error("Map unavailable");
         const mapboxgl = await import("mapbox-gl");
         if (cancelled || !containerRef.current) return;
@@ -312,6 +321,7 @@ function PlayerLayoutMap({
   }, []);
   return (
     <div className="player-venue-layout__map" ref={containerRef}>
+      {notConfigured ? <MapNotConfigured feature="The venue map" /> : null}
       {error && (
         <div role="status">
           <MapPin aria-hidden size={25} />

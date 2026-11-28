@@ -9,5 +9,9 @@ export async function GET(request: Request) {
   if (!actor) {
     return Response.json({ error: "Sign in required." }, { status: 401 });
   }
-  return openMessagingUpdatesStream({ actor, signal: request.signal });
+  return openMessagingUpdatesStream({
+    accept: request.headers.get("accept"),
+    actor,
+    signal: request.signal,
+  });
 }

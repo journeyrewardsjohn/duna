@@ -128,7 +128,21 @@
           "disableSPM": true
         }
       ],
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "../../packages/ui/assets/fonts/Geist-Regular.ttf",
+            "../../packages/ui/assets/fonts/Geist-Medium.ttf",
+            "../../packages/ui/assets/fonts/Geist-SemiBold.ttf",
+            "../../packages/ui/assets/fonts/Geist-Bold.ttf",
+            "../../packages/ui/assets/fonts/GeistMono-Regular.ttf",
+            "../../packages/ui/assets/fonts/GeistMono-Medium.ttf",
+            "../../packages/ui/assets/fonts/GeistMono-SemiBold.ttf",
+            "../../packages/ui/assets/fonts/Jost-Medium.ttf"
+          ]
+        }
+      ],
       "expo-secure-store",
       "expo-sqlite",
       "expo-status-bar",

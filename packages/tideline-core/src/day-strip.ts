@@ -43,6 +43,10 @@ export interface StripDay {
   /** 0 is Sunday. */
   readonly weekday: number;
   readonly dayOfMonth: number;
+  /** 1 to 12. */
+  readonly month: number;
+  /** The first day of the strip or the 1st of a month: label the month here. */
+  readonly startsMonth: boolean;
   readonly count: number;
   readonly isToday: boolean;
   readonly isPast: boolean;
@@ -94,6 +98,8 @@ export function dayStrip(input: DayStripInput): DayStripModel {
       date: key,
       weekday: weekdayOf(date),
       dayOfMonth: date.day,
+      month: date.month,
+      startsMonth: i === 0 || date.day === 1,
       count: n,
       isToday: key === todayKey,
       isPast: key < todayKey,
