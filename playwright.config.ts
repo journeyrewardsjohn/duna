@@ -28,6 +28,11 @@ const hqServerCommand = process.env.CI
 const personaSwitch = { DUNA_DEMO_PERSONAS: "enabled" };
 const personaSuite = "**/personas/**";
 
+// Gallery run (docs/OPERATIONS.md "Component gallery end-to-end"): with
+// TIDELINE_GALLERY=1 only the Tideline specs have anything to do, and they
+// need only HQ, so the public web server is not started.
+const galleryRun = process.env.TIDELINE_GALLERY === "1";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -47,17 +52,23 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: [
-    {
-      command: webServerCommand,
-      port: webPort,
-      env: { NEXT_PUBLIC_HQ_URL: hqBaseUrl, ...personaSwitch },
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
+    ...(galleryRun
+      ? []
+      : [
+          {
+            command: webServerCommand,
+            port: webPort,
+            env: { NEXT_PUBLIC_HQ_URL: hqBaseUrl, ...personaSwitch },
+            reuseExistingServer: !process.env.CI,
+            timeout: 120_000,
+          },
+        ]),
     {
       command: hqServerCommand,
       port: hqPort,
-      env: personaSwitch,
+      env: galleryRun
+        ? { ...personaSwitch, TIDELINE_GALLERY: "1" }
+        : personaSwitch,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

@@ -107,3 +107,7 @@ test.describe("CH-8 Training programs", () => {
   });
   test.fixme("CH-8.2 Open a program's roster and schedule tabs [H6, S3]", async () => {});
 });
+
+test.describe("CH-9 Group sessions that need players", () => {
+  test.fixme("CH-9.1 Opens a session that needs players; Nudge opens a Send review with the share link [PART-7, PART-12]", async () => {});
+});

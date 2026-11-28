@@ -106,6 +106,16 @@ export function readPlanPackageIds(): Set<string> {
   // the plan tables do not list yet.
   for (const id of assignedPackages) ids.add(id);
 
+  // Group sessions (PART-1 … PART-12), from the build plan table in
+  // docs/plan/participation.md §13.
+  const participation = readFileSync(
+    path.join(repoRoot, "docs/plan/participation.md"),
+    "utf8",
+  );
+  for (const [, id] of participation.matchAll(/^\|\s*(PART-\d+)\s*\|/gm)) {
+    if (id) ids.add(id);
+  }
+
   const mobile = readFileSync(
     path.join(repoRoot, "docs/plan/mobile.md"),
     "utf8",
