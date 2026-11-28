@@ -1,7 +1,7 @@
 import type { PromoCodeWorkspace } from "@duna/api";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/app/promo-codes/actions", () => ({
+vi.mock("@/app/(legacy)/marketing/promo-codes/actions", () => ({
   createPromoCodeAction: vi.fn(),
   deactivatePromoCodeAction: vi.fn(),
   duplicatePromoCodeAction: vi.fn(),

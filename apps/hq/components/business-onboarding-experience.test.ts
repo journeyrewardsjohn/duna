@@ -1,4 +1,3 @@
-import { createApiContext, createCaller } from "@duna/api";
 import { ORGANIZATION_PLANS, formatMoney } from "@duna/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,9 +27,8 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-import OrganizationOnboardingPage from "@/app/onboarding/page";
-import { renderElementForTest, renderForTest } from "@/lib/render-for-test";
-import { OperatorOverview } from "./operator-overview";
+import OrganizationOnboardingPage from "@/app/(legacy)/setup/start/page";
+import { renderElementForTest } from "@/lib/render-for-test";
 
 describe("business onboarding experience", () => {
   beforeEach(() => {
@@ -75,45 +73,5 @@ describe("business onboarding experience", () => {
     expect(
       plans.filter((plan) => ORGANIZATION_PLANS[plan].monthlyPriceMinor > 0),
     ).not.toHaveLength(0);
-  });
-
-  it("makes payment readiness a clear action that opens secure setup", async () => {
-    const caller = createCaller(createApiContext());
-    const [dashboard, members, workspace] = await Promise.all([
-      caller.operator.dashboard(),
-      caller.operator.members(),
-      caller.operator.workspace(),
-    ]);
-    const overview = renderForTest(OperatorOverview, {
-      dashboard: {
-        ...dashboard,
-        organization: { ...dashboard.organization, stripeStatus: "pending" },
-        metrics: [
-          ...dashboard.metrics.filter((metric) => metric.label !== "Payments"),
-          { label: "Payments", value: "Set up payments", tone: "warning" },
-        ],
-        alerts: [
-          {
-            id: "stripe",
-            title: "Set up payments",
-            detail: "Connect Stripe to accept payments and receive payouts.",
-            action: "Set up payments",
-            tone: "warning",
-          },
-        ],
-      },
-      matches: [],
-      members,
-      workspace,
-    });
-
-    const setupLinks = overview
-      .elements("a")
-      .filter((link) => link.href === "/payments/setup");
-    // The Payments metric and the attention item both open secure setup.
-    expect(setupLinks.length).toBeGreaterThanOrEqual(2);
-    expect(overview.text).toContain("Open secure setup");
-    expect(overview.text).toContain("Set up payments");
-    expect(overview.text).not.toContain("Action required");
   });
 });

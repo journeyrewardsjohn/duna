@@ -778,7 +778,7 @@ export function SettingsCenter({
                 </p>
                 <Link
                   className="hq-button hq-button--primary"
-                  href="/settings/theme"
+                  href="/setup/identity"
                 >
                   Open Theme Kit <Sparkles aria-hidden size={16} />
                 </Link>
@@ -979,7 +979,7 @@ export function SettingsCenter({
             <div className="settings-directory">
               {[
                 {
-                  href: "/locations",
+                  href: "/setup/places",
                   icon: MapPinned,
                   title: "Locations & courts",
                   detail: `${workspace.venues.length} ${
@@ -995,7 +995,7 @@ export function SettingsCenter({
                   } · roles, access, and availability`,
                 },
                 {
-                  href: "/messages",
+                  href: "/inbox",
                   icon: Globe2,
                   title: "Customer communication",
                   detail: `${workspace.messageDrafts.length} protected ${

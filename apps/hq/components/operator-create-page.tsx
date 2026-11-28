@@ -1,7 +1,11 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { getServerCaller } from "@/lib/api";
-import type { OperatorModule } from "./navigation";
+import {
+  operatorPanelArea,
+  operatorPanelHref,
+  type OperatorPanel,
+} from "./navigation";
 import { OperatorControls } from "./operator-controls";
 import { OperatorShell } from "./operator-shell";
 
@@ -11,7 +15,7 @@ export async function OperatorCreatePage({
   title,
   description,
 }: {
-  readonly module: OperatorModule;
+  readonly module: OperatorPanel;
   readonly eyebrow: string;
   readonly title: string;
   readonly description: string;
@@ -20,14 +24,14 @@ export async function OperatorCreatePage({
   const [dashboard, workspace, waivers] = await Promise.all([
     caller.operator.dashboard(),
     caller.operator.workspace(),
-    module === "products"
+    module === "offerings"
       ? caller.operator.waiverWorkspace()
       : Promise.resolve(undefined),
   ]);
-  const moduleLabel = module === "members" ? "people" : module;
+  const moduleLabel = module;
   return (
     <OperatorShell
-      active={module}
+      active={operatorPanelArea(module)}
       messageDraftCount={workspace.messageDrafts.length}
       organization={dashboard.organization}
     >
@@ -36,7 +40,7 @@ export async function OperatorCreatePage({
           <Link
             aria-label={`Back to ${moduleLabel}`}
             className="operator-create-page__back"
-            href={`/${module}`}
+            href={operatorPanelHref(module)}
             title={`Back to ${moduleLabel}`}
           >
             <ArrowLeft aria-hidden size={20} />

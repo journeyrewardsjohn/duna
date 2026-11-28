@@ -38,7 +38,9 @@ test.describe("honest provider states answer 200, not an error", () => {
       if (response.url().includes("/api/ask-duna/conversations"))
         asked.push(response.status());
     });
-    await page.goto(hq("/"));
+    // Rebuilt pages (the new shell, S1) do not ask at all in demo mode; a
+    // page still on the legacy shell asks and must get a 200.
+    await page.goto(hq("/people"));
     await expectPageReady(page);
     await expect.poll(() => asked.length).toBeGreaterThan(0);
     expect(asked.every((status) => status === 200)).toBe(true);
@@ -90,7 +92,7 @@ test.describe("honest provider states answer 200, not an error", () => {
       if (request.url().includes("/api/messaging/updates"))
         streamRequests.push(request.headers().accept ?? "");
     });
-    await page.goto(hq("/messages"));
+    await page.goto(hq("/inbox"));
     await expectPageReady(page);
     // One stream attempt, one JSON probe; then it stays quiet (polling only).
     await expect
@@ -106,7 +108,7 @@ test.describe("honest provider states answer 200, not an error", () => {
     page,
   }) => {
     await page.goto(
-      hq("/locations/10000000-0000-4000-8000-000000000101/layout"),
+      hq("/setup/places/10000000-0000-4000-8000-000000000101/layout"),
     );
     await expect(
       page.getByText("The satellite map isn't set up yet"),
@@ -136,7 +138,7 @@ test.describe("pages that used to crash", () => {
     test("HQ promo codes opens in demo mode with its empty state", async ({
       page,
     }) => {
-      await page.goto(hq("/promo-codes"));
+      await page.goto(hq("/marketing/promo-codes"));
       await expectPageReady(page, "A better reason to join now.");
       await expect(page.getByText("This page didn’t load")).toHaveCount(0);
       await expect(page.getByText("Active codes")).toBeVisible();

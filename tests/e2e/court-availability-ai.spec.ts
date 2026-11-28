@@ -12,7 +12,7 @@ test("court availability hands natural language and the selected court to Ask Du
 }, testInfo) => {
   const { writes, turns } = await installAskDunaFixture(page);
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto(`${hq}/locations/${venueId}/courts/${courtId}`);
+  await page.goto(`${hq}/setup/places/${venueId}/courts/${courtId}`);
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeHidden();
@@ -31,7 +31,7 @@ test("court availability hands natural language and the selected court to Ask Du
     page.getByRole("button", { name: "Approve change" }),
   ).toBeVisible();
   expect(writes.find((row) => row.path === "conversations")?.body.page).toBe(
-    `/locations/${venueId}/courts/${courtId}`,
+    `/setup/places/${venueId}/courts/${courtId}`,
   );
   expect(JSON.stringify(turns)).toContain(request);
   expect(JSON.stringify(turns)).toContain("Championship Court");
@@ -66,7 +66,7 @@ test("unsaved manual hours stay protected before an AI request", async ({
   page,
 }) => {
   await installAskDunaFixture(page);
-  await page.goto(`${hq}/locations/${venueId}/courts/${courtId}`);
+  await page.goto(`${hq}/setup/places/${venueId}/courts/${courtId}`);
   await expect(
     page.getByRole("region", { name: "Floating Ask Duna" }),
   ).toBeHidden();

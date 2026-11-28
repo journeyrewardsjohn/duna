@@ -136,7 +136,7 @@ export function MemberProfileWorkspace({
   const nextSession = upcomingSessions.toSorted((left, right) =>
     left.startsAt.localeCompare(right.startsAt),
   )[0];
-  const reminderHref = `/messages?compose=new&recipient=${encodeURIComponent(person.personId)}`;
+  const reminderHref = `/inbox?compose=new&recipient=${encodeURIComponent(person.personId)}`;
   const sharedNotes = profile.notes.filter(
     (note) => note.status === "published",
   );
@@ -156,7 +156,7 @@ export function MemberProfileWorkspace({
 
   return (
     <main className="hq-page member-profile-page">
-      <Link className="member-profile-back" href="/members">
+      <Link className="member-profile-back" href="/people">
         <ArrowLeft aria-hidden size={16} /> All people
       </Link>
       <header className="member-profile-hero">
@@ -413,7 +413,7 @@ export function MemberProfileWorkspace({
                 </dd>
               </div>
             </dl>
-            <Link href="/products?type=plan">
+            <Link href="/offerings?type=plan">
               View available plans <ArrowRight aria-hidden size={15} />
             </Link>
           </section>
@@ -723,7 +723,7 @@ export function MemberProfileWorkspace({
             </p>
             <Link
               className="hq-button hq-button--secondary hq-button--compact"
-              href={`/members/${person.personId}/health`}
+              href={`/people/${person.personId}/health`}
             >
               <HeartPulse aria-hidden size={15} /> Open Health Details
             </Link>

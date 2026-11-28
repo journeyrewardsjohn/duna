@@ -16,7 +16,7 @@ import {
   grantOrganizationVideoAllowanceAction,
   revokeOrganizationVideoAllowanceAction,
   type OrganizationVideoAllowanceActionState,
-} from "@/app/admin/actions";
+} from "@/app/(legacy)/admin/actions";
 
 const initialState: OrganizationVideoAllowanceActionState = {
   status: "idle",

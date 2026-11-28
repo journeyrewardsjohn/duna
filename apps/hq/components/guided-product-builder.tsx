@@ -1047,7 +1047,7 @@ export function GuidedProductBuilder({
 
   useEffect(() => {
     if (state.status === "success" && state.entityId) {
-      router.push(`/products/${state.entityId}/draft-ready`);
+      router.push(`/offerings/${state.entityId}/draft-ready`);
     }
   }, [router, state.entityId, state.status]);
 
@@ -1766,7 +1766,7 @@ export function GuidedProductBuilder({
           {editing && initialItem && (
             <Link
               className="hq-button hq-button--secondary"
-              href={`/products/create?clone=${initialItem.id}`}
+              href={`/offerings/create?clone=${initialItem.id}`}
             >
               <Plus aria-hidden size={16} /> Clone as a new draft
             </Link>

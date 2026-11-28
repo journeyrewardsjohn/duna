@@ -33,7 +33,7 @@ const navigation: readonly SearchResult[] = [
     id: "nav-calendar",
     title: "Calendar",
     subtitle: "Schedule, courts, coaches, and bookings",
-    href: "/calendar",
+    href: "/schedule",
     category: "Duna HQ",
     kind: "navigation",
   },
@@ -41,7 +41,7 @@ const navigation: readonly SearchResult[] = [
     id: "nav-people",
     title: "People",
     subtitle: "Members, players, guardians, and customers",
-    href: "/members",
+    href: "/people",
     category: "Duna HQ",
     kind: "navigation",
   },
@@ -65,7 +65,7 @@ const navigation: readonly SearchResult[] = [
     id: "nav-products",
     title: "Products",
     subtitle: "Services, memberships, packs, and goods",
-    href: "/products",
+    href: "/offerings",
     category: "Duna HQ",
     kind: "navigation",
   },
@@ -73,7 +73,7 @@ const navigation: readonly SearchResult[] = [
     id: "nav-money",
     title: "Money",
     subtitle: "Transactions, balances, payouts, and disputes",
-    href: "/payments",
+    href: "/money",
     category: "Duna HQ",
     kind: "navigation",
   },
@@ -154,7 +154,7 @@ export async function GET(request: Request) {
         ]
           .filter(Boolean)
           .join(" · "),
-        href: `/members/${person.personId}`,
+        href: `/people/${person.personId}`,
         category: "People",
         kind: "person",
         badge: person.status,
@@ -198,7 +198,7 @@ export async function GET(request: Request) {
           ? `/events/court-bookings/${entry.id}`
           : entry.sourceType === "pickup"
             ? `/events/matches/${entry.id}`
-            : "/calendar";
+            : "/schedule";
       results.push({
         id: `calendar-${entry.sourceType}-${entry.id}`,
         title: entry.title,
@@ -216,7 +216,7 @@ export async function GET(request: Request) {
         id: `venue-${venue.id}`,
         title: venue.name,
         subtitle: `${venue.locality ?? "Location"}${venue.administrativeArea ? `, ${venue.administrativeArea}` : ""} · ${venue.courts.length} courts`,
-        href: `/locations/${venue.id}`,
+        href: `/setup/places/${venue.id}`,
         category: "Venues",
         kind: "venue",
         badge: venue.status,
@@ -230,7 +230,7 @@ export async function GET(request: Request) {
         id: `product-${product.id}`,
         title: product.title,
         subtitle: `${product.type} · ${product.subtype.replaceAll("-", " ")} · ${product.visibility}`,
-        href: `/products/${product.id}`,
+        href: `/offerings/${product.id}`,
         category: "Products + services",
         kind: "product",
         badge: product.status,
@@ -244,7 +244,7 @@ export async function GET(request: Request) {
         id: `transaction-${transaction.id}`,
         title: transaction.description,
         subtitle: `${transaction.customerName} · ${money(transaction.grossMinor, transaction.currency)} · ${eventDate(transaction.occurredAt, workspace.organization.timezone)}`,
-        href: `/payments?transaction=${encodeURIComponent(transaction.id)}`,
+        href: `/money?transaction=${encodeURIComponent(transaction.id)}`,
         category: "Transactions",
         kind: "money",
         badge: transaction.status,

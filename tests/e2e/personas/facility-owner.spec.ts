@@ -10,7 +10,7 @@ test.use({ persona: "facility-owner" });
 
 test.describe("FO-1 List the facility", () => {
   test("FO-1.1 Venues open with a workspace per venue", async ({ page }) => {
-    await page.goto(hq("/locations"));
+    await page.goto(hq("/setup/places"));
     await expect(page.getByRole("heading", { name: "Venues" })).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Open venue workspace" }).first(),
