@@ -194,7 +194,9 @@ test.describe("HQ empty states", () => {
     if (width(page) > 680) {
       await expect(empty).toHaveCSS("padding", "18px 20px");
       // Icon, copy, action.
-      expect(tracks(await style(empty, "grid-template-columns"))).toBe(3);
+      await expect
+        .poll(async () => tracks(await style(empty, "grid-template-columns")))
+        .toBe(3);
     }
 
     // With matches ready, the heading and list share the same 20px inset.
@@ -384,11 +386,14 @@ test.describe("HQ tournament launch workspace", () => {
          <ol><li>Seeding</li><li>Pools</li><li>Bracket</li></ol>
        </section>`,
     );
-    const columns = tracks(
-      await style(fixture.locator("ol"), "grid-template-columns"),
-    );
-    if (width(page) <= 680) expect(columns).toBe(1);
-    else expect(columns).toBeGreaterThan(1);
+    // Poll: the stylesheet can still be applying right after mounting.
+    await expect
+      .poll(async () =>
+        tracks(await style(fixture.locator("ol"), "grid-template-columns")),
+      )
+      .toSatisfy((columns: number) =>
+        width(page) <= 680 ? columns === 1 : columns > 1,
+      );
   });
 });
 
@@ -459,11 +464,16 @@ test.describe("HQ Audience product experience", () => {
     page,
   }) => {
     await page.goto(`${hq}/audiences/create`);
-    const columns = tracks(
-      await style(page.locator(".audience-builder"), "grid-template-columns"),
-    );
-    if (width(page) <= 900) expect(columns).toBe(1);
-    else expect(columns).toBe(2);
+    await expect
+      .poll(async () =>
+        tracks(
+          await style(
+            page.locator(".audience-builder"),
+            "grid-template-columns",
+          ),
+        ),
+      )
+      .toBe(width(page) <= 900 ? 1 : 2);
     await noPageOverflow(page);
 
     await page.goto(`${hq}/audiences`);
