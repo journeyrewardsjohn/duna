@@ -245,7 +245,7 @@ watches the rating move, watches film, manages membership and wallet.
 | PL-1.1 | Opens Home → direct actions and Next up first, no layout jump                                      | Web           | P1              | Main    |
 | PL-1.2 | Searches by where, when and what (sheets open and close)                                           | Web           | P3, C6          | Main    |
 | PL-1.3 | Filters results to courts                                                                          | Web           | P3              | Main    |
-| PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                           | Web           | P3, C3          | Planned |
+| PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                           | Web           | SITE-4          | Main    |
 | PL-1.n | Finds play in the app: search sheet, list and map                                                  | Player        | M-P2            | Native  |
 | PL-2.1 | Opens a venue and picks day, time and duration (today: "Online rental details are coming soon.")   | Web           | P5              | Planned |
 | PL-2.2 | Adds friends to the booking                                                                        | Web           | P5              | Planned |

@@ -126,15 +126,14 @@ test.describe("Home page and site shell", () => {
       "Hermosa Beach",
     );
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    await page.waitForURL(/\/discover\/results\?/);
+    await page.waitForURL(/\/discover\?/);
     const url = new URL(page.url());
     expect(url.searchParams.get("where")).toBe("place");
     expect(url.searchParams.get("location")).toBe("Hermosa Beach");
     expect(url.searchParams.get("lat")).toBe("33.86220");
     expect(url.searchParams.get("lng")).toBe("-118.39950");
-    expect(url.searchParams.get("when")).toBe("custom");
-    expect(url.searchParams.get("start")).toBeTruthy();
-    expect(url.searchParams.get("what")).toBe("matches");
+    expect(url.searchParams.get("when")).toBe("weekend");
+    expect(url.searchParams.get("what")).toBe("open");
     expect(url.searchParams.get("surface")).toBe("beach");
     // The recent place is remembered on this device.
     const recent = await page.evaluate(() =>
@@ -188,7 +187,7 @@ test.describe("Home page and site shell", () => {
     expect(box!.height).toBeGreaterThanOrEqual(800);
     await sheet.getByRole("button", { name: "Tonight" }).click();
     await sheet.getByRole("button", { name: "Search", exact: true }).click();
-    await page.waitForURL(/\/discover\/results\?.*when=custom/);
+    await page.waitForURL(/\/discover\?.*when=tonight/);
   });
 
   test("the audience switch changes only the call to action and persists", async ({

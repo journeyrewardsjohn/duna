@@ -38,6 +38,7 @@
     "./native/search": "./src/native/search/index.ts",
     "./native/participation": "./src/native/participation/index.ts",
     "./native/map": "./src/native/map/index.ts",
+    "./native/identity": "./src/native/identity/index.ts",
     "./native/foundations": "./src/native/foundations/FoundationsScreen.tsx",
     "./assets/fonts/*": "./assets/fonts/*"
   },

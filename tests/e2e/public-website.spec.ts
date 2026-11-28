@@ -52,7 +52,7 @@ test("quiet public navigation preserves menus, keyboard access and dark mode", a
   await page.addInitScript(() => localStorage.setItem("duna-theme", "light"));
   await page.setViewportSize({ width: 1440, height: 900 });
   // A page still on the legacy header (the home page moved to app/(next)).
-  await page.goto("/discover");
+  await page.goto("/rankings");
   const play = page.locator('.site-experience-menu[data-experience="play"]');
   await play.locator("summary").focus();
   await page.keyboard.press("Enter");

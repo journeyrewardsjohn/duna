@@ -416,6 +416,52 @@ Webhooks (thin routes in `apps/web/app/api/concierge/**`, logic in
 /api/concierge/email`, `POST /api/concierge/sendblue/status?delivery=<id>`;
 Sendblue inbound stays on `/api/sendblue/webhook`.
 
+## Training programs and practice plans (`operator.trainingPrograms`, `player.trainingPrograms`, owner B4)
+
+Shapes are frozen in `packages/api/src/contracts/training-programs.ts`; the
+product rules, roles and what happens to existing data are in
+[`docs/product/training.md`](product/training.md). Every procedure is live
+and returns its fixture from `@duna/core/demo/training-programs` in demo
+mode. Schedule maths is pure (`services/training-programs/schedule.ts`,
+`plan-timeline.ts`).
+
+| Procedure                                                               | Scope                                                   | Notes                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list`, `program`                                                       | `training:read`                                         | Counts, current week, lead coach; legacy programs read through the compatibility layer; ≤ 200 programs, fixed query count                                                                                                                  |
+| `proposeFromSentence`                                                   | `training:write`                                        | Code reads weekdays, times and dates; lists assumptions and what to check; saves nothing                                                                                                                                                   |
+| `create`                                                                | `members:write` (managers, owners)                      | Idempotent by key; a draft with slots, exceptions, coaches (club staff only, one lead) and athletes; no sessions yet                                                                                                                       |
+| `update`                                                                | `members:write`                                         | Partial; replaces the lists it is given; on an active program regenerates future practices without touching booked ones; `CONFLICT` once cancelled, archived or completed                                                                  |
+| `activate`, `cancel`                                                    | `members:write`                                         | Activate generates practices (idempotent); cancel keeps rows and reasons and cancels future sessions; `notifyAthletes` is recorded for a Concierge send a person confirms                                                                  |
+| `sessions`                                                              | `training:read`                                         | Window ≤ 400 days, ≤ 1,000 rows; coaches, plan or focus, `needsCover`, athlete count                                                                                                                                                       |
+| `addSession`, `cancelSession`, `assignSessionCoaches`, `setSessionPlan` | `training:write` + a manager or the program's coach     | Add is idempotent (`source: manual`); ready = plan or focus + a coach                                                                                                                                                                      |
+| `conflicts`, `resolveConflict`                                          | read `training:read`; resolve as above                  | Computed on read; resolutions `drop-practice`, `keep-both`, `ask-cover` (coverage request, substitute asked), `move-practice` (day after the blocking period)                                                                              |
+| `sessionOutcome`, `recordSessionOutcome`                                | `training:write` (+ program coach or manager to record) | Attendance from athlete responses, proposed until a coach records; block outcomes only for the session plan's blocks; completes the session                                                                                                |
+| `practicePlans`, `practicePlan`                                         | `training:write`                                        | ≤ 200 plans; totals computed; where the plan is used (program, phase, session)                                                                                                                                                             |
+| `savePracticePlan`                                                      | `training:write`; edit: the author or a manager         | Idempotent; each save a new version; blocks pin drill versions (a drill id alone pins its current version); duplicate lane positions are `BAD_REQUEST`; overlaps and length are warnings only; an archived plan comes back only as a draft |
+| `proposePracticePlan`                                                   | `training:write`                                        | Warm-up, the club's and Duna's drills that match the focus, games, cool-down; saves nothing                                                                                                                                                |
+| `player.myPrograms`, `player.mySchedule`                                | signed in                                               | The person's and their verified juniors' programs (never drafts), across clubs                                                                                                                                                             |
+
+Errors: `FORBIDDEN` (role), `NOT_FOUND` (another club's ids), `CONFLICT`
+(state machine), `BAD_REQUEST` (dates, time zone, coaches, timeline).
+
+## Drill library, store and scenes (`operator.trainingDrills`, `player.trainingDrills`, `public.trainingDrills`, owners B5 / B6a)
+
+Shapes are frozen in `packages/api/src/contracts/training-drills.ts`; scenes
+are validated by `@duna/core/training-scene`. Every procedure is live and
+returns its fixture from `@duna/core/demo/training-drills` in demo mode.
+
+| Procedure                                 | Scope                                                               | Notes                                                                                                                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library`                                 | `training:write` (coaches)                                          | `personal` (owner only), `club`, `duna`, `purchased`; filters query (escaped, trigram-indexed), focus, players, level, equipment, minutes; ≤ 200, fixed query count; `usedInPlans` counts this club's plans only |
+| `drill`                                   | `training:write`                                                    | Versions, the current version's scene (a legacy v1 scene converted on read), review checks, active listing                                                                                                       |
+| `saveVersion`                             | `training:write`; edit: owner (personal) or author / manager (club) | Idempotent; new version every save; scene validated and stored (invalid kept with issues; > 64 KB `BAD_REQUEST`); no scene → previous one carried forward; Duna and purchased drills `FORBIDDEN`                 |
+| `setScope`                                | as above                                                            | personal → club shares it; club → personal only by its author                                                                                                                                                    |
+| `submitForReview`                         | as above                                                            | Latest version only; scene check and personal-data check run at once → `in-review` or `changes-requested`                                                                                                        |
+| `saveListing`, `delist`                   | club listings: managers; personal: the author                       | Kill switch `training.storefront`; paid needs `TRAINING_MARKETPLACE_FEE_BPS`; `pending-review` until approved, then `listed`                                                                                     |
+| `store`, `public.store`, `public.listing` | `training:read` / public                                            | Listed drills; your own club's are left out; `{ enabled: false }` when switched off                                                                                                                              |
+| `purchase`, `purchases`                   | buy for the club: managers; for yourself: signed-in coach           | Idempotent; free completes at once; paid stays pending until checkout; buying your own `CONFLICT`                                                                                                                |
+| `player.drill`                            | signed in                                                           | Published Duna drills, listed drills, or drills used in a program the athlete is on; no review or listing data                                                                                                   |
+
 ## Safety invariants
 
 - Only complete doubles teams with four distinct people enter the backtest.
@@ -428,6 +474,19 @@ Sendblue inbound stays on `/api/sendblue/webhook`.
   accepting policies, or moving money still requires the normal user checkout.
 - Provider provenance, source URLs, evidence weights, and dispute state must
   survive every repair.
+- `operator.memberProfile` never returns a health value (PRIV-1). It returns
+  `healthAccess: { canView }`, computed for this viewer and this person by the
+  Health service's own non-recording check (`healthSummaryVisibleTo` in
+  `health-service.ts`, built on `resolveHealthAccess`; it writes no access
+  record): an adult viewer with an effective grant to them by name, to them as
+  the person's coach at this club, or to this club for the roles
+  `organizationViewerRolesFor` names (owner, manager, coach for adults;
+  coaches only for a junior, and only with guardian approval). A grant to
+  another club or to a peer player never counts inside a club workspace.
+  Values come only from `operator.memberHealthProfile`, which records
+  "health.profile_viewed". Deprecated: the `health` key is still present (no
+  `metrics`) exactly when `canView` is true, until HQ reads `healthAccess`.
+  Ask Duna never receives that key.
 
 ## Versioning
 
