@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { MARK_RATIO } from "../brand/marks";
 import { useReducedMotion } from "../motion/reduced-motion";
+import { runWithWatchdog, settleValues } from "../motion/watchdog";
 import { nativeTokens } from "../tokens";
 import { CrestLayers } from "./crest-layers";
 import { flipStartsAt, LAUNCH } from "./launch";
@@ -49,6 +50,7 @@ export function LaunchSequence({
   );
   const [skippedAt, setSkippedAt] = useState<number | null>(null);
   const done = useRef(false);
+  const [over, setOver] = useState(false);
   const completeRef = useRef(onComplete);
   completeRef.current = onComplete;
 
@@ -101,6 +103,7 @@ export function LaunchSequence({
     const finish = () => {
       if (done.current) return;
       done.current = true;
+      setOver(true);
       completeRef.current();
     };
     // Reduced motion holds the finished lockup briefly instead of the
@@ -120,10 +123,15 @@ export function LaunchSequence({
       easing: reduceMotion ? Easing.linear : Easing.bezier(0.4, 0, 0.2, 1),
       useNativeDriver: true,
     });
-    animation.start(({ finished }) => {
-      if (finished) finish();
+    // The cover must lift even if the animation never reports back (the
+    // native driver can silently not finish): the watchdog ends it a second
+    // after the timeline would have, and `finish` is idempotent.
+    return runWithWatchdog(animation, {
+      timeline:
+        wait + (reduceMotion ? LAUNCH.reduced.fade : LAUNCH.flip.duration),
+      settle: settleValues([[flip, 1]]),
+      onFinish: finish,
     });
-    return () => animation.stop();
   }, [flip, flipAt, reduceMotion, skippedAt, start]);
 
   const markWidth = MARK_HEIGHT * MARK_RATIO;
@@ -145,7 +153,7 @@ export function LaunchSequence({
 
   return (
     <Animated.View
-      pointerEvents={skippedAt === null ? "auto" : "none"}
+      pointerEvents={skippedAt === null && !over ? "auto" : "none"}
       style={[
         StyleSheet.absoluteFill,
         { backgroundColor: brand["night-court"] },
