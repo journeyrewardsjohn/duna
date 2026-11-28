@@ -22,6 +22,9 @@ export const demoIdPrefixes = {
   search: "d00d0000",
   conditions: "d00e0000",
   health: "d00f0000",
+  fees: "d0100000",
+  households: "d0110000",
+  legal: "d0120000",
 } as const;
 
 export type DemoDomain = keyof typeof demoIdPrefixes;
