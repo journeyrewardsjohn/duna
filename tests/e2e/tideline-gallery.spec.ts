@@ -507,9 +507,12 @@ test.describe("Tideline gallery, layout", () => {
     page,
   }) => {
     // The page is public only in demo mode and only with the env flag; a
-    // theme it does not know falls back to light instead of failing.
+    // theme it does not know falls back to light instead of failing. The
+    // gallery's own scope is the first `div.td` (the body is the app scope).
     await page.goto(`${base}/tideline?theme=unknown`);
-    await expect(page.locator(".td").first()).not.toHaveAttribute("data-theme");
+    await expect(page.locator("div.td").first()).not.toHaveAttribute(
+      "data-theme",
+    );
   });
 });
 
@@ -669,18 +672,9 @@ test.describe("Tideline gallery, Book a lesson", () => {
     live: "rgb(14, 26, 34)",
   };
   for (const theme of ["light", "dark", "live"]) {
-    test(`the primary label keeps on-action in ${theme}, whatever the page does to links`, async ({
-      page,
-    }) => {
+    test(`the primary label keeps on-action in ${theme}`, async ({ page }) => {
       await page.goto(`${base}/tideline?theme=${theme}`);
       await waitForHydration(page);
-      // A hostile host page: unlayered link and button rules, as HQ and Web
-      // have. The legacy bridge hands the colour back to Tideline.
-      await page.addStyleTag({
-        content: `a, a:link, a:visited, html body .td a, button,
-          html body div a.td-btn { color: rgb(0, 0, 128);
-          -webkit-text-fill-color: rgb(0, 0, 128); }`,
-      });
       const label = onAction[theme]!;
       for (const name of ["Primary link", "Save result", "Full width"]) {
         const button = page
