@@ -3,6 +3,7 @@ import type {
   OperatorMemberProfile,
   OperatorWorkspace,
 } from "@duna/api";
+import { appRouter } from "@duna/api";
 import { PROVIDER_NOT_CONFIGURED_MESSAGE } from "@duna/api/observability";
 import { log, report } from "@duna/observability";
 import { cache } from "react";
@@ -11,6 +12,10 @@ import { isPermissionDenied } from "@/lib/permission-denied";
 import { getHqSession, hasScope } from "../shell/hq-session";
 import type { ShellSession } from "../shell/session-types";
 import { demoFirstDayRequested } from "../today/today-data";
+import {
+  capabilitiesFrom,
+  type PeopleCapabilities,
+} from "./people-capabilities";
 import {
   canSeeHealth,
   type DuplicateCandidate,
@@ -96,7 +101,23 @@ export interface PeopleContext {
   readonly canDraft: boolean;
   /** Downloads the people list (owners and managers). */
   readonly canExport: boolean;
+  /** Refunds a payment (owners): the same refund Money uses. */
+  readonly canRefund: boolean;
+  /** Adds someone to a session. */
+  readonly canBook: boolean;
+  /** Features whose backend has landed (see people-capabilities.ts). */
+  readonly capabilities: PeopleCapabilities;
   readonly now: string;
+}
+
+/** Every procedure path the API router serves (read once per process). */
+function procedurePaths(): string[] {
+  const definition = (
+    appRouter as unknown as {
+      _def?: { procedures?: Record<string, unknown> };
+    }
+  )._def;
+  return Object.keys(definition?.procedures ?? {});
 }
 
 export const peopleContext = cache(async (): Promise<PeopleContext> => {
@@ -113,16 +134,33 @@ export const peopleContext = cache(async (): Promise<PeopleContext> => {
     canGrantCredits: hasScope(session, "payments:write"),
     canDraft: hasScope(session, "messages:propose"),
     canExport: canWrite,
+    canRefund: hasScope(session, "payments:write"),
+    canBook: hasScope(session, "sessions:write"),
+    capabilities: capabilitiesFrom(procedurePaths()),
     now: new Date().toISOString(),
   };
 });
 
-/** Whether this viewer may see this person's Health tab at all. */
-export function healthAllowed(
-  context: PeopleContext,
+/**
+ * Whether the Health service lets this viewer see this person's health,
+ * following its own rule exactly. With Duna Database the service itself is
+ * asked (it checks the person's grants: to the club, which reaches its
+ * owners, managers and coaches for an adult and only its coaches for a
+ * junior, or to this coach by name, plus age and guardian approval). In
+ * demo mode, which has no grants table, the same rule is applied to the
+ * club grant the profile carries: the viewer's role must be one the grant
+ * reaches, and the person must have shared with the club.
+ */
+async function healthAccess(
+  personId: string,
   subjectIsJunior: boolean,
-): boolean {
-  return canSeeHealth(context.roles, subjectIsJunior);
+  sharedWithClub: boolean,
+  context: PeopleContext,
+): Promise<"allowed" | "refused"> {
+  if (!canSeeHealth(context.roles, subjectIsJunior)) return "refused";
+  if (!process.env.DATABASE_URL) return sharedWithClub ? "allowed" : "refused";
+  const history = await loadHealthHistory(personId);
+  return history.state === "ok" ? "allowed" : "refused";
 }
 
 export interface PeopleWorkspace {
@@ -262,7 +300,13 @@ export const loadPerson = cache(
       "memberProfile",
     );
     if (profile.state !== "ok") return profile;
-    const health = healthAllowed(context, row.isJunior);
+    const access = await healthAccess(
+      personId,
+      row.isJunior,
+      profile.data.health !== undefined,
+      context,
+    );
+    const health = access !== "refused";
     return {
       state: "ok",
       data: {

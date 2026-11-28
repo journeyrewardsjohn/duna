@@ -11,7 +11,8 @@ export const metadata: Metadata = { title: "Notes" };
 
 /**
  * A person › Notes: the team's notes with their author and time, whether
- * each is private to the team or shared with the person, and adding one.
+ * each is private to the team or shared with the person, adding one (when
+ * its capability is on), and the club's videos of them.
  */
 export default async function PersonNotesPage({
   params,
@@ -36,7 +37,7 @@ export default async function PersonNotesPage({
       page={page}
       tab="notes"
     >
-      {context.canWrite ? (
+      {context.canWrite && context.capabilities.notes ? (
         <PageSection id="add-note" title="Add a note">
           <AddNote personId={row.id} />
         </PageSection>
@@ -74,6 +75,31 @@ export default async function PersonNotesPage({
                 >
                   {note.sessionTitle}
                 </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PageSection>
+      <PageSection flush id="videos" title="Videos">
+        {profile.videos.length === 0 ? (
+          <p className="people-quiet people-pad">
+            No club videos of {first} yet.
+          </p>
+        ) : (
+          <ul className="people-timeline" aria-label={`Videos of ${first}`}>
+            {profile.videos.slice(0, 12).map((video) => (
+              <li key={video.id}>
+                <span className="people-timeline__what">
+                  <strong>{video.title}</strong>
+                  <span>
+                    {[video.sessionTitle ?? video.category, video.status]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </span>
+                <time dateTime={video.createdAt}>
+                  {shortDate(video.createdAt, context.timeZone, now)}
+                </time>
               </li>
             ))}
           </ul>

@@ -393,6 +393,8 @@ export async function updateDetailsAction(input: {
   readonly displayName: string;
   readonly email?: string;
   readonly phone?: string;
+  readonly homeMarket?: string;
+  readonly experienceSummary?: string;
   readonly isJunior: boolean;
   readonly idempotencyKey: string;
 }) {
@@ -411,6 +413,8 @@ export async function updateDetailsAction(input: {
       displayName: name,
       email,
       phoneE164: phone,
+      homeMarket: input.homeMarket?.trim() || undefined,
+      experienceSummary: input.experienceSummary?.trim() || undefined,
       reason: "Updated from the person's page in People.",
       idempotencyKey: uuid(input.idempotencyKey),
     });

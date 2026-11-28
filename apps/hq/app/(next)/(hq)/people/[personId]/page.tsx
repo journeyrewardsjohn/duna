@@ -228,6 +228,8 @@ export default async function PersonOverviewPage({
             isJunior={row.isJunior}
             name={row.name}
             personId={row.id}
+            experienceSummary={profile.profile.experienceSummary}
+            homeMarket={profile.profile.homeMarket}
             phone={row.phone}
           />
         </PageSection>

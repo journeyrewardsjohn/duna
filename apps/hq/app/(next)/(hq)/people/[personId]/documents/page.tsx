@@ -80,7 +80,9 @@ export default async function PersonDocumentsPage({
                       .join(" · ")}
                   </span>
                 </span>
-                <Chip>Signature not on record here</Chip>
+                {context.capabilities.documents ? (
+                  <Chip>Signature not on record here</Chip>
+                ) : null}
                 {context.canDraft ? (
                   <SignatureRequest
                     channel={channel}
@@ -96,7 +98,7 @@ export default async function PersonDocumentsPage({
           </ul>
         )}
       </PageSection>
-      {documents.length > 0 ? (
+      {context.capabilities.documents && documents.length > 0 ? (
         <PartialData missing={["who has signed which version, and when"]} />
       ) : null}
 

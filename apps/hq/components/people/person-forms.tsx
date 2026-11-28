@@ -6,6 +6,7 @@ import {
   Input,
   Notice,
   Select,
+  Textarea,
   useAction,
   useConfirm,
 } from "@duna/ui/tideline";
@@ -27,12 +28,18 @@ export function EditDetails({
   name,
   email,
   phone,
+  homeMarket,
+  experienceSummary,
   isJunior,
 }: {
   readonly personId: string;
   readonly name: string;
   readonly email?: string;
   readonly phone?: string;
+  /** Where they usually play ("Manhattan Beach"). */
+  readonly homeMarket?: string;
+  /** Their playing context, for coaches. */
+  readonly experienceSummary?: string;
   readonly isJunior: boolean;
 }) {
   const router = useRouter();
@@ -40,11 +47,15 @@ export function EditDetails({
     name,
     email: email ?? "",
     phone: phone ?? "",
+    homeMarket: homeMarket ?? "",
+    experienceSummary: experienceSummary ?? "",
   });
   const changed =
     draft.name.trim() !== name ||
     draft.email.trim() !== (email ?? "") ||
-    draft.phone.trim() !== (phone ?? "");
+    draft.phone.trim() !== (phone ?? "") ||
+    draft.homeMarket.trim() !== (homeMarket ?? "") ||
+    draft.experienceSummary.trim() !== (experienceSummary ?? "");
   const save = useAction(
     async ({ idempotencyKey }) =>
       unwrap(
@@ -53,6 +64,8 @@ export function EditDetails({
           displayName: draft.name,
           email: draft.email,
           phone: draft.phone,
+          homeMarket: draft.homeMarket,
+          experienceSummary: draft.experienceSummary,
           isJunior,
           idempotencyKey,
         }),
@@ -120,6 +133,30 @@ export function EditDetails({
           </Field>
         </>
       )}
+      <Field label="Plays at" optional>
+        <Input
+          autoComplete="off"
+          maxLength={160}
+          onChange={(event) =>
+            setDraft({ ...draft, homeMarket: event.currentTarget.value })
+          }
+          value={draft.homeMarket}
+        />
+      </Field>
+      <Field
+        hint="For coaches: level, history, goals."
+        label="Playing context"
+        optional
+      >
+        <Textarea
+          maxLength={2000}
+          onChange={(event) =>
+            setDraft({ ...draft, experienceSummary: event.currentTarget.value })
+          }
+          rows={3}
+          value={draft.experienceSummary}
+        />
+      </Field>
       {save.error ? (
         <Notice role="alert" title="Not saved" tone="danger">
           {messageOf(save.error, "The details weren't saved. Nothing changed.")}

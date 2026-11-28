@@ -5,6 +5,7 @@ import { loadPeople, peopleContext } from "@/components/people/people-data";
 import {
   PeopleBlockState,
   PeopleScreen,
+  PeopleUnavailable,
 } from "@/components/people/people-screen";
 
 export const metadata: Metadata = { title: "Import people" };
@@ -28,7 +29,9 @@ export default async function ImportPeoplePage() {
       parentHref={hqHref("people")}
       title="Import people"
     >
-      {people.state === "ok" ? (
+      {!context.capabilities.import ? (
+        <PeopleUnavailable what="Importing people from a file" />
+      ) : people.state === "ok" ? (
         <ImportFlow now={context.now} people={people.data.candidates} />
       ) : (
         <PeopleBlockState

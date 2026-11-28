@@ -1,7 +1,9 @@
 import { hqHref } from "@duna/core/hq-routes";
 import {
   Avatar,
+  Button,
   buttonClassName,
+  EmptyState,
   ErrorState,
   NotConfigured,
   ObjectHeader,
@@ -79,6 +81,26 @@ export function PeopleBlockState({
         />
       );
   }
+}
+
+/**
+ * An address whose feature is not offered yet (its capability switch is
+ * off): nothing links here, so only a typed or old link lands on it. Says so
+ * plainly and leads back; no form that cannot work.
+ */
+export function PeopleUnavailable({ what }: { readonly what: string }) {
+  return (
+    <EmptyState
+      actions={
+        <Button href={hqHref("people")} size="sm" variant="secondary">
+          Back to People
+        </Button>
+      }
+      description="It isn't available for clubs yet. Everything else in People works."
+      icon="users"
+      title={`${what} isn't available yet`}
+    />
+  );
 }
 
 /** Rows while a list loads, shaped like its rows. */
@@ -279,7 +301,7 @@ export function personTabs(page: PersonPage): SubNavItem[] {
     },
     {
       id: "notes",
-      label: "Notes",
+      label: "Notes and videos",
       href: hqHref("memberNotes", params),
       count: profile.notes.length > 0 ? profile.notes.length : undefined,
     },

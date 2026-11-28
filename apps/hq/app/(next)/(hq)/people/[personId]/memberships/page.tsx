@@ -84,7 +84,7 @@ export default async function PersonMembershipsPage({
                       ? "Payment due"
                       : CARD_STATUS_WORDS[state]}
                   </Chip>
-                  {context.canWrite ? (
+                  {context.canWrite && context.capabilities.membershipChange ? (
                     <MembershipControls
                       name={row.name}
                       personId={row.id}

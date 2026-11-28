@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccessDeniedState } from "@/lib/access-state";
+import { RefundPanel } from "@/components/money/refund-panel";
 import { PageSection } from "@/components/shell/page-header";
 import { firstName, shortDate } from "@/components/people/people-model";
 import { PersonScreen, personPage } from "@/components/people/people-screen";
@@ -13,7 +14,8 @@ export const metadata: Metadata = { title: "Payments" };
 
 /**
  * A person › Payments: a read of what Money has for them, each payment
- * linking into Money (refunds happen there, not here). Only for roles that
+ * linking into Money, and refunding through the same refund Money uses
+ * (owners; a strong confirmation). Only for roles that
  * read payments; anyone else reaching the address gets "You need access",
  * with nothing about the person's money.
  */
@@ -117,13 +119,32 @@ export default async function PersonPaymentsPage({
                     ? `${formatMoney(purchase.refundedMinor, purchase.currency)} refunded`
                     : purchase.status.replaceAll("-", " ")}
                 </Chip>
+                {context.canRefund &&
+                ["paid", "partially-refunded"].includes(purchase.status) &&
+                purchase.amountMinor > purchase.refundedMinor ? (
+                  <div className="people-payments__refund">
+                    <RefundPanel
+                      buyerName={row.name}
+                      currency={purchase.currency}
+                      orderId={purchase.orderId}
+                      paidMinor={purchase.amountMinor}
+                      reference={`Order ${purchase.orderId.slice(0, 8)}`}
+                      refundableMinor={
+                        purchase.amountMinor - purchase.refundedMinor
+                      }
+                      title={purchase.description}
+                    />
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
       </PageSection>
       <p className="people-quiet">
-        Refunds and receipts are in Money: open a payment to refund it there.
+        {context.canRefund
+          ? "A refund here is the same refund Money makes, to the card or as credits. Receipts and payouts are in Money."
+          : "Only an owner can refund a payment. Receipts and payouts are in Money."}
       </p>
     </PersonScreen>
   );

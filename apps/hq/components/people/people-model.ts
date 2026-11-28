@@ -12,22 +12,26 @@ import type { OperatorMemberProfile } from "@duna/api";
 // ---------------------------------------------------------------- privacy
 
 /**
- * Roles that may open a person's Health summary in HQ. The Health service
- * lets an organisation grant reach owners, managers and coaches for an
- * adult, and only coaches for a junior; HQ shows it more narrowly: owners
- * and managers, adults only. A coach, the front desk, a scorekeeper and an
- * accountant never get the tab, and no one sees a junior's health in HQ.
+ * The roles a person's health grant to the club reaches, exactly as the
+ * Health service decides (`HEALTH_ADULT_ORGANIZATION_VIEWER_ROLES` and
+ * `HEALTH_MINOR_ORGANIZATION_VIEWER_ROLES` in the service's policy; a unit
+ * test keeps these equal): owners, managers and coaches for an adult, only
+ * coaches for a junior. The front desk, scorekeepers and accountants are
+ * never reached. A role in the list sees health only when the person has
+ * shared it (the service checks the grant itself with Duna Database).
  */
-export const HEALTH_VIEWER_ROLES = ["owner", "manager"] as const;
+export const HEALTH_ADULT_VIEWER_ROLES = ["owner", "manager", "coach"] as const;
+export const HEALTH_JUNIOR_VIEWER_ROLES = ["coach"] as const;
 
+/** Whether the viewer's role is one a health grant can reach for this person. */
 export function canSeeHealth(
   roles: readonly string[],
   subjectIsJunior: boolean,
 ): boolean {
-  if (subjectIsJunior) return false;
-  return roles.some((role) =>
-    (HEALTH_VIEWER_ROLES as readonly string[]).includes(role),
-  );
+  const reached: readonly string[] = subjectIsJunior
+    ? HEALTH_JUNIOR_VIEWER_ROLES
+    : HEALTH_ADULT_VIEWER_ROLES;
+  return roles.some((role) => reached.includes(role));
 }
 
 /** The product's standing wording under any health figure. */
@@ -73,7 +77,7 @@ export type AttentionKind =
 export interface Attention {
   readonly kind: AttentionKind;
   readonly label: string;
-  readonly tone: "warning" | "attention" | "danger";
+  readonly tone: "warning" | "attention" | "danger" | "neutral";
 }
 
 /**
@@ -230,7 +234,8 @@ export function attentionFor(input: AttentionInput): Attention[] {
         input.daysQuiet !== undefined && input.daysQuiet > 0
           ? `Quiet for ${input.daysQuiet} days`
           : "Lapsing",
-      tone: "attention",
+      // Information, not a failure: neutral (danger is for a failed payment).
+      tone: "neutral",
     });
   }
   return items;

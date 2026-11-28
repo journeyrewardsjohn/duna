@@ -220,9 +220,9 @@ parents, gets paid. Mostly on the phone (Pro, Watch); plans in HQ.
 
 Added by H-PEOPLE (28 November 2026).
 
-| Step    | The person does → expected result                                                       | Surface | Packages | Status |
-| ------- | --------------------------------------------------------------------------------------- | ------- | -------- | ------ |
-| CH-10.1 | Opens a player in People: no Payments or Health tab, and no money or health in the page | HQ      | H-PEOPLE | Main   |
+| Step    | The person does → expected result                                                          | Surface | Packages | Status |
+| ------- | ------------------------------------------------------------------------------------------ | ------- | -------- | ------ |
+| CH-10.1 | Opens a player in People: no Payments tab or money; Health only where the player shared it | HQ      | H-PEOPLE | Main   |
 
 ## Parent or guardian with a junior (PA)
 

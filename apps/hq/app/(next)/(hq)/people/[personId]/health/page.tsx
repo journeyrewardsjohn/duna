@@ -69,11 +69,12 @@ function Trend({
 }
 
 /**
- * A person › Health: the read-only summary the person chose to share with
- * the club, for owners and managers only (never a junior's, never in a
- * list or an export), under the product's standing "not medical advice"
- * wording. For any other role this tab does not exist; reaching the address
- * says "You need access" and nothing about the person's health.
+ * A person › Health: the read-only summary the person chose to share, for
+ * exactly the viewers the Health service allows for this person (see
+ * `healthAccess` in people-data.ts); never in a list or an export, under the
+ * product's standing "not medical advice" wording. For anyone else this tab
+ * does not exist; reaching the address says "You need access" and nothing
+ * about the person's health.
  */
 export default async function PersonHealthPage({
   params,
@@ -93,7 +94,7 @@ export default async function PersonHealthPage({
         <div className="hqs-state">
           <AccessDeniedState
             area="Health"
-            grantedBy={`an owner or manager of ${context.organization}`}
+            grantedBy="the person, who chooses in their Duna app who sees their health"
           />
         </div>
       </PersonScreen>
@@ -102,145 +103,135 @@ export default async function PersonHealthPage({
   const first = firstName(row.name);
   const now = new Date(context.now);
   const snapshot = profile.health;
-  const history = snapshot ? await loadHealthHistory(row.id) : undefined;
-  const daily =
-    history?.state === "ok" ? history.data.daily.slice(0, 14).toReversed() : [];
+  // With Duna Database this is the service's own answer for this viewer.
+  const history = await loadHealthHistory(row.id);
+  const detail = history.state === "ok" ? history.data : undefined;
+  const metrics = {
+    readinessScore:
+      snapshot?.metrics?.readinessScore ?? detail?.intelligence.readiness.score,
+    strainScore:
+      snapshot?.metrics?.strainScore ?? detail?.intelligence.strain.score,
+    restingHeartRate:
+      snapshot?.metrics?.restingHeartRate ?? detail?.summary.restingHeartRate,
+    heartRateVariabilityMs:
+      snapshot?.metrics?.heartRateVariabilityMs ??
+      detail?.summary.heartRateVariabilityMs,
+    sleepHours: snapshot?.metrics?.sleepHours ?? detail?.summary.lastSleepHours,
+    exerciseMinutes: snapshot?.metrics?.exerciseMinutes,
+  };
+  const daily = detail ? detail.daily.slice(0, 14).toReversed() : [];
   const pick = (key: "steps" | "activeEnergyKcal" | "sleepHours") =>
     daily.flatMap((day) => (day[key] === undefined ? [] : [day[key]!]));
+  const figures: readonly [string, number | undefined, string, number][] = [
+    ["Readiness", metrics.readinessScore, " / 10", 1],
+    ["Strain", metrics.strainScore, " / 10", 1],
+    ["Resting heart rate", metrics.restingHeartRate, " bpm", 0],
+    ["Heart rate variability", metrics.heartRateVariabilityMs, " ms", 0],
+    ["Sleep", metrics.sleepHours, " h", 1],
+    ["Exercise", metrics.exerciseMinutes, " min", 0],
+  ];
+  const factors =
+    detail?.intelligence.readiness.factors.filter(
+      (factor) => factor.score !== undefined,
+    ) ?? [];
+  const scopes = snapshot?.scopes ?? detail?.access.scopes ?? [];
   return (
     <PersonScreen
       askStarters={[`How has ${first}'s training load changed this month?`]}
       page={page}
       tab="health"
     >
-      {!snapshot ? (
-        <PageSection id="health" title="Health summary">
+      <dl
+        aria-label={`${first}'s shared health summary`}
+        className="people-figures"
+      >
+        {figures.map(([label, figure, suffix, digits]) => (
+          <div className="people-figure" key={label}>
+            <dt>{label}</dt>
+            <dd
+              className={
+                typeof figure === "number" ? "people-num" : "people-dd-quiet"
+              }
+            >
+              {value(figure, suffix, digits)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="people-disclaimer">{HEALTH_DISCLAIMER}</p>
+      <PageSection id="sharing" title="What is shared">
+        <p className="people-body">
+          {`${first} chose to share ${scopes.join(", ").replaceAll("-", " ")}${
+            snapshot?.observedAt
+              ? `. Last updated ${shortDate(snapshot.observedAt, context.timeZone, now)}`
+              : ""
+          }. ${first} can stop sharing at any time.`}
+        </p>
+        {(snapshot?.metrics?.readinessSummary ??
+        detail?.intelligence.readiness.summary) ? (
           <p className="people-body">
-            {`${first} doesn't share health with ${context.organization}. Only ${first} can choose to, from their Duna app, and can stop at any time.`}
+            {snapshot?.metrics?.readinessSummary ??
+              detail?.intelligence.readiness.summary}
           </p>
-        </PageSection>
-      ) : (
-        <>
-          <dl
-            aria-label={`${first}'s shared health summary`}
-            className="people-figures"
-          >
-            <div className="people-figure">
-              <dt>Readiness</dt>
-              <dd
-                className={
-                  typeof snapshot.metrics?.readinessScore === "number"
-                    ? "people-num"
-                    : "people-dd-quiet"
-                }
-              >
-                {value(snapshot.metrics?.readinessScore, " / 10", 1)}
-              </dd>
-            </div>
-            <div className="people-figure">
-              <dt>Strain</dt>
-              <dd
-                className={
-                  typeof snapshot.metrics?.strainScore === "number"
-                    ? "people-num"
-                    : "people-dd-quiet"
-                }
-              >
-                {value(snapshot.metrics?.strainScore, " / 10", 1)}
-              </dd>
-            </div>
-            <div className="people-figure">
-              <dt>Resting heart rate</dt>
-              <dd
-                className={
-                  typeof snapshot.metrics?.restingHeartRate === "number"
-                    ? "people-num"
-                    : "people-dd-quiet"
-                }
-              >
-                {value(snapshot.metrics?.restingHeartRate, " bpm")}
-              </dd>
-            </div>
-            <div className="people-figure">
-              <dt>Heart rate variability</dt>
-              <dd
-                className={
-                  typeof snapshot.metrics?.heartRateVariabilityMs === "number"
-                    ? "people-num"
-                    : "people-dd-quiet"
-                }
-              >
-                {value(snapshot.metrics?.heartRateVariabilityMs, " ms")}
-              </dd>
-            </div>
-            <div className="people-figure">
-              <dt>Sleep</dt>
-              <dd
-                className={
-                  typeof snapshot.metrics?.sleepHours === "number"
-                    ? "people-num"
-                    : "people-dd-quiet"
-                }
-              >
-                {value(snapshot.metrics?.sleepHours, " h", 1)}
-              </dd>
-            </div>
-            <div className="people-figure">
-              <dt>Exercise</dt>
-              <dd
-                className={
-                  typeof snapshot.metrics?.exerciseMinutes === "number"
-                    ? "people-num"
-                    : "people-dd-quiet"
-                }
-              >
-                {value(snapshot.metrics?.exerciseMinutes, " min")}
-              </dd>
-            </div>
-          </dl>
-          <p className="people-disclaimer">{HEALTH_DISCLAIMER}</p>
-          <PageSection id="sharing" title="What is shared">
-            <p className="people-body">
-              {`${first} chose to share ${snapshot.scopes.join(", ").replaceAll("-", " ")} with the club${
-                snapshot.observedAt
-                  ? `. Last updated ${shortDate(snapshot.observedAt, context.timeZone, now)}`
-                  : ""
-              }. ${first} can stop sharing at any time.`}
+        ) : null}
+        {factors.length > 0 ? (
+          <ul className="people-facts-list">
+            {factors.map((factor) => (
+              <li key={factor.id}>
+                <strong>{factor.label}</strong>
+                <span>{factor.summary}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </PageSection>
+      <PageSection id="trends" title="Recent days">
+        {history.state !== "ok" ? (
+          history.state === "denied" ? (
+            <p className="people-quiet">
+              {`${first} shares a summary only, not the day-by-day history.`}
             </p>
-            {snapshot.metrics?.readinessSummary ? (
-              <p className="people-body">{snapshot.metrics.readinessSummary}</p>
+          ) : (
+            <PeopleBlockState
+              loaded={history}
+              organization={context.organization}
+              what="the day-by-day history"
+            />
+          )
+        ) : (
+          <>
+            <div className="people-trends">
+              <Trend label="Steps" values={pick("steps")} />
+              <Trend
+                label="Active energy"
+                suffix=" kcal"
+                values={pick("activeEnergyKcal")}
+              />
+              <Trend label="Sleep" suffix=" h" values={pick("sleepHours")} />
+            </div>
+            {history.data.timeline.length > 0 ? (
+              <ul className="people-timeline" aria-label="Shared timeline">
+                {history.data.timeline.slice(0, 24).map((entry) => (
+                  <li key={entry.id}>
+                    <span className="people-timeline__what">
+                      <strong>{entry.metric.replaceAll("-", " ")}</strong>
+                      <span>
+                        {entry.value === undefined
+                          ? (entry.categoryValue ?? "Recorded")
+                          : `${Math.round(entry.value * 10) / 10}${entry.unit ? ` ${entry.unit}` : ""}`}
+                      </span>
+                    </span>
+                    <time dateTime={entry.startedAt}>
+                      {shortDate(entry.startedAt, context.timeZone, now)}
+                    </time>
+                  </li>
+                ))}
+              </ul>
             ) : null}
-          </PageSection>
-          <PageSection id="trends" title="Recent days">
-            {history && history.state !== "ok" ? (
-              history.state === "denied" ? (
-                <p className="people-quiet">
-                  {`${first} shares a summary only, not the day-by-day history.`}
-                </p>
-              ) : (
-                <PeopleBlockState
-                  loaded={history}
-                  organization={context.organization}
-                  what="the day-by-day history"
-                />
-              )
-            ) : (
-              <div className="people-trends">
-                <Trend label="Steps" values={pick("steps")} />
-                <Trend
-                  label="Active energy"
-                  suffix=" kcal"
-                  values={pick("activeEnergyKcal")}
-                />
-                <Trend label="Sleep" suffix=" h" values={pick("sleepHours")} />
-              </div>
-            )}
-            {history?.state === "ok" ? (
-              <p className="people-disclaimer">{history.data.disclaimer}</p>
-            ) : null}
-          </PageSection>
-        </>
-      )}
+            <p className="people-disclaimer">{history.data.disclaimer}</p>
+          </>
+        )}
+      </PageSection>
     </PersonScreen>
   );
 }

@@ -159,9 +159,47 @@
       list-style: none;
     }
 
-    .people-file {
-      max-width: 100%;
-      font: var(--td-type-body);
+    .people-drop {
+      position: relative;
+      display: grid;
+      justify-items: center;
+      gap: var(--td-space-1);
+      max-width: 560px;
+      padding: var(--td-space-6) var(--td-space-4);
+      border: 1px dashed var(--td-line-strong);
+      border-radius: var(--td-radius-xl);
+      background: var(--td-surface-subtle);
+      color: var(--td-text-2);
+      text-align: center;
+      cursor: pointer;
+      transition: background var(--td-duration-hover) var(--td-ease-ui);
+
+      &:hover,
+      &[data-over] {
+        background: var(--td-surface-sunken);
+      }
+
+      &:focus-within {
+        box-shadow: var(--td-focus-ring);
+      }
+    }
+
+    .people-drop__input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .people-drop__title {
+      color: var(--td-text);
+      font: var(--td-type-label);
+    }
+
+    .people-drop__hint {
+      font: var(--td-type-meta);
     }
 
     /* ---------- The list ---------- */
@@ -603,6 +641,10 @@
         color: var(--td-text);
         font: var(--td-type-label);
       }
+    }
+
+    .people-payments__refund {
+      flex-basis: 100%;
     }
 
     .people-grants > li {

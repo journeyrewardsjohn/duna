@@ -2,15 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * People on the new shell (H-PEOPLE), in demo mode: search and segments as
- * addresses, an open person, a plan paused through its strong confirmation
- * (a double click sends one request), a junior added with a guardian, an
- * import dry run with problems then its confirmation, a merge, a coach's
- * limited view (no payments, no health), the health address refused for a
- * role without the permission (without leaking a value), and every People
- * page at 375 px with no horizontal scroll and no legacy stylesheet.
+ * addresses, an open person, a junior added with a guardian, giving
+ * credits and refunds through their strong confirmations, features without a
+ * backend not offered, a coach's view (no payments; health only because the
+ * person shared it), the Health service's rule by tab and by address with no
+ * leak, and every People page at 375 px with no horizontal scroll and no
+ * legacy stylesheet. Import, merge and plan changes wait behind their
+ * capability switches (fixme until their procedures exist).
  *
  * Ported access checks from the legacy People pages: "health appears only
- * after a player grants access" (now also: only for owners and managers),
+ * after a player grants access" (now by the Health service's own rule),
  * and the minor's contact routed to the guardian (legacy showed the
  * guardian's address on the junior's row; the new row shows none).
  */
@@ -112,7 +113,9 @@ test("the list moves by keyboard and opens a person with their next action and c
   ).toContainText("Next best action");
 });
 
-test("pausing a plan asks a strong confirmation, and a double click sends one request", async ({
+// Capability "membershipChange" (people-capabilities.ts): the plan buttons
+// are offered only when `operator.people.changeMembership` exists.
+test.fixme("pausing a plan asks a strong confirmation, and a double click sends one request [capability: membershipChange]", async ({
   page,
 }) => {
   await signIn(page);
@@ -170,7 +173,8 @@ test("adding a junior asks for the guardian, explains duplicates, and sends once
   expect(actions).toHaveLength(1);
 });
 
-test("an import dry run shows each problem, writes nothing, then confirms with counts", async ({
+// Capability "import": offered only when `operator.people.import` exists.
+test.fixme("an import dry run shows each problem, writes nothing, then confirms with counts [capability: import]", async ({
   page,
 }) => {
   await signIn(page);
@@ -216,7 +220,8 @@ test("an import dry run shows each problem, writes nothing, then confirms with c
   expect(actions).toHaveLength(1);
 });
 
-test("merging shows both records side by side and says what is kept", async ({
+// Capability "merge": offered only when `operator.people.merge` exists.
+test.fixme("merging shows both records side by side and says what is kept [capability: merge]", async ({
   page,
 }) => {
   await signIn(page);
@@ -241,7 +246,61 @@ test("merging shows both records side by side and says what is kept", async ({
   ).toBeDisabled();
 });
 
-test("a coach sees people without payments or health, even in the page's data", async ({
+test("giving credits restates them in a strong confirmation, and a double click sends one request", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto(hq(`/people/${maya}/memberships`));
+  // No plan change is offered until its procedure exists (no dead ends).
+  await expect(
+    page.getByRole("button", { name: "Pause", exact: true }),
+  ).toHaveCount(0);
+  const form = page.getByRole("form", { name: "Give credits" });
+  await form.getByRole("spinbutton", { name: "Credits" }).fill("3");
+  await form.getByRole("textbox", { name: "Why" }).fill("Rained-out clinic");
+  await form.getByRole("button", { name: "Review credits" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("Give Maya Chen 3 credits?");
+  const actions = countActions(page);
+  await dialog.getByRole("button", { name: "Give 3 credits" }).dblclick();
+  await expect(dialog).toContainText(/isn't set up yet|Nothing was changed/);
+  expect(actions).toHaveLength(1);
+});
+
+test("an owner refunds from Payments through the same strong refund Money uses", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto(hq(`/people/${maya}/payments`));
+  await title(page, "Maya Chen");
+  await expect(
+    page.getByRole("button", { name: /refund/i }).first(),
+  ).toBeVisible();
+});
+
+test("features without a backend are not offered anywhere", async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto(hq("/people"));
+  await expect(page.getByRole("link", { name: "Import" })).toHaveCount(0);
+  await page.getByRole("checkbox", { name: "Select Maya Chen" }).check();
+  const bulk = page.getByRole("region", { name: "Selected people" });
+  await expect(bulk.getByRole("button", { name: "Tag" })).toHaveCount(0);
+  await expect(
+    bulk.getByRole("button", { name: "Start a message draft" }),
+  ).toBeVisible();
+  await page.goto(hq(`/people/${maya}/notes`));
+  await expect(page.getByRole("form", { name: "Add a note" })).toHaveCount(0);
+  // An old or typed address says so plainly, with no form that can't work.
+  await page.goto(hq("/people/import"));
+  await expect(
+    page.getByText("Importing people from a file isn't available yet"),
+  ).toBeVisible();
+  await expect(page.getByLabel("Spreadsheet file")).toHaveCount(0);
+});
+
+test("a coach sees no payments, and health only because the person shared it with the club", async ({
   page,
 }) => {
   await signIn(page, "coach");
@@ -250,12 +309,13 @@ test("a coach sees people without payments or health, even in the page's data", 
   const tabs = page.getByRole("navigation", { name: "Maya Chen" });
   await expect(tabs.getByRole("link", { name: "Overview" })).toBeVisible();
   await expect(tabs.getByRole("link", { name: "Payments" })).toHaveCount(0);
-  await expect(tabs.getByRole("link", { name: "Health" })).toHaveCount(0);
-  // Neither rendered nor serialised into the page for the browser.
-  const html = await page.content();
-  expect(html).not.toContain("1,485");
-  expect(html).not.toContain("heartRateVariabilityMs");
-  expect(html).not.toContain("restingHeartRate");
+  // Maya shared a summary with the club; the service's rule reaches coaches.
+  await expect(tabs.getByRole("link", { name: "Health" })).toBeVisible();
+  // Money is neither rendered nor serialised into the page for the browser.
+  expect(await page.content()).not.toContain("1,485");
+  await page.goto(hq(`/people/${maya}/health`));
+  await expect(page.getByText("58 bpm")).toBeVisible();
+  await expect(page.getByText(/not medical advice/).first()).toBeVisible();
   await page.goto(hq("/people"));
   await expect(page.getByRole("button", { name: "Export" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Add a person" })).toHaveCount(0);
@@ -266,23 +326,28 @@ test("a coach sees people without payments or health, even in the page's data", 
   expect(await page.content()).not.toContain("1,485");
 });
 
-test("the health address answers 'You need access' to a role without the permission, leaking nothing", async ({
+test("health exists only for viewers the service allows: no tab, and the address leaks nothing", async ({
   page,
 }) => {
-  await signIn(page, "coach");
-  const response = await page.goto(hq(`/people/${maya}/health`));
-  expect(response?.status()).toBeLessThan(400);
-  await expect(page.getByText("You don't have access to Health")).toBeVisible();
-  const html = await page.content();
-  for (const leak of ["Resting heart rate", "58 bpm", "restingHeartRate"]) {
-    expect(html, leak).not.toContain(leak);
+  // Ported legacy check: health appears only after the person shares it.
+  // Jordan has not shared with the club: no tab for the owner or a coach.
+  for (const persona of ["club-owner", "coach"]) {
+    await signIn(page, persona);
+    await page.goto(hq(`/people/${jordan}`));
+    await expect(
+      page
+        .getByRole("navigation", { name: "Jordan Smith" })
+        .getByRole("link", { name: "Health" }),
+    ).toHaveCount(0);
+    const response = await page.goto(hq(`/people/${jordan}/health`));
+    expect(response?.status()).toBeLessThan(400);
+    await expect(
+      page.getByText("You don't have access to Health"),
+    ).toBeVisible();
   }
-  // An owner sees the summary, with the standing wording.
+  // A junior's health reaches only the club's coaches (the service's rule):
+  // never the owner, by tab or by address, and nothing leaks into the page.
   await signIn(page, "club-owner");
-  await page.goto(hq(`/people/${maya}/health`));
-  await expect(page.getByText("58 bpm")).toBeVisible();
-  await expect(page.getByText(/not medical advice/).first()).toBeVisible();
-  // No one sees a junior's health in HQ, not even the owner.
   await page.goto(hq(`/people/${ava}/health`));
   await expect(page.getByText("You don't have access to Health")).toBeVisible();
   await expect(
@@ -290,6 +355,19 @@ test("the health address answers 'You need access' to a role without the permiss
       .getByRole("navigation", { name: "Ava Patel" })
       .getByRole("link", { name: "Health" }),
   ).toHaveCount(0);
+  const html = await page.content();
+  for (const leak of [
+    "Resting heart rate",
+    "bpm",
+    "restingHeartRate",
+    "Readiness",
+  ]) {
+    expect(html, leak).not.toContain(leak);
+  }
+  // The owner sees an adult's shared summary, with the standing wording.
+  await page.goto(hq(`/people/${maya}/health`));
+  await expect(page.getByText("58 bpm")).toBeVisible();
+  await expect(page.getByText(/not medical advice/).first()).toBeVisible();
 });
 
 test("a junior's page names the guardian at the top and never a contact of their own", async ({

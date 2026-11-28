@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   attentionFor,
   canSeeHealth,
+  HEALTH_ADULT_VIEWER_ROLES,
+  HEALTH_JUNIOR_VIEWER_ROLES,
   checkImport,
   exportColumns,
   exportRow,
@@ -29,6 +31,11 @@ import {
   visibleRange,
   type WorkspacePerson,
 } from "./people-model";
+import { capabilitiesFrom } from "./people-capabilities";
+import {
+  HEALTH_ADULT_ORGANIZATION_VIEWER_ROLES,
+  HEALTH_MINOR_ORGANIZATION_VIEWER_ROLES,
+} from "../../../../packages/api/src/services/health/policy";
 
 const now = new Date("2026-11-28T15:00:00.000Z");
 const timeZone = "America/Los_Angeles";
@@ -604,13 +611,30 @@ describe("merge plan", () => {
   });
 });
 
-describe("health permission", () => {
-  it("is for owners and managers, adults only", () => {
-    expect(canSeeHealth(["owner"], false)).toBe(true);
-    expect(canSeeHealth(["manager"], false)).toBe(true);
+describe("health permission follows the Health service's rule", () => {
+  it("uses exactly the service's viewer roles", () => {
+    expect([...HEALTH_ADULT_VIEWER_ROLES]).toEqual([
+      ...HEALTH_ADULT_ORGANIZATION_VIEWER_ROLES,
+    ]);
+    expect([...HEALTH_JUNIOR_VIEWER_ROLES]).toEqual([
+      ...HEALTH_MINOR_ORGANIZATION_VIEWER_ROLES,
+    ]);
+  });
+
+  it("reaches owners, managers and coaches for an adult", () => {
+    for (const role of ["owner", "manager", "coach"]) {
+      expect(canSeeHealth([role], false), role).toBe(true);
+    }
+  });
+
+  it("reaches only coaches for a junior", () => {
+    expect(canSeeHealth(["coach"], true)).toBe(true);
     expect(canSeeHealth(["owner"], true)).toBe(false);
+    expect(canSeeHealth(["manager"], true)).toBe(false);
+  });
+
+  it("never reaches the front desk, scorekeepers, accountants or members", () => {
     for (const role of [
-      "coach",
       "front-desk",
       "scorekeeper",
       "accountant",
@@ -618,7 +642,30 @@ describe("health permission", () => {
       "guardian",
     ]) {
       expect(canSeeHealth([role], false), role).toBe(false);
+      expect(canSeeHealth([role], true), role).toBe(false);
     }
+  });
+});
+
+describe("capability switches", () => {
+  it("turns a feature on only when its procedure exists", () => {
+    expect(capabilitiesFrom(["operator.memberProfile"])).toEqual({
+      import: false,
+      merge: false,
+      notes: false,
+      tags: false,
+      household: false,
+      documents: false,
+      membershipChange: false,
+    });
+    const on = capabilitiesFrom([
+      "operator.people.import",
+      "operator.people.merge.preview",
+      "operator.people.importer",
+    ]);
+    expect(on.import).toBe(true);
+    expect(on.merge).toBe(true);
+    expect(on.notes).toBe(false);
   });
 });
 

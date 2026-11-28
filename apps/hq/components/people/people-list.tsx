@@ -47,6 +47,7 @@ import {
   visibleRange,
   WINDOW_THRESHOLD,
 } from "./people-model";
+import type { PeopleCapabilities } from "./people-capabilities";
 import { reportFailure, unwrap } from "./people-result";
 
 /** The row height windowing assumes (matches `--people-row-h` in people.css). */
@@ -90,6 +91,7 @@ export function PeopleList({
   canDraft,
   duplicates,
   focusSearch = false,
+  capabilities,
 }: {
   readonly rows: readonly PersonRow[];
   readonly initial: ListState;
@@ -100,6 +102,8 @@ export function PeopleList({
   readonly canDraft: boolean;
   readonly duplicates: readonly DuplicatePair[];
   readonly focusSearch?: boolean;
+  /** Features whose backend has landed (people-capabilities.ts). */
+  readonly capabilities: Pick<PeopleCapabilities, "import" | "merge" | "tags">;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -200,16 +204,22 @@ export function PeopleList({
                 <Button href="/people/invite" variant="primary">
                   Add a person
                 </Button>
-                <Button href="/people/import" variant="secondary">
-                  Import from a file
-                </Button>
+                {capabilities.import ? (
+                  <Button href="/people/import" variant="secondary">
+                    Import from a file
+                  </Button>
+                ) : null}
                 <Button href="/website" variant="ghost">
                   Share your club page
                 </Button>
               </div>
             ) : undefined
           }
-          description="Add your first members, import a list you already have, or share your club page so players can join themselves."
+          description={
+            capabilities.import
+              ? "Add your first members, import a list you already have, or share your club page so players can join themselves."
+              : "Add your first members, or share your club page so players can join themselves."
+          }
           icon="users"
           title="No people yet"
         />
@@ -219,7 +229,7 @@ export function PeopleList({
 
   return (
     <div className="people-directory">
-      {canWrite && duplicates.length > 0 ? (
+      {canWrite && capabilities.merge && duplicates.length > 0 ? (
         <Notice
           action={
             <Button
@@ -300,7 +310,7 @@ export function PeopleList({
         <section aria-label="Selected people" className="people-bulk">
           <p className="people-bulk__count">{`${selected.size} selected`}</p>
           <div className="people-actions">
-            {canWrite ? (
+            {canWrite && capabilities.tags ? (
               <Button
                 onClick={() => setDialog("tag")}
                 size="sm"

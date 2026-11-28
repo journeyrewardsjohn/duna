@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "@duna/ui/icons";
 import {
   Button,
   Chip,
@@ -9,7 +10,7 @@ import {
   Select,
   useConfirm,
 } from "@duna/ui/tideline";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { importPeopleAction } from "@/app/(next)/(hq)/people/actions";
 import {
   checkImport,
@@ -27,6 +28,56 @@ import { reportFailure, unwrap } from "./people-result";
 const fieldOptions = (Object.keys(importFieldLabels) as ImportField[]).map(
   (field) => ({ value: field, label: importFieldLabels[field] }),
 );
+
+/**
+ * The file part: a drop area that is also the real file control. The input
+ * stays in the page (keyboard, screen readers, "Choose file" on a phone);
+ * the label around it is the visible target, with a focus ring when the
+ * input has focus and a drop state while a file is dragged over it.
+ */
+function FileDrop({
+  onFile,
+  fileName,
+}: {
+  readonly onFile: (file: File | undefined) => void;
+  readonly fileName?: string;
+}) {
+  const id = useId();
+  const [over, setOver] = useState(false);
+  return (
+    <label
+      className="people-drop"
+      data-over={over || undefined}
+      htmlFor={id}
+      onDragLeave={() => setOver(false)}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setOver(true);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        onFile(event.dataTransfer.files[0]);
+      }}
+    >
+      <input
+        accept=".csv,text/csv"
+        aria-describedby={`${id}-hint`}
+        className="people-drop__input"
+        id={id}
+        onChange={(event) => onFile(event.currentTarget.files?.[0])}
+        type="file"
+      />
+      <Icon name="users" size="control" />
+      <span className="people-drop__title">Spreadsheet file</span>
+      <span className="people-drop__hint" id={`${id}-hint`}>
+        {fileName
+          ? `${fileName} is chosen. Choose or drop another to replace it.`
+          : "Choose a CSV file, or drop it here. Up to 2 MB."}
+      </span>
+    </label>
+  );
+}
 
 /**
  * Import people from a spreadsheet: choose the file, match its columns,
@@ -123,14 +174,7 @@ export function ImportFlow({
             a junior column, and the guardian&apos;s name and contact, for
             juniors.
           </p>
-          <Field label="Spreadsheet file">
-            <input
-              accept=".csv,text/csv"
-              className="people-file"
-              onChange={(event) => void read(event.currentTarget.files?.[0])}
-              type="file"
-            />
-          </Field>
+          <FileDrop fileName={fileName} onFile={(file) => void read(file)} />
           {fileError ? (
             <Notice role="alert" title="Can't read that file" tone="danger">
               {fileError}

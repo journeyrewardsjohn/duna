@@ -5,6 +5,7 @@ import { loadPeople, peopleContext } from "@/components/people/people-data";
 import {
   PeopleBlockState,
   PeopleScreen,
+  PeopleUnavailable,
 } from "@/components/people/people-screen";
 import { PageSection } from "@/components/shell/page-header";
 
@@ -32,7 +33,9 @@ export default async function MergePeoplePage({
       title="Merge duplicates"
     >
       <PageSection id="merge" title="Which two records?">
-        {people.state === "ok" ? (
+        {!context.capabilities.merge ? (
+          <PeopleUnavailable what="Merging two people" />
+        ) : people.state === "ok" ? (
           <MergeFlow
             initialA={a}
             initialB={b}

@@ -136,8 +136,7 @@ export default async function PersonFamilyPage({
           </PageSection>
           <Notice title="A second guardian" tone="info">
             A guardian adds another guardian from their own Duna app, where each
-            one accepts by link. Linking a guardian from HQ isn&apos;t switched
-            on yet.
+            one accepts by link.
           </Notice>
         </>
       ) : (
@@ -156,7 +155,7 @@ export default async function PersonFamilyPage({
           {juniors.length === 0 ? (
             <p className="people-quiet people-pad">
               {row.isGuardian
-                ? `No junior invited by the club names ${first} as guardian. Juniors ${first} added in the Duna app appear here once household links reach HQ.`
+                ? `No junior invited by the club names ${first} as guardian. Juniors ${first} added in their own Duna app aren't listed in HQ.`
                 : `${first} isn't a guardian of any junior at the club.`}
             </p>
           ) : (

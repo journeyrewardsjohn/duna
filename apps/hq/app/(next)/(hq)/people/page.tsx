@@ -35,7 +35,7 @@ export default async function PeoplePage({
   const people = await loadPeople();
   const initial = listStateFromParams(params);
   const duplicates: DuplicatePair[] =
-    people.state === "ok" && context.canWrite
+    people.state === "ok" && context.canWrite && context.capabilities.merge
       ? findDuplicatePairs(people.data.candidates)
           .slice(0, 20)
           .map((pair) => ({
@@ -52,9 +52,11 @@ export default async function PeoplePage({
       actions={
         context.canWrite && count !== 0 ? (
           <>
-            <Button href={hqHref("peopleImport")} variant="secondary">
-              Import
-            </Button>
+            {context.capabilities.import ? (
+              <Button href={hqHref("peopleImport")} variant="secondary">
+                Import
+              </Button>
+            ) : null}
             <Button href={hqHref("memberInvite")} variant="primary">
               Add a person
             </Button>
@@ -78,6 +80,7 @@ export default async function PeoplePage({
         <PeopleList
           canDraft={context.canDraft}
           canExport={context.canExport}
+          capabilities={context.capabilities}
           canWrite={context.canWrite}
           duplicates={duplicates}
           focusSearch={params.focus === "search"}
