@@ -188,7 +188,19 @@ Names `EXPO_PUBLIC_MAPBOX_API_TOKEN` (native, public `pk.` token), `MAPBOX_API_T
 
 ### 1.24 WhatsApp
 
-No sending, webhook or provider code on `origin/main`. Only `whatsappEnabled` / `whatsappMessages` columns (migration 0043), a transport enum value, and legal copy. Whatever the rebuild adds will need Meta WhatsApp Business verification, a number and approved templates (inferred; unknown provider choice).
+Concierge (B7) has a WhatsApp adapter through Sent.dm (the provider already used for SMS templates): `POST https://api.sent.dm/v3/messages` with `channel: ["whatsapp"]` and an approved template, plus a signed webhook at `POST https://duna.coach/api/concierge/whatsapp`. It answers "not configured" until the values below are set. Older `whatsappEnabled` / `whatsappMessages` columns (migration 0043) are unrelated and unused. See §1.24a.
+
+### 1.24a Concierge channels (B7): what the owner must provide and approve
+
+Nothing below is set or activated by code; every channel is ON in code (`concierge.channel.email|imessage|whatsapp`, default on) and reports "not configured" until the owner sets production values. No provider has been called and no message has been sent as part of B7.
+
+| Channel  | Owner provides / approves | Env names |
+| -------- | ------------------------- | --------- |
+| Email    | Verified sending domain (SPF/DKIM/DMARC) and from-address; an inbound reply domain routed to Resend inbound; a Resend webhook for `email.received`, `email.delivered`, `email.bounced` to `https://duna.coach/api/concierge/email`; a 32+ character reply-token secret. | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (missing in web Production today), `RESEND_WEBHOOK_SECRET` (`whsec_…`), `CONCIERGE_EMAIL_REPLY_DOMAIN`, `CONCIERGE_REPLY_SECRET` |
+| iMessage | A separate Duna Sendblue account and line (the owner deferred this on 4 November), its webhook pointed at the existing `https://duna.coach/api/sendblue/webhook`; status callbacks arrive at `/api/concierge/sendblue/status`. | `SENDBLUE_API_KEY`, `SENDBLUE_API_SECRET`, `SENDBLUE_PHONE_NUMBERS`, `SENDBLUE_WEBHOOK_SECRET` (as §1.20) |
+| WhatsApp | Meta business verification and a WhatsApp sender registered in Sent.dm; two approved templates: a UTILITY template `duna_concierge_message` with parameters `club`, `author`, `message`, `link`, and an AUTHENTICATION template `duna_verification_code` with `code`; a Sent.dm webhook (events `message.received` and the status events) to `https://duna.coach/api/concierge/whatsapp`. | `SENT_DM_API` (or `SENT_DM_API_KEY`), `SENT_DM_WEBHOOK_SECRET` (`whsec_…`), optional `SENT_DM_WHATSAPP_TEMPLATE_ID|NAME`, `SENT_DM_WHATSAPP_VERIFY_TEMPLATE_ID|NAME`; `SENT_DM_SANDBOX=true` sends nothing real |
+
+Decisions the owner (and counsel, `docs/legal/README.md` Q25) must make before a channel goes live: the opt-in wording a person sees when connecting a channel; the quiet-hours default (today: none until the person sets it; operational notices are not held); a HELP auto-reply (today HELP is not answered automatically, because nothing is sent without a person); whether email `opened` should count as "read". Migration 0123 must be applied before any of this is used.
 
 ### 1.25 Expo (EAS) and Expo Push
 

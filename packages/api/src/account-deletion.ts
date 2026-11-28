@@ -32,6 +32,9 @@ import {
   organizationStaffProfiles,
   organizations,
   people,
+  personChannelEndpoints,
+  personChannelPreferences,
+  conciergeOrganizationMutes,
   playerMatchNotes,
   playerMatchNoteShares,
   playerSourceConnections,
@@ -482,6 +485,17 @@ export async function permanentlyDeleteAccount(input: {
     database
       .delete(idempotencyRecords)
       .where(eq(idempotencyRecords.personId, input.personId)),
+    // Concierge (B7): outside-channel destinations, codes, preferences and
+    // club mutes are personal data; delivery history keeps ids only.
+    database
+      .delete(personChannelEndpoints)
+      .where(eq(personChannelEndpoints.personId, input.personId)),
+    database
+      .delete(personChannelPreferences)
+      .where(eq(personChannelPreferences.personId, input.personId)),
+    database
+      .delete(conciergeOrganizationMutes)
+      .where(eq(conciergeOrganizationMutes.personId, input.personId)),
     database
       .update(importLinks)
       .set({

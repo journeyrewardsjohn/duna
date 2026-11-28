@@ -43,6 +43,8 @@ export const conciergeDemoIds = {
   leagueThread: id(4),
   clubThread: id(5),
   dunaThread: id(6),
+  clinicThread: id(7),
+  divisionThread: id(8),
   readyProposal: id(30),
   sentProposal: id(34),
   emailEndpoint: id(70),
@@ -143,11 +145,45 @@ export const conciergeDemoThreads = [
     lastMessagePreview: "Your Sand Rating moved from 3.34 to 3.42.",
     lastMessageAt: "2026-11-24T10:00:00.000Z",
   },
+  {
+    conversationId: conciergeDemoIds.clinicThread,
+    kind: "lesson" as const,
+    title: "Saturday clinic · Beginners",
+    context: {
+      type: "lesson" as const,
+      id: id(107),
+      label: "Saturday clinic",
+      status: "Today",
+      startsAt: "2026-11-28T16:00:00.000Z",
+      place: "Courts 3–4",
+    },
+    participantCount: 9,
+    unreadCount: 1,
+    minorPresent: false,
+    lastMessagePreview: "Rain is moving in: today's clinic moves to Sunday 9:00 AM.",
+    lastMessageAt: "2026-11-28T15:00:00.000Z",
+  },
+  {
+    conversationId: conciergeDemoIds.divisionThread,
+    kind: "tournament" as const,
+    title: "Winter Open · 16U girls",
+    context: {
+      type: "division" as const,
+      id: id(108),
+      label: "16U girls",
+      status: "Guardian",
+    },
+    participantCount: 12,
+    unreadCount: 0,
+    minorPresent: true,
+    lastMessagePreview: "Check-in opens at 7:30 AM at the main tent.",
+    lastMessageAt: "2026-11-27T18:30:00.000Z",
+  },
 ];
 
 export const conciergeDemoThreadPage = {
   items: conciergeDemoThreads,
-  counts: { all: 6, unread: 2, families: 2 },
+  counts: { all: 8, unread: 3, families: 3 },
 };
 
 /** The lesson thread opened, with one message of every kind. */
@@ -405,10 +441,78 @@ export const conciergeDemoChannels = {
   ],
 };
 
+/** The clinic thread: a club notice sent by the coach, delivered per person. */
+export const conciergeDemoClinicThread = {
+  ...conciergeDemoThreads[6]!,
+  participants: [
+    { ...ref(theo), role: "coach" as const },
+    { ...ref(noa), role: "member" as const },
+    { ...ref(sam), role: "member" as const },
+    { ...ref(elena), role: "member" as const },
+  ],
+  messages: [
+    {
+      messageId: id(206),
+      sequence: 1,
+      kind: "coach" as const,
+      author: ref(theo),
+      onBehalfOfOrganization: demoOrganization.name,
+      body: "Rain is moving in: today's clinic moves to Sunday 9:00 AM.",
+      delivery: {
+        status: "read" as const,
+        readBy: [noa.displayName],
+        recipientCount: 8,
+      },
+      createdAt: "2026-11-28T15:00:00.000Z",
+    },
+    {
+      messageId: id(207),
+      sequence: 2,
+      kind: "person" as const,
+      author: ref(sam),
+      body: "Sunday works. Thanks for the heads up.",
+      channel: "imessage" as const,
+      createdAt: "2026-11-28T15:04:00.000Z",
+    },
+  ],
+};
+
+/** The division thread: a junior and her guardian in the same thread. */
+export const conciergeDemoDivisionThread = {
+  ...conciergeDemoThreads[7]!,
+  participants: [
+    { ...ref(elena), role: "staff" as const },
+    { ...ref(junior), role: "member" as const },
+    {
+      ...ref(mara),
+      role: "guardian" as const,
+      guardianOf: junior.displayName,
+    },
+  ],
+  messages: [
+    {
+      messageId: id(208),
+      sequence: 1,
+      kind: "coach" as const,
+      author: ref(elena),
+      onBehalfOfOrganization: demoOrganization.name,
+      body: "Check-in opens at 7:30 AM at the main tent.",
+      channel: "email" as const,
+      createdAt: "2026-11-27T18:30:00.000Z",
+    },
+  ],
+};
+
 export const conciergeDemo = {
   domain: "concierge",
   threads: conciergeDemoThreadPage,
   thread: conciergeDemoThread,
+  /** Opened threads the screens can show (lesson, clinic, division). */
+  threadDetails: [
+    conciergeDemoThread,
+    conciergeDemoClinicThread,
+    conciergeDemoDivisionThread,
+  ],
   proposals: conciergeDemoProposals,
   deliveries: conciergeDemoDeliveries,
   channels: conciergeDemoChannels,
