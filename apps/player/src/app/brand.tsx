@@ -1,44 +1,35 @@
-import { Image, View } from "react-native";
-import { SatoshiText as Text } from "../../satoshi-text";
-import { styles } from "../legacy/styles";
+import { View } from "react-native";
+import {
+  DunaMark as CrestMark,
+  DunaWordmark as DrawnWordmark,
+} from "@duna/ui/native";
 
-// Metro requires static module references so the full Duna mark ships natively.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaPlayerWordmarkBlue = require("../../assets/duna-horizontal-blue.png");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaPlayerWordmarkWhite = require("../../assets/duna-horizontal-white.png");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const dunaPlayerBrandIcon = require("../../assets/duna-mark.png");
-
+/**
+ * The Duna lockup for legacy screens (the Wallet header): the Crest mark and
+ * the drawn wordmark from the design system, replacing the retired raster
+ * wordmark and dune mark. `tone="light"` draws Salt on a dark ground.
+ */
 export function DunaWordmark({
-  pro = false,
   tone = "default",
 }: {
   readonly pro?: boolean;
   readonly tone?: "default" | "light";
 }) {
+  const color = tone === "light" ? "#F4F2EC" : undefined;
   return (
-    <View style={styles.wordmark}>
-      <Image
-        accessibilityLabel="Duna"
-        resizeMode="contain"
-        source={
-          tone === "light" ? dunaPlayerWordmarkWhite : dunaPlayerWordmarkBlue
-        }
-        style={styles.wordmarkImage}
-      />
-      {pro && <Text style={styles.proPill}>PRO</Text>}
+    <View
+      accessibilityLabel="Duna"
+      accessibilityRole="image"
+      accessible
+      style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+    >
+      <CrestMark color={color} decorative size={22} />
+      <DrawnWordmark color={color} width={64} />
     </View>
   );
 }
 
+/** The Crest mark (the brand's mark; the old dune mark is retired). */
 export function DunaMark({ size }: { readonly size: number }) {
-  return (
-    <Image
-      accessibilityIgnoresInvertColors
-      resizeMode="contain"
-      source={dunaPlayerBrandIcon}
-      style={{ height: size, width: size }}
-    />
-  );
+  return <CrestMark decorative size={size} />;
 }

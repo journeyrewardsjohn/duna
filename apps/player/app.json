@@ -32,26 +32,49 @@
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight"
         ],
-        "NSCameraUsageDescription": "Duna uses the camera to record and live stream beach volleyball.",
-        "NSMicrophoneUsageDescription": "Duna uses the microphone only when you choose to include audio in a recording or live stream.",
-        "NSPhotoLibraryUsageDescription": "Duna lets you choose high-resolution volleyball action photos for profile artwork and videos for your private archive or profile.",
+        "NSCameraUsageDescription": "Duna uses the camera when you record a game with Duna Vision, take a profile photo or, if you choose, broadcast a match live.",
+        "NSMicrophoneUsageDescription": "Duna uses the microphone only when you choose to record a game with sound or broadcast a match live.",
+        "NSPhotoLibraryUsageDescription": "Duna lets you choose photos for your profile and videos from your library to add to your private film archive.",
         "NSHealthShareUsageDescription": "Duna reads only the Apple Health categories you choose to build private, personalized Readiness, Sleep and Strain trends, compare those patterns with your matches, and align heart rate with your Duna Vision recordings.",
         "NSHealthUpdateUsageDescription": "Duna does not write to or change Apple Health. HealthKit access is read-only so you can choose the data behind your private performance timeline, personal insights and video overlays.",
-        "NSContactsUsageDescription": "Duna uses contacts you select to find frequent partners or send a one-time game invitation.",
-        "NSLocationWhenInUseUsageDescription": "Duna uses location to show nearby courts and events when you open Discover. If you choose Share trip ETA, Duna shares only a short-lived distance and ETA with your coach during the session arrival window.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "After you choose Share trip ETA, background location keeps your Lock Screen ETA current during the private arrival window. Duna stops automatically 30 minutes after the session starts and never stores raw coordinates.",
-        "UIBackgroundModes": ["location", "remote-notification"]
+        "NSContactsUsageDescription": "Duna uses only the contacts you pick to find partners you already play with or to send a one-time game invitation.",
+        "NSLocationWhenInUseUsageDescription": "Duna uses your location to show courts, clubs and games near you. If you choose Share trip ETA, Duna shares only a short-lived distance and arrival time with your coach before a session.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Only after you choose Share trip ETA, Duna keeps your arrival time on the Lock Screen current in the background. It stops on its own 30 minutes after the session starts and never stores your raw location.",
+        "UIBackgroundModes": ["location", "remote-notification"],
+        "NSMotionUsageDescription": "Duna reads the phone's tilt while you record so the court stays level and the score overlay sits upright. Nothing about your movement is stored."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
         "com.apple.developer.healthkit.background-delivery": true
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1", "0A2A.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1", "85F4.1"]
+          }
+        ]
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/monochrome-icon.png",
-        "backgroundColor": "#EFE6D3"
+        "backgroundColor": "#0E1A22"
       },
       "package": "com.duna.player",
       "permissions": [
@@ -70,31 +93,45 @@
       "./plugins/with-ios-release-compatibility",
       "@bacons/apple-targets",
       "@rnmapbox/maps",
-      "expo-contacts",
-      "expo-audio",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Duna uses only the contacts you pick to find partners you already play with or to send a one-time game invitation."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Duna uses the microphone only when you choose to record a game with sound or broadcast a match live."
+        }
+      ],
       "expo-notifications",
       [
         "expo-image-picker",
         {
-          "photosPermission": "Duna lets you choose photos for your profile and videos for your private archive or public profile.",
-          "cameraPermission": "Duna uses the camera only when you choose to capture volleyball media."
+          "photosPermission": "Duna lets you choose photos for your profile and videos from your library to add to your private film archive.",
+          "cameraPermission": "Duna uses the camera when you record a game with Duna Vision, take a profile photo or, if you choose, broadcast a match live.",
+          "microphonePermission": "Duna uses the microphone only when you choose to record a game with sound or broadcast a match live."
         }
       ],
       [
         "expo-calendar",
         {
-          "calendarPermission": "Duna reads calendar events you approve on this device so your matches, lessons, and personal schedule can appear together.",
-          "remindersPermission": "Duna adds reminders only to confirmed bookings you choose to sync."
+          "calendarPermission": "Duna adds the bookings you choose to sync to your calendar and, with your approval, reads your events so your matches, lessons and personal plans appear together.",
+          "remindersPermission": false
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Duna uses location to show nearby courts and events when you open Discover. If you choose Share trip ETA, Duna shares only a short-lived distance and ETA with your coach during the session arrival window.",
-          "locationAlwaysAndWhenInUsePermission": "After you choose Share trip ETA, background location keeps your Lock Screen ETA current during the private arrival window. Duna stops automatically 30 minutes after the session starts and never stores raw coordinates.",
+          "locationWhenInUsePermission": "Duna uses your location to show courts, clubs and games near you. If you choose Share trip ETA, Duna shares only a short-lived distance and arrival time with your coach before a session.",
+          "locationAlwaysAndWhenInUsePermission": "Only after you choose Share trip ETA, Duna keeps your arrival time on the Lock Screen current in the background. It stops on its own 30 minutes after the session starts and never stores your raw location.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": true
+          "isAndroidForegroundServiceEnabled": true,
+          "locationAlwaysPermission": false,
+          "locationFullAccuracyPermission": false,
+          "motionUsagePermission": "Duna reads the phone's tilt while you record so the court stays level and the score overlay sits upright. Nothing about your movement is stored."
         }
       ],
       [
@@ -110,12 +147,13 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/duna-launch-poster-v3.png",
-          "resizeMode": "cover",
-          "backgroundColor": "#071625",
+          "image": "./assets/splash-blank.png",
+          "imageWidth": 64,
+          "resizeMode": "contain",
+          "backgroundColor": "#0E1A22",
           "dark": {
-            "image": "./assets/duna-launch-poster-v3.png",
-            "backgroundColor": "#071625"
+            "image": "./assets/splash-blank.png",
+            "backgroundColor": "#0E1A22"
           }
         }
       ],
@@ -143,7 +181,12 @@
           ]
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       "expo-sqlite",
       "expo-status-bar",
       "expo-web-browser",
