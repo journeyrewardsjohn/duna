@@ -9,6 +9,7 @@ const nextConfig = {
     "@duna/api",
     "@duna/core",
     "@duna/pricing",
+    "@duna/tideline-core",
     "@duna/ui",
     "@duna/rating",
     "@duna/league-engine",
