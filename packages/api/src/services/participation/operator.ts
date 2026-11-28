@@ -40,6 +40,7 @@ import { stableHash } from "../../canonical";
 import {
   ACTIVE_CATALOG_BOOKING_STATUSES,
   evaluateCatalogSessionParticipation,
+  planOccurrenceCancellation,
   refundCancelledOccurrenceBookings,
   type ParticipationCancellationResult,
 } from "../../catalog-participation";
@@ -953,6 +954,279 @@ export async function requestParticipationCancel(input: {
     now: input.now,
   });
   return { requestId: open.id };
+}
+
+/**
+ * `operator.participation.cancelPreview`: exactly what cancelling would
+ * return to whom. Uses `planOccurrenceCancellation`, the plan the refund in
+ * `cancelParticipationSession` runs, so the two cannot disagree. Read-only.
+ * Money only with `includeMoney` (`payments:read`); a junior appears by first
+ * name and their guardian (the booker) is who Duna's notice goes to.
+ */
+export async function previewParticipationCancel(input: {
+  readonly organizationId: string;
+  readonly subjectType: string;
+  readonly subjectId: string;
+  readonly includeMoney: boolean;
+  readonly now: Date;
+}) {
+  requireParticipationDatabase();
+  assertCatalogSubject(input.subjectType);
+  const { occurrence } = await loadSession(
+    input.organizationId,
+    input.subjectId,
+  );
+  const plan = await planOccurrenceCancellation({
+    organizationId: input.organizationId,
+    occurrenceId: occurrence.id,
+    now: input.now,
+  });
+  const bookerOf = (line: (typeof plan)[number]) =>
+    typeof line.booking.fulfillment.details.bookedByPersonId === "string"
+      ? line.booking.fulfillment.details.bookedByPersonId
+      : line.booking.order.buyerPersonId;
+  const personIds = [
+    ...new Set(
+      plan.flatMap((line) => [
+        line.booking.fulfillment.personId,
+        bookerOf(line),
+      ]),
+    ),
+  ];
+  const personRows =
+    personIds.length === 0
+      ? []
+      : await getDatabase()
+          .select({
+            id: people.id,
+            displayName: people.displayName,
+            isMinor: people.isMinor,
+          })
+          .from(people)
+          .where(inArray(people.id, personIds));
+  const personById = new Map(personRows.map((row) => [row.id, row]));
+  const nameOf = (id: string) =>
+    personById.get(id)?.displayName ?? "Duna member";
+  const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? name;
+  const currencies = new Set(plan.map((line) => line.currency));
+  const currency = currencies.size === 1 ? [...currencies][0] : undefined;
+  const bookings = plan.map((line) => {
+    const participant = personById.get(line.booking.fulfillment.personId);
+    const isMinor = participant?.isMinor === true;
+    const name = nameOf(line.booking.fulfillment.personId);
+    return {
+      bookingId: line.booking.fulfillment.id,
+      displayName: isMinor ? firstName(name) : name,
+      isMinor,
+      quantity: line.booking.quantity,
+      method: line.method,
+      outcome: line.expectedStatus,
+      ...(input.includeMoney
+        ? {
+            ...(line.method === "credits"
+              ? { creditsBack: line.creditsBack }
+              : {}),
+            ...(line.method === "card" || line.method === "cash"
+              ? {
+                  cardRefundMinor: line.refundMinor,
+                  currency: line.currency.toUpperCase(),
+                }
+              : {}),
+          }
+        : {}),
+    };
+  });
+  const notices = plan.map((line) => {
+    const participantId = line.booking.fulfillment.personId;
+    const booker = bookerOf(line);
+    const isMinor = personById.get(participantId)?.isMinor === true;
+    return {
+      bookingId: line.booking.fulfillment.id,
+      audience: nameOf(booker),
+      audienceRole:
+        booker === participantId
+          ? ("player" as const)
+          : isMinor
+            ? ("guardian" as const)
+            : ("payer" as const),
+      channel: "notice" as const,
+    };
+  });
+  const refunded = plan.filter(
+    (line) => line.method === "card" || line.method === "cash",
+  );
+  log.info("participation.cancelPreview.computed", {
+    organizationId: input.organizationId,
+    subjectId: occurrence.id,
+    bookings: plan.length,
+  });
+  return {
+    subjectType: CATALOG_SUBJECT,
+    subjectId: occurrence.id,
+    bookings,
+    totals: {
+      bookings: plan.length,
+      places: plan.reduce((total, line) => total + line.booking.quantity, 0),
+      released: plan.filter((line) => line.expectedStatus === "released")
+        .length,
+      reviewRequired: plan.filter(
+        (line) => line.expectedStatus === "review-required",
+      ).length,
+      cardRefunds: refunded.length,
+      ...(input.includeMoney
+        ? {
+            creditsBack: plan.reduce(
+              (total, line) => total + line.creditsBack,
+              0,
+            ),
+            ...(currency
+              ? {
+                  cardRefundMinor: refunded.reduce(
+                    (total, line) => total + line.refundMinor,
+                    0,
+                  ),
+                  currency: currency.toUpperCase(),
+                }
+              : {}),
+          }
+        : {}),
+    },
+    notices,
+  };
+}
+
+/**
+ * A director answers a coach's request to cancel (§6). Approve runs the very
+ * same cancellation as `cancelSession` (refunds, Duna's own notices to each
+ * booker; the club's personal message still goes through Send review), then
+ * marks the request approved. Decline records the decision. Re-entrant: a
+ * repeat approve re-runs the re-entrant cancellation and returns its result.
+ * Duna has no internal staff notification path, so the coach is not told
+ * automatically (`coachNotified: false`).
+ */
+export async function resolveParticipationCancelRequest(input: {
+  readonly actor: ApiActor;
+  readonly organizationId: string;
+  readonly cancelRequestId: string;
+  readonly decision: "approve" | "decline";
+  readonly requestId: string;
+  readonly now: Date;
+}): Promise<{
+  readonly requestId: string;
+  readonly status: "approved" | "declined";
+  readonly cancellations: readonly {
+    readonly bookingId: string;
+    readonly refundStatus: ParticipationCancellationResult["refundStatus"];
+  }[];
+  readonly coachNotified: boolean;
+}> {
+  requireParticipationDatabase();
+  const database = getDatabase();
+  const request = await database.query.participationCancelRequests.findFirst({
+    where: and(
+      eq(participationCancelRequests.id, input.cancelRequestId),
+      eq(participationCancelRequests.organizationId, input.organizationId),
+    ),
+  });
+  if (!request) {
+    throw new ParticipationError("NOT_FOUND", "This request was not found.");
+  }
+  const target = input.decision === "approve" ? "approved" : "declined";
+  if (request.status !== "open" && request.status !== target) {
+    throw new ParticipationError(
+      "CONFLICT",
+      `This request was already ${request.status}.`,
+    );
+  }
+  if (input.decision === "approve") {
+    if (!actorHasScope(input.actor, "payments:write")) {
+      throw new ParticipationError(
+        "FORBIDDEN",
+        "Only someone who can refund players can approve a cancellation.",
+      );
+    }
+    const result = await cancelParticipationSession({
+      organizationId: input.organizationId,
+      actorPersonId: input.actor.personId,
+      subjectType: request.subjectType,
+      subjectId: request.subjectId,
+      reason: request.reason as ParticipationClubCancelReason,
+      requestId: input.requestId,
+      now: input.now,
+    });
+    await closeCancelRequest({ ...input, status: "approved" });
+    log.info("participation.intervention.recorded", {
+      organizationId: input.organizationId,
+      subjectId: request.subjectId,
+      action: "approve-cancel-request",
+    });
+    return {
+      requestId: request.id,
+      status: "approved",
+      cancellations: result.cancellations.map((entry) => ({
+        bookingId: entry.fulfillmentId,
+        refundStatus: entry.refundStatus,
+      })),
+      coachNotified: false,
+    };
+  }
+  await closeCancelRequest({ ...input, status: "declined" });
+  log.info("participation.intervention.recorded", {
+    organizationId: input.organizationId,
+    subjectId: request.subjectId,
+    action: "decline-cancel-request",
+  });
+  return {
+    requestId: request.id,
+    status: "declined",
+    cancellations: [],
+    coachNotified: false,
+  };
+}
+
+async function closeCancelRequest(input: {
+  readonly actor: ApiActor;
+  readonly organizationId: string;
+  readonly cancelRequestId: string;
+  readonly status: "approved" | "declined";
+  readonly requestId: string;
+  readonly now: Date;
+}): Promise<void> {
+  const closed = await getDatabase()
+    .update(participationCancelRequests)
+    .set({
+      status: input.status,
+      resolvedByPersonId: input.actor.personId,
+      resolvedAt: input.now,
+    })
+    .where(
+      and(
+        eq(participationCancelRequests.id, input.cancelRequestId),
+        eq(participationCancelRequests.status, "open"),
+      ),
+    )
+    .returning({
+      subjectId: participationCancelRequests.subjectId,
+    });
+  // Only the call that closed it writes the audit row (a retry finds it closed).
+  const row = closed[0];
+  if (!row) return;
+  await audit({
+    organizationId: input.organizationId,
+    actorPersonId: input.actor.personId,
+    action:
+      input.status === "approved"
+        ? "participation.cancel_request_approved"
+        : "participation.cancel_request_declined",
+    entityId: row.subjectId,
+    after: { requestId: input.cancelRequestId, status: input.status },
+    reason:
+      input.status === "approved"
+        ? "A director approved a coach's request to cancel this session."
+        : "A director declined a coach's request to cancel this session.",
+    requestId: input.requestId,
+    now: input.now,
+  });
 }
 
 /** Open cancel requests for directors (Today / Pro). */

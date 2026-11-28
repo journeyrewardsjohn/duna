@@ -4518,6 +4518,19 @@ export const operatorCatalogSessionOccurrenceSchema = z.object({
   status: z.enum(["scheduled", "cancelled", "complete"]),
   capacity: z.number().int().positive(),
   confirmedCount: z.number().int().nonnegative(),
+  // PART-B (additive): who, where. Null when the session names none.
+  coach: z
+    .object({ id: z.string().uuid(), displayName: z.string() })
+    .nullable()
+    .optional(),
+  court: z
+    .object({ id: z.string().uuid(), name: z.string() })
+    .nullable()
+    .optional(),
+  venue: z
+    .object({ id: z.string().uuid(), name: z.string(), timeZone: z.string() })
+    .nullable()
+    .optional(),
   participation: occurrenceParticipationStateSchema
     .extend({
       minimumPolicy: participationMinimumPolicySchema,
@@ -4544,6 +4557,10 @@ export const operatorCatalogSessionOccurrenceSchema = z.object({
         settledCredits: z.number().int().nonnegative().optional(),
         returnedCredits: z.number().int().nonnegative().optional(),
         attendance: z.enum(["attended", "no-show"]).optional(),
+        // PART-B (additive): a junior, and who speaks for them. Never a
+        // birth date or an age; never health data.
+        isMinor: z.boolean().optional(),
+        guardianDisplayName: z.string().optional(),
       }),
     )
     .readonly(),

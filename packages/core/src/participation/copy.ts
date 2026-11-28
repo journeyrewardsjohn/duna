@@ -37,6 +37,13 @@ export const PARTICIPATION_COPY_KEYS = [
   "staff.done",
   // Money
   "price.now",
+  "price.now-returning",
+  "price.now-returning-more",
+  "price.now-fixed",
+  "price.card-now",
+  "price.card-now-returning",
+  "price.card-now-returning-more",
+  "price.card-now-fixed",
   "price.decided",
   "price.ladder-row",
   "price.ladder-now",
@@ -98,6 +105,8 @@ const credits = (value: string | number | undefined) =>
   `${count(value)} credit${count(value) === 1 ? "" : "s"}`;
 const players = (value: string | number | undefined, unit?: string | number) =>
   `${count(value)} ${unit === "team" ? "team" : "player"}${count(value) === 1 ? "" : "s"}`;
+const comes = (value: string | number | undefined) =>
+  count(value) === 1 ? "comes" : "come";
 const joins = (value: string | number | undefined) =>
   count(value) === 1 ? "joins" : "join";
 
@@ -141,6 +150,21 @@ const english: Readonly<
   "staff.done": () => "Done",
   "price.now": (p) =>
     `${credits(p.max)} now. If more join by ${s(p.lock)}, the difference comes back.`,
+  // The group has already reached a cheaper rung than the one reserved.
+  "price.now-returning": (p) =>
+    `${credits(p.max)} now; ${count(p.back)} ${comes(p.back)} back when the group is confirmed ${s(p.lock)}.`,
+  "price.now-returning-more": (p) =>
+    `${credits(p.max)} now; ${count(p.back)} ${comes(p.back)} back when the group is confirmed ${s(p.lock)}, more if more join.`,
+  // Every rung costs the same: nothing to come back.
+  "price.now-fixed": (p) => `${credits(p.max)} now.`,
+  // Card payers (decision 6, once the card ladder is charged): amounts preformatted.
+  "price.card-now": (p) =>
+    `${s(p.max)} now. If more join by ${s(p.lock)}, the difference goes back to your card.`,
+  "price.card-now-returning": (p) =>
+    `${s(p.max)} now; ${s(p.back)} goes back to your card when the group is confirmed ${s(p.lock)}.`,
+  "price.card-now-returning-more": (p) =>
+    `${s(p.max)} now; ${s(p.back)} goes back to your card when the group is confirmed ${s(p.lock)}, more if more join.`,
+  "price.card-now-fixed": (p) => `${s(p.max)} now.`,
   "price.decided": (p) => `Group confirmed · you pay ${credits(p.final)}`,
   "price.ladder-row": (p) => {
     const min = count(p.min);
