@@ -40,8 +40,9 @@ import {
   membershipEntitlementMultiplier,
   membershipSubscriptionDisclosure,
   membershipSubscriptionPolicy,
-  participationCutoffAt,
+  creditTiersFromPriceTiers,
   reservedCreditsPerPlayer,
+  type ParticipationRules,
   validateMembershipSubscriptionPolicy,
   type LedgerPosting,
 } from "@duna/core";
@@ -55,11 +56,20 @@ import {
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { stableHash } from "./canonical";
 import { evaluateCatalogSessionParticipation } from "./catalog-participation";
+import { bookingParticipationSnapshot } from "./catalog-participation-rules";
 import {
-  bookingParticipationSnapshot,
-  catalogItemParticipationRules,
-  participationOpenedAt,
-} from "./catalog-participation-rules";
+  decisionRule,
+  effectiveLockAt,
+  ensureCatalogDecision,
+  type ParticipationDecisionRow,
+} from "./services/participation/catalog";
+import {
+  AlreadyBookedError,
+  afterCatalogBookingConfirmed,
+  assertNotAlreadyBooked,
+  claimOccurrencePlace,
+  isDuplicateBookingViolation,
+} from "./services/participation/engine";
 import {
   ensureLedgerAccount,
   issueOrganizationCredits,
@@ -186,7 +196,8 @@ export class CatalogCheckoutError extends Error {
       | "INSUFFICIENT_CREDITS"
       | "INVENTORY_UNAVAILABLE"
       | "PARTICIPANT_NOT_ALLOWED"
-      | "CHECKOUT_UNAVAILABLE",
+      | "CHECKOUT_UNAVAILABLE"
+      | "ALREADY_BOOKED",
     message: string,
   ) {
     super(message);
@@ -822,31 +833,42 @@ export async function startCatalogCheckout(input: {
         ),
       })
     : undefined;
-  // Offers without participation rules skip this block entirely and keep
-  // their capacity-only behavior.
-  let participationRules =
+  // Offers without a group rule (their own or the club default) skip this
+  // block entirely and keep their capacity-only behavior. The rule is the
+  // session's snapshot, taken at its first booking (participation.md §4.3).
+  let participationDecision: ParticipationDecisionRow | undefined =
     occurrence && row.item.type === "service"
-      ? catalogItemParticipationRules(
-          row.item.configuration,
-          occurrence.capacity,
-        )
+      ? await ensureCatalogDecision({
+          occurrence,
+          item: row.item,
+          now: input.now,
+        })
+      : undefined;
+  const v1Rules = (
+    decision: ParticipationDecisionRow,
+    capacity: number,
+  ): ParticipationRules => {
+    const resolved = decisionRule(decision, capacity);
+    return {
+      minParticipants: resolved.minParticipants,
+      maxParticipants: capacity,
+      minimumPolicy: resolved.minimumPolicy,
+      cutoffMinutesBeforeStart: resolved.lockMinutesBeforeStart,
+      settlementBasis: resolved.legacySettlementBasis ?? "cutoff",
+      creditTiers: creditTiersFromPriceTiers(resolved.tiers),
+    };
+  };
+  let participationRules =
+    occurrence && participationDecision
+      ? v1Rules(participationDecision, occurrence.capacity)
       : undefined;
   if (
     occurrence &&
-    participationRules &&
-    !occurrence.participationOutcome &&
-    input.now >=
-      participationCutoffAt(
-        occurrence.startsAt,
-        participationRules,
-        participationOpenedAt({
-          occurrenceCreatedAt: occurrence.createdAt,
-          itemPublishedAt: row.item.publishedAt,
-          configuration: row.item.configuration,
-        }),
-      )
+    participationDecision &&
+    !participationDecision.outcome &&
+    input.now >= effectiveLockAt(participationDecision)
   ) {
-    // The cutoff has passed but the schedule has not decided this session
+    // The lock has passed but the schedule has not decided this session
     // yet. Decide first so nobody can book into a session that is about to be
     // cancelled for missing its minimum.
     await evaluateCatalogSessionParticipation({
@@ -861,7 +883,10 @@ export async function startCatalogCheckout(input: {
         eq(catalogSessionOccurrences.status, "scheduled"),
       ),
     });
-    if (!occurrence) participationRules = undefined;
+    if (!occurrence) {
+      participationRules = undefined;
+      participationDecision = undefined;
+    }
   }
   if (input.catalogSessionOccurrenceId && !occurrence) {
     const unavailable =
@@ -877,6 +902,12 @@ export async function startCatalogCheckout(input: {
         "This session was cancelled because it did not reach its minimum number of players.",
       );
     }
+    if (unavailable?.status === "cancelled") {
+      throw new CatalogCheckoutError(
+        "CATALOG_ITEM_UNAVAILABLE",
+        "This session was cancelled by the club.",
+      );
+    }
   }
   if (fixedSession && !occurrence) {
     throw new CatalogCheckoutError(
@@ -885,6 +916,21 @@ export async function startCatalogCheckout(input: {
     );
   }
   if (occurrence) {
+    // Decision 5: the same person never books the same session twice.
+    try {
+      await assertNotAlreadyBooked({
+        occurrenceId: occurrence.id,
+        participantPersonId,
+        organizationId: row.organization.id,
+        surface: input.paymentSurface ?? "hosted",
+        now: input.now,
+      });
+    } catch (error) {
+      if (error instanceof AlreadyBookedError) {
+        throw new CatalogCheckoutError("ALREADY_BOOKED", error.message);
+      }
+      throw error;
+    }
     const existing = await database
       .select({ details: catalogFulfillments.details })
       .from(catalogFulfillments)
@@ -1252,7 +1298,7 @@ export async function startCatalogCheckout(input: {
           policy: subscriptionPolicy,
         })
       : undefined;
-  await database.batch([
+  const insertCheckout = () => database.batch([
     row.item.type === "good" && row.item.subtype === "digital-content"
       ? database
           .update(organizationParticipants)
@@ -1345,6 +1391,8 @@ export async function startCatalogCheckout(input: {
               })
             : undefined,
         sessionOccurrenceId: occurrence?.id,
+        // Claimed under a row lock right after this insert (last place).
+        placeClaimPending: occurrence ? true : undefined,
         sessionStartsAt: occurrence?.startsAt.toISOString(),
         sessionEndsAt: occurrence?.endsAt.toISOString(),
         sessionTimezone: occurrence?.timezone,
@@ -1445,6 +1493,40 @@ export async function startCatalogCheckout(input: {
         }),
       ),
   ]);
+  try {
+    await insertCheckout();
+  } catch (error) {
+    if (occurrence && isDuplicateBookingViolation(error)) {
+      throw new CatalogCheckoutError(
+        "ALREADY_BOOKED",
+        new AlreadyBookedError().message,
+      );
+    }
+    throw error;
+  }
+  if (occurrence) {
+    const claimed = await claimOccurrencePlace({
+      occurrenceId: occurrence.id,
+      fulfillmentId,
+      now: input.now,
+    });
+    if (!claimed) {
+      await database.batch([
+        database
+          .update(catalogFulfillments)
+          .set({ status: "cancelled", updatedAt: input.now })
+          .where(eq(catalogFulfillments.id, fulfillmentId)),
+        database
+          .update(orders)
+          .set({ status: "cancelled", updatedAt: input.now })
+          .where(eq(orders.id, orderId)),
+      ]);
+      throw new CatalogCheckoutError(
+        "CATALOG_ITEM_UNAVAILABLE",
+        "That session no longer has enough open places.",
+      );
+    }
+  }
 
   if (promoQuote) {
     try {
@@ -1643,6 +1725,13 @@ export async function startCatalogCheckout(input: {
       );
     }
     await fulfillPaidCatalogOrder(orderId, input.now);
+    if (occurrence) {
+      await afterCatalogBookingConfirmed({
+        occurrenceId: occurrence.id,
+        fulfillmentId,
+        now: input.now,
+      });
+    }
     return {
       mode: "organization-credit",
       orderId,
@@ -1675,6 +1764,13 @@ export async function startCatalogCheckout(input: {
       .set({ status: "paid", updatedAt: input.now })
       .where(eq(orders.id, orderId));
     await fulfillPaidCatalogOrder(orderId, input.now);
+    if (occurrence) {
+      await afterCatalogBookingConfirmed({
+        occurrenceId: occurrence.id,
+        fulfillmentId,
+        now: input.now,
+      });
+    }
     return {
       mode: "free",
       orderId,

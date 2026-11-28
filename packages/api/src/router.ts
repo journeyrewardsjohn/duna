@@ -1822,7 +1822,8 @@ function throwDomainError(error: unknown): never {
         : error.code === "MEMBERSHIP_REQUIRED" ||
             error.code === "PARTICIPANT_NOT_ALLOWED"
           ? "FORBIDDEN"
-          : error.code === "CHECKOUT_UNAVAILABLE"
+          : error.code === "CHECKOUT_UNAVAILABLE" ||
+              error.code === "ALREADY_BOOKED"
             ? "CONFLICT"
             : "PRECONDITION_FAILED";
     throw new TRPCError({ code, message: error.message, cause: error });

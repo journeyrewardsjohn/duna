@@ -10,15 +10,17 @@ import {
   ledgerJournals,
   orders,
   organizationCreditApplications,
+  participationDecisions,
   organizationCreditGrants,
   organizationWallets,
   people,
   refundRecords,
 } from "@duna/db";
+import { log } from "@duna/observability";
 import {
   assertBalancedJournal,
+  creditTiersFromPriceTiers,
   decideParticipationMinimum,
-  participationCutoffAt,
   planParticipationSettlement,
   reverseLedgerPostings,
   type LedgerPosting,
@@ -38,6 +40,14 @@ import {
 } from "./catalog-participation-rules";
 import { refundOrganizationOrder } from "./catalog-service";
 import type { ApiActor } from "./context";
+import {
+  bookerNotices,
+  decisionRule,
+  effectiveLockAt,
+  ensureCatalogDecision,
+  loadDecision,
+  queueParticipationNotices,
+} from "./services/participation/catalog";
 
 export class CatalogParticipationError extends Error {
   constructor(
@@ -84,7 +94,7 @@ interface OccurrenceBooking {
   readonly snapshot?: BookingParticipationSnapshot;
 }
 
-async function loadOccurrenceBookings(
+export async function loadOccurrenceBookings(
   occurrenceId: string,
   now: Date,
 ): Promise<readonly OccurrenceBooking[]> {
@@ -652,13 +662,20 @@ async function systemActor(
  * refund path; an unpaid pay-in-person reservation is simply released.
  * Re-entrant: bookings already refunded are no longer active and are skipped.
  */
-async function refundCancelledOccurrenceBookings(input: {
+export async function refundCancelledOccurrenceBookings(input: {
   readonly organizationId: string;
   readonly occurrenceId: string;
   readonly actorPersonId?: string;
   readonly requestId: string;
   readonly now: Date;
+  /** Stored on each booking; default "minimum-not-met". */
+  readonly cancellationReason?: string;
+  readonly refundReason?: string;
 }): Promise<readonly ParticipationCancellationResult[]> {
+  const cancellationReason = input.cancellationReason ?? "minimum-not-met";
+  const refundReason =
+    input.refundReason ??
+    "Session cancelled: the minimum number of players was not met.";
   const database = getDatabase();
   const bookings = await loadOccurrenceBookings(input.occurrenceId, input.now);
   const results: ParticipationCancellationResult[] = [];
@@ -680,7 +697,7 @@ async function refundCancelledOccurrenceBookings(input: {
             details: {
               ...booking.fulfillment.details,
               cancelledAt: input.now.toISOString(),
-              cancellationReason: "minimum-not-met",
+              cancellationReason,
             },
             updatedAt: input.now,
           })
@@ -705,7 +722,7 @@ async function refundCancelledOccurrenceBookings(input: {
           details: {
             ...booking.fulfillment.details,
             cancelledAt: input.now.toISOString(),
-            cancellationReason: "minimum-not-met",
+            cancellationReason,
           },
           updatedAt: input.now,
         })
@@ -722,7 +739,7 @@ async function refundCancelledOccurrenceBookings(input: {
         orderId: booking.order.id,
         amountMinor: booking.order.totalMinor,
         disposition: "original-payment",
-        reason: "Session cancelled: the minimum number of players was not met.",
+        reason: refundReason,
         requestId: `participation-cancel:${booking.fulfillment.id}`,
         now: input.now,
       });
@@ -804,31 +821,50 @@ export async function evaluateCatalogSessionParticipation(input: {
   let occurrence = row.occurrence;
   const organizationId = occurrence.organizationId;
   const empty = { settlements: [], cancellations: [] } as const;
-  const rules = catalogItemParticipationRules(
-    row.item.configuration,
-    occurrence.capacity,
-  );
-  if (!rules) {
+  // The rule is the snapshot taken at the first booking (or, before anyone
+  // booked, the offering's current rule or the club default), never the
+  // offering's live configuration (participation.md §4.3).
+  let decision = await ensureCatalogDecision({
+    occurrence,
+    item: row.item,
+    now: input.now,
+  });
+  if (!decision) {
     return { occurrenceId: occurrence.id, status: "no-rules", ...empty };
   }
+  const resolved = decisionRule(decision, occurrence.capacity);
+  const rules = {
+    minParticipants: resolved.minParticipants,
+    minimumPolicy: resolved.minimumPolicy,
+    // Decision 2: only 289 bookings that agreed to attendance pricing keep it.
+    settlementBasis: resolved.legacySettlementBasis ?? ("cutoff" as const),
+    creditTiers: creditTiersFromPriceTiers(resolved.tiers),
+  };
+  if (decision.outcome === "cancelled-by-club") {
+    // A person at the club cancelled; keep releasing anything left.
+    return {
+      occurrenceId: occurrence.id,
+      status: "cancelled",
+      headcount: decision.decidedGroupSize ?? 0,
+      minParticipants: rules.minParticipants,
+      settlements: [],
+      cancellations: await refundCancelledOccurrenceBookings({
+        organizationId,
+        occurrenceId: occurrence.id,
+        actorPersonId: input.actorPersonId,
+        requestId: input.requestId,
+        now: input.now,
+        cancellationReason: decision.cancelReason ?? "other",
+        refundReason: "Session cancelled by the club.",
+      }),
+    };
+  }
 
-  if (!occurrence.participationOutcome) {
+  if (!decision.outcome) {
     if (occurrence.status !== "scheduled") {
       return { occurrenceId: occurrence.id, status: "no-rules", ...empty };
     }
-    if (
-      !input.force &&
-      input.now <
-        participationCutoffAt(
-          occurrence.startsAt,
-          rules,
-          participationOpenedAt({
-            occurrenceCreatedAt: occurrence.createdAt,
-            itemPublishedAt: row.item.publishedAt,
-            configuration: row.item.configuration,
-          }),
-        )
-    ) {
+    if (!input.force && input.now < effectiveLockAt(decision)) {
       return {
         occurrenceId: occurrence.id,
         status: "not-due",
@@ -840,22 +876,53 @@ export async function evaluateCatalogSessionParticipation(input: {
       occurrence.id,
       input.now,
     );
-    const decision = decideParticipationMinimum(rules, headcount);
+    const decided = decideParticipationMinimum(rules, headcount);
     // A session that has already started is never cancelled automatically.
     // If the decision was missed (a paused schedule, a late rule change) the
     // session runs under its minimum and an operator can refund by hand.
+    // "Run anyway" (an operator, before the lock) also keeps it running.
     const decidedLate =
-      decision === "cancel-under-minimum" && input.now >= occurrence.startsAt;
-    const outcome = decidedLate ? "run-under-minimum" : decision;
+      decided === "cancel-under-minimum" && input.now >= occurrence.startsAt;
+    const forcedRun =
+      decided === "cancel-under-minimum" && decision.forcedOutcome === "run";
+    const outcome: ParticipationMinimumOutcome =
+      decidedLate || forcedRun ? "run-under-minimum" : decided;
     // Claiming the decision in one statement means two concurrent runs cannot
     // both decide; the loser re-reads what the winner recorded.
     await database
+      .update(participationDecisions)
+      .set({
+        outcome,
+        decidedAt: input.now,
+        decidedGroupSize: headcount,
+        decidedByPersonId: input.actorPersonId,
+        cancelReason:
+          outcome === "cancel-under-minimum" ? "minimum-not-met" : null,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(participationDecisions.id, decision.id),
+          isNull(participationDecisions.outcome),
+        ),
+      );
+    decision = (await loadDecision(occurrence.id)) ?? decision;
+    if (!decision.outcome || decision.outcome === "cancelled-by-club") {
+      return { occurrenceId: occurrence.id, status: "no-rules", ...empty };
+    }
+    const won =
+      decision.decidedAt?.getTime() === input.now.getTime() &&
+      decision.outcome === outcome &&
+      decision.decidedGroupSize === headcount;
+    // The payments model reads the occurrence columns: mirror the decision.
+    await database
       .update(catalogSessionOccurrences)
       .set({
-        participationOutcome: outcome,
-        participationDecidedAt: input.now,
-        decidedHeadcount: headcount,
-        status: outcome === "cancel-under-minimum" ? "cancelled" : "scheduled",
+        participationOutcome: decision.outcome,
+        participationDecidedAt: decision.decidedAt,
+        decidedHeadcount: decision.decidedGroupSize,
+        status:
+          decision.outcome === "cancel-under-minimum" ? "cancelled" : "scheduled",
         updatedAt: input.now,
       })
       .where(
@@ -865,16 +932,13 @@ export async function evaluateCatalogSessionParticipation(input: {
           isNull(catalogSessionOccurrences.participationOutcome),
         ),
       );
-    const decided = await database.query.catalogSessionOccurrences.findFirst({
+    const mirrored = await database.query.catalogSessionOccurrences.findFirst({
       where: eq(catalogSessionOccurrences.id, occurrence.id),
     });
-    if (!decided?.participationOutcome) {
+    if (!mirrored?.participationOutcome) {
       return { occurrenceId: occurrence.id, status: "no-rules", ...empty };
     }
-    if (
-      decided.participationDecidedAt?.getTime() === input.now.getTime() &&
-      decided.participationOutcome === outcome
-    ) {
+    if (won) {
       await database.insert(auditLog).values({
         organizationId,
         actorPersonId: input.actorPersonId,
@@ -891,20 +955,68 @@ export async function evaluateCatalogSessionParticipation(input: {
           headcount,
           minParticipants: rules.minParticipants,
           minimumPolicy: rules.minimumPolicy,
+          forcedRun,
         }),
         reason:
           outcome === "cancel-under-minimum"
             ? `Session cancelled with ${headcount} of the ${rules.minParticipants} players it needs.`
             : decidedLate
               ? `Session had ${headcount} of the ${rules.minParticipants} players it needs, but had already started when this was decided. It was not cancelled automatically.`
-              : outcome === "run-under-minimum"
-                ? `Session runs with ${headcount} players, under its minimum of ${rules.minParticipants}.`
-                : `Session confirmed with ${headcount} players.`,
+              : forcedRun
+                ? `Session runs with ${headcount} players, under its minimum of ${rules.minParticipants}, because the club chose to run it anyway.`
+                : outcome === "run-under-minimum"
+                  ? `Session runs with ${headcount} players, under its minimum of ${rules.minParticipants}.`
+                  : `Session confirmed with ${headcount} players.`,
         traceId: input.requestId,
         createdAt: input.now,
       });
+      const { bookings: active } = {
+        bookings: (await loadOccurrenceBookings(occurrence.id, input.now)).filter(
+          (booking) => booking.confirmed,
+        ),
+      };
+      const hasMinimum = rules.minParticipants > 1;
+      const notices = hasMinimum
+        ? bookerNotices({
+            organizationId,
+            occurrenceId: occurrence.id,
+            bookings: active.map((booking) => ({
+              fulfillment: booking.fulfillment,
+              bookerPersonId:
+                typeof booking.fulfillment.details.bookedByPersonId === "string"
+                  ? booking.fulfillment.details.bookedByPersonId
+                  : booking.order.buyerPersonId,
+            })),
+            kind:
+              outcome === "cancel-under-minimum" ? "cancelled-low" : "confirmed",
+            at: input.now,
+          })
+        : [];
+      if (outcome === "cancel-under-minimum") {
+        for (const coach of occurrence.coachPersonIds) {
+          notices.push({
+            organizationId,
+            subjectId: occurrence.id,
+            recipientPersonId: coach,
+            bookingId: null,
+            kind: "staff-cancelled",
+            scheduledFor: input.now,
+          });
+        }
+      }
+      await queueParticipationNotices(notices);
+      log.info("participation.session.locked", {
+        organizationId,
+        subjectType: "catalog-session-occurrence",
+        subjectId: occurrence.id,
+        outcome,
+        groupSize: headcount,
+        min: rules.minParticipants,
+        capacity: occurrence.capacity,
+        decidedLate,
+      });
     }
-    occurrence = decided;
+    occurrence = mirrored;
   }
 
   const outcome =
@@ -1016,6 +1128,23 @@ export async function evaluateCatalogSessionParticipation(input: {
           isNull(catalogSessionOccurrences.participationSettledAt),
         ),
       );
+    await database
+      .update(participationDecisions)
+      .set({
+        settledAt: input.now,
+        settledGroupSize: headcount,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(participationDecisions.id, decision.id),
+          isNull(participationDecisions.settledAt),
+          inArray(participationDecisions.outcome, [
+            "minimum-met",
+            "run-under-minimum",
+          ]),
+        ),
+      );
     const settled = await database.query.catalogSessionOccurrences.findFirst({
       where: eq(catalogSessionOccurrences.id, occurrence.id),
     });
@@ -1108,7 +1237,16 @@ export async function processDueCatalogParticipation(input: {
     )
     .where(
       and(
-        sql`${catalogItems.configuration} ? 'participation'`,
+        or(
+          sql`${catalogItems.configuration} ? 'participation'`,
+          // A session under the club default has a decision row from its
+          // first booking.
+          sql`EXISTS (
+            SELECT 1 FROM participation_decisions AS decision
+            WHERE decision.subject_type = 'catalog-session-occurrence'
+              AND decision.subject_id = ${catalogSessionOccurrences.id}
+          )`,
+        ),
         gte(catalogSessionOccurrences.startsAt, lookback),
         lte(catalogSessionOccurrences.startsAt, horizon),
         or(
@@ -1126,6 +1264,21 @@ export async function processDueCatalogParticipation(input: {
               "run-under-minimum",
             ]),
             isNull(catalogSessionOccurrences.participationSettledAt),
+          ),
+          // Cancelled by the club with bookings still to release.
+          and(
+            eq(catalogSessionOccurrences.status, "cancelled"),
+            sql`EXISTS (
+              SELECT 1 FROM participation_decisions AS decision
+              WHERE decision.subject_type = 'catalog-session-occurrence'
+                AND decision.subject_id = ${catalogSessionOccurrences.id}
+                AND decision.outcome = 'cancelled-by-club'
+            )`,
+            sql`EXISTS (
+              SELECT 1 FROM catalog_fulfillments AS booking
+              WHERE booking.catalog_session_occurrence_id = ${catalogSessionOccurrences.id}
+                AND booking.status IN ('held', 'pending', 'ready', 'fulfilled')
+            )`,
           ),
           // Cancelled under minimum with bookings still to release.
           and(

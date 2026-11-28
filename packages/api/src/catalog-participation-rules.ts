@@ -3,13 +3,19 @@ import {
   creditTierForHeadcount,
   describeParticipationTier,
   participationCutoffAt,
-  participationRulesAreInert,
   participationTierLabel,
+  creditTiersFromPriceTiers,
+  participationRuleIsInert,
   readParticipationRules,
   reservedCreditsPerPlayer,
-  validateParticipationRules,
+  serializeParticipationRule,
+  validateParticipationRuleV2,
   type ParticipationCreditTier,
   type ParticipationRules,
+} from "@duna/core";
+import {
+  deriveParticipationState,
+  type ParticipationState,
 } from "@duna/core";
 import { stableHash } from "./canonical";
 
@@ -50,15 +56,17 @@ export function normalizeParticipationConfiguration(input: {
     );
   }
   const capacity = positiveInteger(input.configuration.capacity, 1);
-  const result = validateParticipationRules(input.configuration.participation, {
+  // Version 2 validation: plain-language messages, prices that never rise
+  // as the group grows, no attendance pricing on a new save (decisions 2, 3).
+  const result = validateParticipationRuleV2(input.configuration.participation, {
     capacity,
     allowCredits: input.allowCredits,
     creditCost: input.creditCost,
   });
-  if (!result.rules) throw new Error(result.issues.join(" "));
+  if (!result.rule) throw new Error(result.issues.join(" "));
   const schedule = record(input.configuration.sessionSchedule);
   if (
-    !participationRulesAreInert(result.rules) &&
+    !participationRuleIsInert(result.rule) &&
     schedule?.mode !== "one-off" &&
     schedule?.mode !== "recurring"
   ) {
@@ -66,9 +74,20 @@ export function normalizeParticipationConfiguration(input: {
       "Player minimums and group-size pricing need preset session dates. Choose one-off or recurring sessions.",
     );
   }
-  const rest = { ...result.rules } as Record<string, unknown>;
-  // The capacity stays in `configuration.capacity`; it is never stored twice.
-  delete rest.maxParticipants;
+  const { effectiveFrom: _ignored, maxParticipants: _capacity, ...rule } =
+    result.rule;
+  void _ignored;
+  void _capacity;
+  const rest: Record<string, unknown> = {
+    ...serializeParticipationRule({ ...rule }),
+    // Read by the 289 HQ form until PART-6 replaces it. Deprecated mirrors:
+    // drop them once no reader uses `cutoffMinutesBeforeStart`/`creditTiers`.
+    ...(rule.lockMinutesBeforeStart !== undefined
+      ? { cutoffMinutesBeforeStart: rule.lockMinutesBeforeStart }
+      : {}),
+    settlementBasis: "cutoff",
+    creditTiers: creditTiersFromPriceTiers(rule.tiers),
+  };
   // `effectiveFrom` records when these exact rules took effect. Sessions
   // already inside their cutoff window when rules are added or changed are
   // decided later rather than the moment the rules are saved.
@@ -179,6 +198,15 @@ export interface OccurrenceParticipationState {
   /** Credits taken from the wallet for one place booked right now. */
   readonly bookingCreditsPerPlayer?: number;
   readonly settledHeadcount?: number;
+  /** PART: the state every surface shows (participation.md §3.2). */
+  readonly displayState?: ParticipationState;
+  /** PART: alias of `decisionAt` (the lock, with any extension). */
+  readonly lockAt?: string;
+  readonly waitlistCount?: number;
+  /** PART: decision 1, the lock is the free-cancellation deadline. */
+  readonly freeCancelUntil?: string;
+  /** PART: unpaid checkouts holding a place (count for capacity only). */
+  readonly heldCount?: number;
 }
 
 export function occurrenceParticipationState(input: {
@@ -190,12 +218,49 @@ export function occurrenceParticipationState(input: {
     | "participationOutcome"
     | "settledHeadcount"
     | "participationSettledAt"
-  >;
+  > &
+    Partial<
+      Pick<
+        typeof catalogSessionOccurrences.$inferSelect,
+        "endsAt" | "status"
+      >
+    >;
+  /** Confirmed places (paid, or an unexpired pay-in-person reservation). */
   readonly bookedCount: number;
   /** See `participationOpenedAt`. Omit to use the configured cutoff as is. */
   readonly openedAt?: Date;
+  /** The engine's lock (snapshot, extension); wins over the computed one. */
+  readonly lockAt?: Date;
+  readonly heldCount?: number;
+  readonly waitlistCount?: number;
+  /** "cancelled-by-club" when a person at the club cancelled. */
+  readonly decisionOutcome?: string | null;
+  readonly now?: Date;
 }): OccurrenceParticipationState {
   const { rules, occurrence, bookedCount } = input;
+  const lockAt =
+    input.lockAt ??
+    participationCutoffAt(occurrence.startsAt, rules, input.openedAt);
+  const outcome =
+    input.decisionOutcome === "cancelled-by-club" ||
+    (occurrence.status === "cancelled" && !occurrence.participationOutcome)
+      ? ("cancelled-by-club" as const)
+      : occurrence.participationOutcome === "minimum-met" ||
+          occurrence.participationOutcome === "run-under-minimum" ||
+          occurrence.participationOutcome === "cancel-under-minimum"
+        ? occurrence.participationOutcome
+        : undefined;
+  const displayState =
+    input.now && occurrence.endsAt
+      ? deriveParticipationState({
+          booked: bookedCount,
+          minParticipants: rules.minParticipants,
+          capacity: occurrence.capacity,
+          outcome,
+          now: input.now,
+          endsAt: occurrence.endsAt,
+        })
+      : undefined;
   const settledHeadcount = occurrence.participationSettledAt
     ? (occurrence.settledHeadcount ?? undefined)
     : undefined;
@@ -203,15 +268,21 @@ export function occurrenceParticipationState(input: {
   return {
     capacity: occurrence.capacity,
     bookedCount,
-    spotsRemaining: Math.max(0, occurrence.capacity - bookedCount),
+    spotsRemaining: Math.max(
+      0,
+      occurrence.capacity - bookedCount - (input.heldCount ?? 0),
+    ),
     minParticipants: rules.minParticipants,
     minimumMet: bookedCount >= rules.minParticipants,
     playersNeeded: Math.max(0, rules.minParticipants - bookedCount),
-    decisionAt: participationCutoffAt(
-      occurrence.startsAt,
-      rules,
-      input.openedAt,
-    ).toISOString(),
+    decisionAt: lockAt.toISOString(),
+    lockAt: lockAt.toISOString(),
+    freeCancelUntil: lockAt.toISOString(),
+    ...(displayState ? { displayState } : {}),
+    ...(input.waitlistCount !== undefined
+      ? { waitlistCount: input.waitlistCount }
+      : {}),
+    ...(input.heldCount !== undefined ? { heldCount: input.heldCount } : {}),
     status:
       occurrence.participationOutcome === "cancel-under-minimum"
         ? "cancelled-under-minimum"

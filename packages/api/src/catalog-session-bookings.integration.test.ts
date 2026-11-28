@@ -688,20 +688,46 @@ describe("cancelling a session booking", () => {
     );
     const { orderId } = await checkout(guardian);
     await checkout(otherAdult);
+    // Before the lock: everything that is still held comes back.
+    const result = await cancel(guardian, await bookingIdFor(orderId), {
+      now: new Date("2026-12-08T05:00:00.000Z"),
+    });
+    expect(result).toMatchObject({
+      refundStatus: "credits-returned",
+      creditsReturned: 3,
+    });
+    await expectWallet(guardian, 10);
+  });
+
+  it("after the lock a late cancellation pays the final price (decision 4)", async () => {
+    await configureParticipation(
+      pg,
+      { creditTiers: tiers, cutoffMinutesBeforeStart: 2_880 },
+      3,
+    );
+    const { orderId } = await checkout(guardian);
+    await checkout(otherAdult);
     await evaluateCatalogSessionParticipation({
       occurrenceId: sessions[0],
       requestId: crypto.randomUUID(),
       now: new Date("2026-12-08T18:00:00.000Z"),
     });
     await expectWallet(guardian, 8);
-    const result = await cancel(guardian, await bookingIdFor(orderId), {
-      now: new Date("2026-12-09T05:00:00.000Z"),
-    });
-    expect(result).toMatchObject({
-      refundStatus: "credits-returned",
-      creditsReturned: 2,
-    });
-    await expectWallet(guardian, 10);
+    const bookingId = await bookingIdFor(orderId);
+    // The lock is the free-cancellation deadline (decision 1), even though
+    // the club's refund window is later.
+    await expect(
+      cancel(guardian, bookingId, { now: new Date("2026-12-09T05:00:00.000Z") }),
+    ).rejects.toThrow(
+      "Cancelling now costs 2 credits. You get them back if someone takes your place.",
+    );
+    expect(
+      await cancel(guardian, bookingId, {
+        now: new Date("2026-12-09T05:00:00.000Z"),
+        acknowledgeNoRefund: true,
+      }),
+    ).toMatchObject({ chargedCredits: 2, creditsReturned: 0 });
+    await expectWallet(guardian, 8);
     await expectWallet(otherAdult, 8);
   });
 });
