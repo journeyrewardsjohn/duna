@@ -40,6 +40,12 @@ export const NEW_ACTIONS: readonly {
     icon: "users",
   },
   {
+    key: "score-match",
+    title: "Score a match",
+    summary: "Keep score point by point, then see your Sand Rating",
+    icon: "score",
+  },
+  {
     key: "upload-score",
     title: "Add a result",
     summary: "Your opponents confirm it",

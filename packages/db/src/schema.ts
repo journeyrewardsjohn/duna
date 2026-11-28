@@ -2903,6 +2903,10 @@ export const catalogSessionOccurrences = pgTable(
       table.organizationId,
       table.startsAt,
     ),
+    // B10 search: upcoming scheduled sessions across every club, soonest first.
+    index("catalog_session_occurrence_upcoming_idx")
+      .on(table.startsAt)
+      .where(sql`${table.status} = 'scheduled'`),
     check(
       "catalog_session_occurrence_time_valid",
       sql`${table.endsAt} > ${table.startsAt}`,

@@ -1,3 +1,4 @@
+import { participationDemo } from "@duna/core/demo/participation";
 import { TRPCError } from "@trpc/server";
 import {
   COURT_SURFACE_IDS,
@@ -35,6 +36,7 @@ import {
   superAdminProcedure,
 } from "./auth";
 import type { ApiContext } from "./context";
+import { usesDemoData } from "./services/data-source";
 import { messagingRouter } from "./messaging-router";
 import { flagsPublicRouter } from "./routers/flags";
 import { readinessAdminRouter } from "./routers/readiness";
@@ -12230,21 +12232,46 @@ const operatorRouter = router({
       z
         .object({
           catalogItemId: z.string().uuid().optional(),
+          // PART-B: one session (no window unless given).
+          occurrenceId: z.string().uuid().optional(),
           from: z.iso.datetime().optional(),
           to: z.iso.datetime().optional(),
         })
         .default({}),
     )
     .output(z.array(operatorCatalogSessionOccurrenceSchema).readonly())
-    .query(({ input, ctx }) =>
-      loadOperatorCatalogSessionOccurrences({
+    .query(({ input, ctx }) => {
+      // Demo mode answers from the participation fixtures (it used to return
+      // [] because the service bailed out without a database).
+      if (usesDemoData()) {
+        const seesMoney =
+          ctx.actor!.scopes.includes("*") ||
+          ctx.actor!.scopes.includes("payments:read");
+        return participationDemo.occurrences
+          .filter(
+            (occurrence) =>
+              (!input.occurrenceId || occurrence.id === input.occurrenceId) &&
+              (!input.catalogItemId ||
+                occurrence.catalogItemId === input.catalogItemId),
+          )
+          .map((occurrence) => {
+            if (seesMoney || !occurrence.participation) return occurrence;
+            const participation = { ...occurrence.participation };
+            delete (participation as { atStakeCredits?: number })
+              .atStakeCredits;
+            delete (participation as { atStakeMinor?: number }).atStakeMinor;
+            return { ...occurrence, participation };
+          });
+      }
+      return loadOperatorCatalogSessionOccurrences({
         actor: ctx.actor!,
         catalogItemId: input.catalogItemId,
+        occurrenceId: input.occurrenceId,
         from: input.from ? new Date(input.from) : undefined,
         to: input.to ? new Date(input.to) : undefined,
         now: ctx.now,
-      }),
-    ),
+      });
+    }),
   settleCatalogSessionOccurrence: organizationProcedure("payments:write")
     .input(
       z.object({

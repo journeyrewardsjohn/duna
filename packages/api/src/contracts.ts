@@ -1,4 +1,4 @@
-import { MEMBERSHIP_PLAN_IDS } from "@duna/core";
+import { MEMBERSHIP_PLAN_IDS, PARTICIPATION_STATES } from "@duna/core";
 import { z } from "zod";
 
 export const currencySchema = z.enum(["USD", "CAD", "AUD", "BRL", "EUR"]);
@@ -4467,6 +4467,8 @@ export const publicParticipationSummarySchema = z.object({
       }),
     )
     .readonly(),
+  // B10 (additive): the rule keeps a waitlist once the session is full.
+  waitlist: z.boolean().optional(),
 });
 
 export const occurrenceParticipationStateSchema = z.object({
@@ -4518,6 +4520,19 @@ export const operatorCatalogSessionOccurrenceSchema = z.object({
   status: z.enum(["scheduled", "cancelled", "complete"]),
   capacity: z.number().int().positive(),
   confirmedCount: z.number().int().nonnegative(),
+  // PART-B (additive): who, where. Null when the session names none.
+  coach: z
+    .object({ id: z.string().uuid(), displayName: z.string() })
+    .nullable()
+    .optional(),
+  court: z
+    .object({ id: z.string().uuid(), name: z.string() })
+    .nullable()
+    .optional(),
+  venue: z
+    .object({ id: z.string().uuid(), name: z.string(), timeZone: z.string() })
+    .nullable()
+    .optional(),
   participation: occurrenceParticipationStateSchema
     .extend({
       minimumPolicy: participationMinimumPolicySchema,
@@ -4544,6 +4559,10 @@ export const operatorCatalogSessionOccurrenceSchema = z.object({
         settledCredits: z.number().int().nonnegative().optional(),
         returnedCredits: z.number().int().nonnegative().optional(),
         attendance: z.enum(["attended", "no-show"]).optional(),
+        // PART-B (additive): a junior, and who speaks for them. Never a
+        // birth date or an age; never health data.
+        isMinor: z.boolean().optional(),
+        guardianDisplayName: z.string().optional(),
       }),
     )
     .readonly(),
@@ -5885,6 +5904,19 @@ export const discoveryMapItemSchema = z.object({
   level: z.string().optional(),
   price: moneySchema.optional(),
   tags: z.array(z.string()).readonly(),
+  /**
+   * B10 (additive): group state for an event or pickup that has a group
+   * rule, from the core display model (never new wording).
+   */
+  participation: z
+    .object({
+      displayState: z.enum([...PARTICIPATION_STATES, "open"]),
+      copy: z.object({
+        status: z.string(),
+        line: z.string().optional(),
+      }),
+    })
+    .optional(),
 });
 
 export const discoveryMapSchema = z.object({

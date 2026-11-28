@@ -197,44 +197,6 @@
   color: var(--hq-surface);
   background: var(--hq-ink);
 }
-.hq-shell .guided-product-builder,
-.hq-shell .guided-product-builder__header,
-.hq-shell .guided-product-builder .guided-product-form,
-.hq-shell .guided-product-builder .guided-product-footer {
-  color: var(--hq-ink);
-  background: var(--hq-surface);
-  border-color: var(--hq-border);
-}
-.hq-shell
-  .guided-product-builder
-  :is(
-    .guided-event-link,
-    .guided-product-guide,
-    .guided-product-stage,
-    .guided-offer-preview__card
-  ) {
-  color: var(--hq-ink);
-  background: var(--hq-surface);
-  border-color: var(--hq-border);
-  box-shadow: none;
-}
-.hq-shell .guided-product-builder .guided-product-type-row > button {
-  color: var(--hq-ink);
-  background: var(--hq-surface);
-  border-color: var(--hq-border);
-  box-shadow: none;
-}
-.hq-shell
-  .guided-product-builder
-  :is(
-    .guided-product-type-row > button.active,
-    .guided-product-steps > button.active,
-    .guided-choice.active
-  ) {
-  background: var(--hq-tint);
-  border-color: var(--hq-ink);
-  box-shadow: none;
-}
 .hq-shell
   .guided-product-builder
   :is(
