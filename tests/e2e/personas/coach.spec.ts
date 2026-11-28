@@ -121,9 +121,9 @@ test.describe("CH-9 Group sessions that need players", () => {
     const panel = page.getByRole("dialog", { name: "Saturday semi-private" });
     await panel.getByRole("button", { name: "Message the group" }).click();
     await expect(panel.getByText("Nothing is sent from here")).toBeVisible();
-    await expect(panel.getByLabel("Message")).toHaveValue(
-      /clubs\/.+\/products\/.+\?session=/,
-    );
+    await expect(
+      panel.getByRole("textbox", { name: "Message", exact: true }),
+    ).toHaveValue(/clubs\/.+\/products\/.+\?session=/);
     await expect(
       panel.getByRole("button", { name: "Copy the booking link" }),
     ).toBeVisible();

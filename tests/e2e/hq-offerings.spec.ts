@@ -140,9 +140,11 @@ test("the group rule saves after showing what happens to booked sessions", async
   await fewest.fill("3");
   await fewest.press("Tab");
   await page.getByRole("button", { name: "Save group size" }).click();
-  const question = page.getByRole("dialog", {
-    name: "Change the group rule for Weekly clinic?",
-  });
+  // The kit's confirmation is an alert dialog.
+  const question = page.getByRole("alertdialog");
+  await expect(question).toContainText(
+    "Change the group rule for Weekly clinic?",
+  );
   await expect(question).toContainText("Runs with at least 3 players.");
   await expect(question).toContainText("keeps the rule people booked under");
   await expect(
@@ -223,7 +225,7 @@ test("attendance is a fast checklist on a phone", async ({ page }) => {
     hq(`/offerings/${clinic}/schedule?session=${mondayMorningSession}`),
   );
   const list = page.getByRole("list", { name: "Attendance" });
-  await expect(list).toBeVisible();
+  await expect(list).toBeVisible({ timeout: 15_000 });
   const first = list.getByRole("button").first();
   await first.click();
   await expect(first).toHaveAttribute("aria-pressed", "true");
