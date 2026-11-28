@@ -1,0 +1,1 @@
+CREATE INDEX "catalog_session_occurrence_upcoming_idx" ON "catalog_session_occurrences" USING btree ("starts_at") WHERE "catalog_session_occurrences"."status" = 'scheduled';

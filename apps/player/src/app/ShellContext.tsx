@@ -4,6 +4,7 @@ import type { HomeQuickAction } from "../features/home/home-quick-action";
 import type { CourtBookingRequest } from "../features/courts/court-types";
 import type { VideoTransferStatus } from "../../video-studio";
 import type { WatchScoreDraft } from "../../watch-scoring";
+import type { ScoreDraft } from "../features/score/score-draft";
 import type { RouteKey, TabKey } from "./router";
 import type { RouteEntry, ShellAction } from "./shell-state";
 
@@ -26,7 +27,10 @@ export interface ShellNavigation {
   readonly openEvent: (event: EventSummary) => void;
   readonly openEventAtIndex: (index: number) => void;
   readonly registerForEvent: (index: number) => void;
+  /** A match's result (route `result`). */
   readonly openMatch: (match: MatchSummary) => void;
+  /** The film, private notes and conversation of a match (a sheet). */
+  readonly openMatchDetails: (match: MatchSummary) => void;
   readonly openOrganization: (slug: string) => void;
   readonly openVenue: (venueId: string) => void;
   readonly openCourtBooking: (request: CourtBookingRequest) => void;
@@ -36,8 +40,11 @@ export interface ShellNavigation {
   readonly openPath: (href: string) => void;
   readonly unreadMessages: number;
   readonly setUnreadMessages: (count: number) => void;
-  readonly watchScoreDraft?: WatchScoreDraft;
+  /** What "Add a result" opens with (a Watch score, a stopped live match). */
+  readonly scoreDraft?: ScoreDraft;
   readonly reviewWatchScore: (draft: WatchScoreDraft) => void;
+  /** Opens "Add a result", pre-filled when a draft is given. */
+  readonly addResult: (draft?: ScoreDraft) => void;
   /** The film studio reports upload progress for the shell banner. */
   readonly onVideoTransfer: (status: VideoTransferStatus | undefined) => void;
   /** Long press on the preview chip (preview builds): the Layout lab. */

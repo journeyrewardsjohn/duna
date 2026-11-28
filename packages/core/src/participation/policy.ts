@@ -23,6 +23,11 @@ export const PARTICIPATION_POLICY = {
   duplicateBooking: "block",
   /** Decision 6: card payers reserve the most and get the difference back (PART-10 wires cards). */
   cardGroupPricing: "reserve-then-return",
+  /**
+   * Decision 6 is not charged yet: card checkout takes the fixed card price.
+   * While false, no surface tells a card payer that money comes back.
+   */
+  cardLadderCharged: false,
   /** Decision 7: old "auto-cancel" settings only cancel sessions created from now on. */
   legacyAutoCancel: "new-sessions-only",
 } as const;

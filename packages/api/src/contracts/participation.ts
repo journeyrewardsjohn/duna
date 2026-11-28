@@ -515,3 +515,107 @@ export const participationKeepRuleInputSchema = z.object({
 export const participationKeepRuleSchema = z.object({
   state: z.literal("kept"),
 });
+
+// ---------------------------------------------------------------------------
+// PART-B (additive): the cancel preview, resolving a coach's request, an
+// operator share link.
+// ---------------------------------------------------------------------------
+
+export const participationCancelPreviewInputSchema = z.object({
+  ...participationSubjectInput,
+});
+
+/** How a booking was paid, as the cancellation will return it. */
+export const participationCancelMethodSchema = z.enum([
+  "credits",
+  "card",
+  "cash",
+  "free",
+  "unpaid",
+]);
+
+/**
+ * Exactly what cancelling would return to whom, computed by the same plan
+ * `cancelSession` runs. Money fields only with `payments:read`; a junior is
+ * shown by first name and their guardian is the notice audience.
+ */
+export const participationCancelPreviewSchema = z.object({
+  subjectType: participationSubjectTypeSchema,
+  subjectId: w3IdSchema,
+  bookings: z
+    .array(
+      z.object({
+        bookingId: w3IdSchema,
+        displayName: z.string(),
+        isMinor: z.boolean(),
+        quantity: z.number().int().positive(),
+        method: participationCancelMethodSchema,
+        /** The status `cancelSession` reports for this booking if nothing changes first. */
+        outcome: z.enum([
+          "credits-restored",
+          "refund-submitted",
+          "released",
+          "review-required",
+        ]),
+        creditsBack: z.number().int().nonnegative().optional(),
+        cardRefundMinor: z.number().int().nonnegative().optional(),
+        currency: z.string().length(3).optional(),
+      }),
+    )
+    .readonly(),
+  totals: z.object({
+    bookings: z.number().int().nonnegative(),
+    places: z.number().int().nonnegative(),
+    released: z.number().int().nonnegative(),
+    reviewRequired: z.number().int().nonnegative(),
+    cardRefunds: z.number().int().nonnegative(),
+    creditsBack: z.number().int().nonnegative().optional(),
+    cardRefundMinor: z.number().int().nonnegative().optional(),
+    currency: z.string().length(3).optional(),
+  }),
+  /**
+   * Who Duna's own cancellation notice goes to (one per booking, about their
+   * own booking, principle 5). The club's personal message is separate and
+   * goes through Send review.
+   */
+  notices: z
+    .array(
+      z.object({
+        bookingId: w3IdSchema,
+        audience: z.string(),
+        audienceRole: z.enum(["player", "guardian", "payer"]),
+        channel: z.literal("notice"),
+      }),
+    )
+    .readonly(),
+});
+
+export const participationResolveCancelRequestInputSchema = z.object({
+  requestId: w3IdSchema,
+  decision: z.enum(["approve", "decline"]),
+  /**
+   * For the coach (decline) or the players (approve). Never stored or sent
+   * from here: the UI sends it through Send review.
+   */
+  note: z.string().max(500).optional(),
+  /** Approve is the `strong` tier (people and refunds restated); decline is `confirm`. */
+  confirmed: z.literal(true),
+  idempotencyKey: w3IdempotencyKeySchema,
+});
+
+export const participationResolveCancelRequestSchema = z.object({
+  requestId: w3IdSchema,
+  status: z.enum(["approved", "declined"]),
+  /** Approve: exactly what `cancelSession` returns. Decline: empty. */
+  cancellations: participationCancelSessionSchema.shape.cancellations,
+  /**
+   * False today: Duna has no internal staff notification path yet, so a
+   * decline is recorded (and visible in `cancelRequests` history) but the
+   * coach is not told automatically.
+   */
+  coachNotified: z.boolean(),
+});
+
+export const participationShareLinkInputSchema = z.object({
+  ...participationSubjectInput,
+});
