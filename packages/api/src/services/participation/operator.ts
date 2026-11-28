@@ -844,7 +844,7 @@ export async function cancelParticipationSession(input: {
         organizationId: input.organizationId,
         occurrenceId: occurrence.id,
         bookings: places.bookings,
-        kind: input.reason === "merged" ? "moved" : "cancelled-club",
+        kind: "cancelled-club",
         at: input.now,
       }),
     );

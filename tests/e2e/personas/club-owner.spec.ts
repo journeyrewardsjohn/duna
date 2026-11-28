@@ -298,3 +298,11 @@ test.describe("CO-13 Identity chrome", () => {
 test.describe("CO-14 Pay the team", () => {
   test.fixme("CO-14.1 Run a pay period for coaches and export it [B3b, H5]", async () => {});
 });
+
+test.describe("CO-15 Group sessions that fill up", () => {
+  test.fixme("CO-15.1 Sets the club booking rule as a sentence; offerings without their own rule show “Club default” [PART-6]", async () => {});
+  test.fixme("CO-15.2 Picks “Clinic” on an offering and enters a price ladder; sees the cliff warning and the live preview [PART-6]", async () => {});
+  test.fixme("CO-15.3 Opens Today; “At risk this week” lists a session with “Needs 2 by Thu 6:00 PM” [PART-7]", async () => {});
+  test.fixme("CO-15.4 Cancels a thin session after a strong confirmation restating people and refunds; it shows “Cancelled” [PART-7]", async () => {});
+  test.fixme("CO-15.5 Asks Duna to make every clinic need 4 players; a proposal card shows before, after and affected sessions [PART-6]", async () => {});
+});
