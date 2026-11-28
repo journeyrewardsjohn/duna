@@ -1,4 +1,6 @@
 import { TRPCError } from "@trpc/server";
+import { demoOrganizationStorefront } from "@duna/core/demo/storefront";
+import { usesDemoData } from "./services/data-source";
 import {
   COURT_SURFACE_IDS,
   withEventLifecycle,
@@ -2734,7 +2736,13 @@ const publicRouter = router({
   organizationStorefront: publicProcedure
     .input(z.object({ slug: z.string().trim().min(1).max(64) }))
     .output(publicOrganizationStorefrontSchema)
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      // Demo mode (no database): the demo clubs' storefronts (SITE-5).
+      if (usesDemoData()) {
+        const demo = demoOrganizationStorefront(input.slug, ctx.now);
+        if (!demo) throw new TRPCError({ code: "NOT_FOUND" });
+        return demo;
+      }
       const storefront = await loadPublicOrganizationStorefront(input.slug);
       if (!storefront) throw new TRPCError({ code: "NOT_FOUND" });
       return storefront;

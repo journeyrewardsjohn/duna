@@ -70,6 +70,47 @@ test.describe("VI-2 Look around without an account", () => {
     await page.goto("/rankings");
     await expectPageReady(page);
   });
+  test("VI-2.5 Booking from a club's offering asks the visitor to sign in and returns them to its checkout", async ({
+    page,
+  }) => {
+    await page.goto(
+      "/clubs/south-bay-volleyball/products/serve-receive-clinic",
+    );
+    await expectPageReady(page, "Serve-receive clinic");
+    const returnTo =
+      "/clubs/south-bay-volleyball/products/serve-receive-clinic/checkout";
+    const book = page
+      .getByRole("main")
+      .getByRole("link", { name: "Book a place" })
+      .first();
+    await expect(book).toHaveAttribute(
+      "href",
+      new RegExp(`^/sign-in\\?returnTo=${encodeURIComponent(returnTo)}&`),
+    );
+    await book.click();
+    await expect(
+      page.getByRole("link", { name: "Sign in and continue" }),
+    ).toHaveAttribute(
+      "href",
+      `/sign-in/start?returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  });
+  test("VI-2.6 A club's membership is shown as its card, and Join leads to the offer", async ({
+    page,
+  }) => {
+    await page.goto("/clubs/south-bay-volleyball");
+    await expectPageReady(page, "South Bay Volleyball Club");
+    const join = page.locator("#join");
+    await expect(
+      join.getByRole("article", {
+        name: "South Bay Volleyball Club membership card, as it will look in your wallet",
+      }),
+    ).toBeVisible();
+    await expect(join.getByText("Your name", { exact: true })).toBeVisible();
+    await join.getByRole("link", { name: /^Join for \$/ }).click();
+    await expectPageReady(page, "South Bay membership");
+    await expectNoHorizontalOverflow(page);
+  });
 });
 
 test.describe("VI-3 Decide to book", () => {

@@ -27,6 +27,9 @@ export const web: SurfaceContract = {
     "apps/web/app/(next)/(app)/",
     "apps/web/components/app-shell/",
     "apps/web/lib/app-routes.ts",
+    "apps/web/components/club/",
+    "apps/web/components/event/",
+    "apps/web/components/coach/",
   ],
   checks: [
     // The rebuilt Player web app (P1): the shell, Home and the route table.
@@ -109,11 +112,61 @@ export const web: SurfaceContract = {
       message:
         "Home's Next up is future-only and group-session words come from the shared copy table",
     },
+    // SITE-5: the pages a club sends its players to, rebuilt in app/(next)
+    // at the same addresses; the old pages and their parts are deleted.
+    ...[
+      "apps/web/app/(legacy)/clubs/[slug]/page.tsx",
+      "apps/web/app/(legacy)/clubs/[slug]/products/[productSlug]/page.tsx",
+      "apps/web/app/(legacy)/events/[slug]/page.tsx",
+      "apps/web/app/(legacy)/coaches/[handle]/page.tsx",
+      "apps/web/components/event-card.tsx",
+      "apps/web/components/coach-card.tsx",
+      "apps/web/components/club-hero-media.tsx",
+      "apps/web/components/catalog-recommendations.tsx",
+    ].map(
+      (path) =>
+        ({
+          kind: "absent",
+          path,
+          message:
+            "Club, offering, event and coach pages live in app/(next)/(site) (SITE-5); the old page and its parts are deleted",
+        }) as const,
+    ),
+    ...[
+      "apps/web/components/club",
+      "apps/web/components/event",
+      "apps/web/components/coach",
+    ].map(
+      (root) =>
+        ({
+          kind: "treeExcludes",
+          root,
+          values: [...legacySheets, "lucide-react"],
+          message: `${root} renders in app/(next): design-system parts and @duna/ui icons only`,
+        }) as const,
+    ),
+    ...(
+      [
+        ["clubs/[slug]", "canonical"],
+        ["clubs/[slug]/products/[productSlug]", "canonical"],
+        ["events/[slug]", "canonical"],
+        ["coaches/[handle]", "canonical"],
+      ] as const
+    ).map(
+      ([route, value]) =>
+        ({
+          kind: "includes",
+          file: `apps/web/app/(next)/(site)/${route}/page.tsx`,
+          values: [value, '"text/markdown"', "application/ld+json"],
+          message: `/${route} keeps its canonical address, Markdown companion and structured data`,
+        }) as const,
+    ),
     {
-      kind: "excludes",
-      file: "apps/web/components/event-card.tsx",
-      values: ["event-card__court-lines"],
-      message: "event-card must not restore synthetic court artwork",
+      kind: "includes",
+      file: "apps/web/components/club/theme.ts",
+      values: ["guardedAccent", "readsAsSolar", "publishedAt"],
+      message:
+        "A club's colour is an accent with a contrast guard and never reads as Solar (contract R13)",
     },
     {
       kind: "excludes",

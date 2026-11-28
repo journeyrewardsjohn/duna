@@ -211,29 +211,30 @@ parents, gets paid. Mostly on the phone (Pro, Watch); plans in HQ.
 Books and pays for a junior, hears from the coach, decides what is shared, and
 cancels when plans change. Mostly in the Player app, sometimes on the web.
 
-| Step   | The person does → expected result                                                                                  | Surface     | Packages       | Status  |
-| ------ | ------------------------------------------------------------------------------------------------------------------ | ----------- | -------------- | ------- |
-| PA-1.1 | Opens Settings › Household → "Add dependent" offered                                                               | Web         | none           | Main    |
-| PA-1.2 | Adds a junior's private profile with consent recorded → "Pending review", toast                                    | Web         | none           | **Gap** |
-| PA-1.3 | Invites a second guardian who accepts by link (`/join/guardian/[token]` exists)                                    | Web         | none           | **Gap** |
-| PA-1.n | Manages the family in the app (profile and organisation screens)                                                   | Player      | M-P6           | Native  |
-| PA-2.1 | Opens a session's checkout                                                                                         | Web         | P5             | Main    |
-| PA-2.2 | Chooses the junior as the participant                                                                              | Web         | none           | **Gap** |
-| PA-2.3 | Pays once (single-flight, idempotency key) → the junior's session appears in Next up                               | Web         | P5, B2         | Planned |
-| PA-2.n | Books lessons and events for the junior in the app                                                                 | Player      | M-P3b          | Native  |
-| PA-3.1 | Opens messages                                                                                                     | Web         | P7             | Main    |
-| PA-3.2 | Receives a coach's message tied to the junior's session; replies                                                   | Web         | P7, B7         | Planned |
-| PA-3.3 | Chooses how to be reached per club (app, email, text)                                                              | Web         | P7             | Planned |
-| PA-3.n | The same in the app's Concierge                                                                                    | Player      | M-P5a          | Native  |
-| PA-4.1 | Approves or declines sharing the junior's health data with the coach (owner decision pending, `HEALTH_PRIVACY.md`) | Web, Player | none           | **Gap** |
-| PA-5.1 | Cancels the junior's booking within the club's policy after a tier 1 confirm stating the refund                    | Web         | none           | **Gap** |
-| PA-5.2 | Sees the refund with its amount and where it went                                                                  | Web         | P6             | Planned |
-| PA-6.1 | Signs the club's waiver for the junior before the first session (`/waivers/complete` exists)                       | Web         | none           | **Gap** |
-| PA-7.1 | Opens Home → Next up first                                                                                         | Web         | P1             | Main    |
-| PA-7.2 | Next up includes the junior's sessions, labelled with the junior's name                                            | Web         | P1             | Main    |
-| PA-7.n | The family's next session as a widget and Live Activity                                                            | Player      | M-K2           | Native  |
-| PA-8.1 | Books a clinic for a child → checkout shows "3 credits now" and the ladder; the guardian receives the confirmation | Web         | PART-8         | Planned |
-| PA-8.2 | The clinic is cancelled under its minimum → the guardian is told and the credits are back in the wallet            | Web         | PART-5, PART-8 | Planned |
+| Step   | The person does → expected result                                                                                    | Surface     | Packages       | Status  |
+| ------ | -------------------------------------------------------------------------------------------------------------------- | ----------- | -------------- | ------- |
+| PA-1.1 | Opens Settings › Household → "Add dependent" offered                                                                 | Web         | none           | Main    |
+| PA-1.2 | Adds a junior's private profile with consent recorded → "Pending review", toast                                      | Web         | none           | **Gap** |
+| PA-1.3 | Invites a second guardian who accepts by link (`/join/guardian/[token]` exists)                                      | Web         | none           | **Gap** |
+| PA-1.n | Manages the family in the app (profile and organisation screens)                                                     | Player      | M-P6           | Native  |
+| PA-2.1 | Opens a session's checkout                                                                                           | Web         | P5             | Main    |
+| PA-2.2 | Chooses the junior as the participant                                                                                | Web         | none           | **Gap** |
+| PA-2.3 | Pays once (single-flight, idempotency key) → the junior's session appears in Next up                                 | Web         | P5, B2         | Planned |
+| PA-2.4 | Opens a club's clinic → how many have booked, what happens if too few do, the price all-in, one action into checkout | Web         | SITE-5         | Main    |
+| PA-2.n | Books lessons and events for the junior in the app                                                                   | Player      | M-P3b          | Native  |
+| PA-3.1 | Opens messages                                                                                                       | Web         | P7             | Main    |
+| PA-3.2 | Receives a coach's message tied to the junior's session; replies                                                     | Web         | P7, B7         | Planned |
+| PA-3.3 | Chooses how to be reached per club (app, email, text)                                                                | Web         | P7             | Planned |
+| PA-3.n | The same in the app's Concierge                                                                                      | Player      | M-P5a          | Native  |
+| PA-4.1 | Approves or declines sharing the junior's health data with the coach (owner decision pending, `HEALTH_PRIVACY.md`)   | Web, Player | none           | **Gap** |
+| PA-5.1 | Cancels the junior's booking within the club's policy after a tier 1 confirm stating the refund                      | Web         | none           | **Gap** |
+| PA-5.2 | Sees the refund with its amount and where it went                                                                    | Web         | P6             | Planned |
+| PA-6.1 | Signs the club's waiver for the junior before the first session (`/waivers/complete` exists)                         | Web         | none           | **Gap** |
+| PA-7.1 | Opens Home → Next up first                                                                                           | Web         | P1             | Main    |
+| PA-7.2 | Next up includes the junior's sessions, labelled with the junior's name                                              | Web         | P1             | Main    |
+| PA-7.n | The family's next session as a widget and Live Activity                                                              | Player      | M-K2           | Native  |
+| PA-8.1 | Books a clinic for a child → checkout shows "3 credits now" and the ladder; the guardian receives the confirmation   | Web         | PART-8         | Planned |
+| PA-8.2 | The clinic is cancelled under its minimum → the guardian is told and the credits are back in the wallet              | Web         | PART-5, PART-8 | Planned |
 
 ## Adult player (PL)
 
@@ -246,6 +247,7 @@ watches the rating move, watches film, manages membership and wallet.
 | PL-1.2 | Searches by where, when and what (sheets open and close)                                           | Web           | P3, C6          | Main    |
 | PL-1.3 | Filters results to courts                                                                          | Web           | P3              | Main    |
 | PL-1.4 | Sees results on the map: pins by zoom, satellite at the last three zooms                           | Web           | P3, C3          | Planned |
+| PL-1.5 | Opens a coach's profile and books their next opening                                               | Web           | SITE-5          | Main    |
 | PL-1.n | Finds play in the app: search sheet, list and map                                                  | Player        | M-P2            | Native  |
 | PL-2.1 | Opens a venue and picks day, time and duration (today: "Online rental details are coming soon.")   | Web           | P5              | Planned |
 | PL-2.2 | Adds friends to the booking                                                                        | Web           | P5              | Planned |
@@ -305,6 +307,8 @@ club, and signs up without losing their place.
 | VI-2.2 | Opens a public event page                                                                                                                                | Web     | P2         | Main   |
 | VI-2.3 | Opens a club's public page                                                                                                                               | Web     | P4         | Main   |
 | VI-2.4 | Reads the rankings                                                                                                                                       | Web     | P2         | Main   |
+| VI-2.5 | Books from a club's offering → signs in and returns to that offering's checkout                                                                          | Web     | SITE-5     | Main   |
+| VI-2.6 | Sees a club's membership as its card ("Your name") and Join leads to the offer                                                                           | Web     | SITE-5     | Main   |
 | VI-3.1 | Opens a public checkout → what happens next is explained                                                                                                 | Web     | P5         | Main   |
 | VI-3.2 | Booking asks them to sign in and returns them to the same place                                                                                          | Web     | P1         | Main   |
 | VI-4.1 | Opens sign-up → a secure account hand-off                                                                                                                | Web     | P2         | Main   |

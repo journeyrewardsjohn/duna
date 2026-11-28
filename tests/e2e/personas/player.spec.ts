@@ -47,6 +47,19 @@ test.describe("PL-1 Find a game", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
   test.fixme("PL-1.4 See results on the map with pins by zoom and satellite close in [P3, C3]", async () => {});
+  test("PL-1.5 Opens a coach's profile and books their next opening", async ({
+    page,
+  }) => {
+    await page.goto("/coaches/theopark");
+    await expectPageReady(page, "Theo Park");
+    await page
+      .getByRole("main")
+      .getByRole("link", { name: /^Book / })
+      .first()
+      .click();
+    await expectPageReady(page, "Private lesson with Theo Park");
+    await expectNoHorizontalOverflow(page);
+  });
 });
 
 test.describe("PL-2 Book a court with friends", () => {
