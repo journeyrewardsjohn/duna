@@ -152,40 +152,7 @@
 }
 
 /* Operator setup and finance stay on the same neutral workspace ground. */
-.hq-shell .money-hero {
-  --money-white: var(--hq-ink);
-  --money-muted: var(--hq-muted);
-  background: var(--hq-surface);
-  border-color: var(--hq-border);
-  box-shadow: none;
-}
-.hq-shell .money-hero > div + div,
-.hq-shell .money-hero__destination > div {
-  border-color: var(--hq-border);
-}
-.hq-shell .money-hero__available > .duna-numeric {
-  font-weight: 500;
-  font-size: clamp(2.5rem, 4vw, 4rem);
-  line-height: 1.1;
-}
-.hq-shell .money-hero__chart > strong,
-.hq-shell .money-hero__release {
-  color: var(--hq-ink);
-}
-.hq-shell .money-hero__chart-line {
-  stroke: var(--hq-ink);
-  stroke-width: 2;
-}
-.hq-shell .money-hero__chart-area {
-  fill: color-mix(in srgb, var(--hq-ink) 10%, transparent);
-}
-.hq-shell .money-hero__available > button,
-.hq-shell .money-hero__destination > a {
-  color: var(--hq-ink);
-  min-height: 48px;
-  font-size: 0.875rem;
-  font-weight: 500;
-}
+
 .hq-shell .settings-center__nav button.active {
   color: var(--hq-ink);
   background: var(--hq-tint);
@@ -1076,25 +1043,7 @@ body[data-zone="operator"]
 body[data-zone="operator"] .hq-shell--focused .settings-readiness p {
   color: var(--hq-muted);
 }
-body[data-zone="operator"] .hq-shell--focused .money-subnav > a {
-  background: var(--hq-surface);
-  color: var(--hq-text);
-  border-color: var(--hq-line);
-  box-shadow: none;
-  border-radius: 12px;
-}
-body[data-zone="operator"] .hq-shell--focused .money-subnav > a.active {
-  background: var(--hq-soft);
-}
-body[data-zone="operator"]
-  .hq-shell--focused
-  .money-subnav
-  > a
-  > svg:first-child {
-  background: var(--hq-soft);
-  color: var(--hq-text);
-  border-color: var(--hq-line);
-}
+
 body[data-zone="operator"] .hq-shell--focused .hq-setup-progress {
   grid-template-columns: 150px minmax(0, 1fr);
   gap: 24px;
@@ -1265,26 +1214,7 @@ body[data-zone="operator"] .hq-shell--focused .hq-page-heading {
 .hq-work-actions a > svg {
   display: none;
 }
-.hq-shell--focused .money-subnav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 0 0 8px;
-  border-bottom: 1px solid var(--hq-line);
-  margin-bottom: 16px;
-}
-body[data-zone="operator"] .hq-shell--focused .money-subnav > a {
-  display: inline-flex;
-  min-height: 48px;
-  padding: 8px 14px;
-  border: 0;
-  border-radius: 8px;
-  box-shadow: none;
-}
-.hq-shell--focused .money-subnav > a strong {
-  font-size: 14px;
-  font-weight: 500;
-}
+
 .hq-shell--focused .people-command-layout {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -1361,35 +1291,4 @@ body[data-zone="operator"] .hq-shell--focused .money-subnav > a {
   .hq-shell--focused .people-command-rail {
     grid-template-columns: minmax(0, 1fr);
   }
-  .hq-shell--focused .money-subnav {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-  }
-  .hq-shell--focused .money-subnav > a {
-    flex-shrink: 0;
-  }
-}
-
-.hq-shell--focused .refund-policy-form > h3 {
-  font-size: 20px;
-  font-weight: 500;
-  margin: 0 0 12px;
-}
-.hq-shell--focused .refund-policy-page .hq-card-heading h2 {
-  max-width: none;
-}
-.hq-shell--focused .refund-policy-page .hq-card-heading > svg {
-  display: none;
-}
-.hq-shell--focused .refund-policy-form > div {
-  grid-template-columns: minmax(0, 1fr) minmax(80px, 110px);
-}
-.hq-shell--focused .refund-policy-form :is(label, input, select, textarea) {
-  min-width: 0;
-}
-.hq-shell--focused
-  .refund-policy-form
-  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
-  width: 100%;
-  box-sizing: border-box;
 }

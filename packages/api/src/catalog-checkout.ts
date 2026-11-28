@@ -100,6 +100,7 @@ import {
   generateBookableSessionOccurrences,
   parseSessionDeliveryConfiguration,
 } from "./session-delivery";
+import { loadBookingAvailability } from "./services/team-availability";
 import {
   MARKETPLACE_TAX_POLICY_VERSION,
   resolveCatalogTaxCode,
@@ -159,6 +160,15 @@ async function resolveAvailableOccurrenceCoaches(input: {
     configuration.coachPersonIds.length > 0
       ? configuration.coachPersonIds
       : staff.map((coach) => coach.personId);
+  // B3a: schedules, blackouts and approved time off from the new tables.
+  const staffAvailability = await loadBookingAvailability({
+    organizationId: input.organizationId,
+    personIds: assignedCoachIds,
+    range: {
+      startsAt: input.now,
+      endsAt: new Date(input.now.getTime() + 731 * 86_400_000),
+    },
+  });
   const occurrences = generateBookableSessionOccurrences({
     configuration,
     coaches: staff
@@ -166,6 +176,7 @@ async function resolveAvailableOccurrenceCoaches(input: {
       .map((coach) => ({
         ...coach,
         email: coach.email ?? undefined,
+        staffAvailability: staffAvailability.get(coach.personId),
         busyRanges: busy
           .filter((range) => range.personId === coach.personId)
           .map((range) => ({
