@@ -7,6 +7,10 @@ const support = (file: string) =>
   );
 
 export default defineConfig({
+  test: {
+    // Never run compiled copies from `tsc -p tsconfig.build.json`.
+    exclude: ["**/node_modules/**", "**/dist/**"],
+  },
   resolve: {
     // Native layout tests render with react-test-renderer against plain host
     // components; React Native's own sources are Flow and do not run in Node.
