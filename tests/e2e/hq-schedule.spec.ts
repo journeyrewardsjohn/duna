@@ -299,7 +299,10 @@ test("an offering's group session opens the one session panel (Offerings')", asy
 }) => {
   // The participation fixtures sit in the week of 8 December 2026.
   await openSchedule(page, "?date=2026-12-09&view=day");
+  // Placed on its own court's lane (PART-B), not on "No court".
+  await expect(page.getByRole("group", { name: "No court" })).toHaveCount(0);
   await page
+    .getByRole("group", { name: /^Court 3/ })
     .getByRole("button", { name: /^Group session: Wednesday small group/ })
     .click();
   const panel = page.getByRole("dialog", { name: "Wednesday small group" });

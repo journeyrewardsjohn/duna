@@ -1,4 +1,4 @@
-import type { OperatorWorkspace } from "@duna/api";
+import { appRouter, type OperatorWorkspace } from "@duna/api";
 import {
   participationDisplay,
   renderParticipationCopy,
@@ -18,6 +18,11 @@ import {
 } from "../participation/session-model";
 import { getHqSession, hasScope } from "../shell/hq-session";
 import type { ShellSession } from "../shell/session-types";
+import {
+  capabilitiesFrom,
+  demoCapabilities,
+  type ScheduleCapabilities,
+} from "./schedule-capabilities";
 import {
   applyDemoStore,
   DEMO_SCHEDULE_COOKIE,
@@ -103,6 +108,16 @@ export interface ScheduleData {
   readonly demo: boolean;
   readonly viewerId?: string;
   readonly permissions: SchedulePermissions;
+  /** Features whose backend has landed (schedule-capabilities.ts). */
+  readonly capabilities: ScheduleCapabilities;
+}
+
+/** Every procedure path the API router serves. */
+function procedurePaths(): string[] {
+  const definition = (
+    appRouter as unknown as { _def?: { procedures?: Record<string, unknown> } }
+  )._def;
+  return Object.keys(definition?.procedures ?? {});
 }
 
 export type ScheduleLoad =
@@ -346,9 +361,25 @@ export function occurrenceItem(
     source: "catalog-occurrence",
     kind: "session",
     title: occurrence.title,
+    ...(occurrence.coach?.displayName
+      ? { who: occurrence.coach.displayName }
+      : {}),
     startsAt: occurrence.startsAt,
     endsAt: occurrence.endsAt,
-    timeZone: occurrence.timezone,
+    timeZone: occurrence.venue?.timeZone ?? occurrence.timezone,
+    // Where and who (PART-B): the session's own court and coach lanes.
+    ...(occurrence.venue
+      ? { placeId: occurrence.venue.id, placeName: occurrence.venue.name }
+      : {}),
+    ...(occurrence.court
+      ? { courtId: occurrence.court.id, courtName: occurrence.court.name }
+      : {}),
+    ...(occurrence.coach
+      ? {
+          coachId: occurrence.coach.id,
+          coachName: occurrence.coach.displayName,
+        }
+      : {}),
     status: occurrence.status,
     ...(cancelled ? { cancelled: true } : {}),
     capacity: occurrence.capacity,
@@ -669,7 +700,8 @@ export const loadSchedule = cache(
         items,
         people,
         sessions,
-        inventory: workspace.inventory
+        // The demo club has no equipment store to reserve from.
+        inventory: (demo ? [] : workspace.inventory)
           .filter(
             (item) =>
               item.purpose !== "sale" &&
@@ -684,6 +716,9 @@ export const loadSchedule = cache(
         demo,
         ...(session.person ? { viewerId: session.person.id } : {}),
         permissions,
+        capabilities: demo
+          ? demoCapabilities
+          : capabilitiesFrom(procedurePaths()),
       },
     };
   },

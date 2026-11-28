@@ -20,6 +20,7 @@ import {
   cancelItemAction,
   equipmentAction,
   markPaidAction,
+  removeBlockAction,
   rosterAction,
 } from "@/app/(next)/(hq)/schedule/actions";
 import {
@@ -49,6 +50,14 @@ export interface PanelPermissions {
   readonly change: boolean;
   readonly checkIn: boolean;
   readonly refund: boolean;
+  /** This item may be moved (role, procedure and capability switch). */
+  readonly move: boolean;
+  /** This item may be cancelled from here (a booking needs its procedure). */
+  readonly cancel: boolean;
+  /** A desk payment can be recorded (capability switch). */
+  readonly deskPayment: boolean;
+  /** A block can be removed (capability switch). */
+  readonly removeBlock: boolean;
 }
 
 /**
@@ -603,7 +612,10 @@ function PanelBody({
             {item.kind === "event" ? "Open the event" : "Open in Offerings"}
           </Button>
         ) : null}
-        {permissions.change && due > 0 && !item.cancelled ? (
+        {permissions.change &&
+        permissions.deskPayment &&
+        due > 0 &&
+        !item.cancelled ? (
           <Button
             onClick={() => {
               void confirm
@@ -627,18 +639,49 @@ function PanelBody({
             Record payment
           </Button>
         ) : null}
-        {permissions.change && item.movable && !item.cancelled && !isOver ? (
+        {permissions.move && !isOver ? (
           <Button onClick={() => setPanel("move")} variant="secondary">
             Move…
           </Button>
         ) : null}
         {permissions.change &&
+        permissions.cancel &&
         item.kind !== "event" &&
         item.kind !== "block" &&
         !item.cancelled &&
         !isOver ? (
           <Button onClick={() => setPanel("cancel")} variant="ghost">
             Cancel…
+          </Button>
+        ) : null}
+        {permissions.change &&
+        permissions.removeBlock &&
+        item.kind === "block" ? (
+          <Button
+            onClick={() => {
+              void confirm
+                .run({
+                  tier: "confirm",
+                  title: `Remove this block from ${item.courtName ?? "the schedule"}?`,
+                  description: `${clockRange(item.startsAt, item.endsAt, zone)} opens again for bookings.`,
+                  verb: "Remove block",
+                  cancelLabel: "Keep block",
+                  agentConfirm: `Removes the block on ${item.courtName ?? "the schedule"} at ${clock(item.startsAt, zone)}`,
+                  perform: ({ idempotencyKey }) =>
+                    act(removeBlockAction({ id: item.id, idempotencyKey })),
+                  success: "Block removed",
+                  report: reportError,
+                })
+                .then((outcome) => {
+                  if (outcome.status === "done") {
+                    onChanged();
+                    onClose();
+                  }
+                });
+            }}
+            variant="ghost"
+          >
+            Remove block…
           </Button>
         ) : null}
       </div>

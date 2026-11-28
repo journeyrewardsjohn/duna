@@ -112,6 +112,20 @@
       max-width: 100%;
     }
 
+    .sch-phone-only,
+    .sch-actions--phone {
+      display: none;
+    }
+
+    .sch-filters-sheet {
+      display: grid;
+      gap: var(--td-space-3);
+    }
+
+    .sch-filters-sheet .td-select {
+      width: 100%;
+    }
+
     .sch-quiet {
       margin: 0;
       color: var(--td-text-3);
@@ -734,6 +748,25 @@
 
       .sch-form__row {
         grid-template-columns: minmax(0, 1fr);
+      }
+
+      /* Today first: the day, then Now and next and the agenda. */
+      .sch-wide-only,
+      .sch-actions--wide,
+      .sch-bar__spacer {
+        display: none;
+      }
+
+      .sch-phone-only {
+        display: inline-flex;
+      }
+
+      .sch-actions--phone {
+        display: block;
+      }
+
+      .sch-conditions {
+        order: 10;
       }
 
       /* On a phone the default view is the agenda with its day strip. */

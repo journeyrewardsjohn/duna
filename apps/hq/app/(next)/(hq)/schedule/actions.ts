@@ -18,6 +18,7 @@ import {
   type ItemKind,
   type ItemSource,
 } from "@/components/schedule/schedule-model";
+import type { ScheduleCapability } from "@/components/schedule/schedule-capabilities";
 import { getHqSession } from "@/components/shell/hq-session";
 import { getServerCaller, getServerContext } from "@/lib/api";
 import { isPermissionDenied } from "@/lib/permission-denied";
@@ -103,6 +104,15 @@ async function run<T>(
 /** A change the API cannot make yet (listed under "Needs API"). */
 class NotAvailableYet extends Error {}
 
+/**
+ * A change whose procedure has not landed (schedule-capabilities.ts). The
+ * screen does not offer it while its switch is off; this answer is for a
+ * stale page. The guard test fails if a switch is on while this remains.
+ */
+function needsApi(capability: ScheduleCapability, message: string): never {
+  throw new NotAvailableYet(message);
+}
+
 const uuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
     ? value
@@ -184,7 +194,8 @@ export async function createItemAction(
       return { id };
     }
     if (input.kind !== "block") {
-      throw new NotAvailableYet(
+      needsApi(
+        "createBooking",
         "Booking a court or a lesson from HQ isn't available yet. Nothing was booked; players can still book in the app.",
       );
     }
@@ -260,7 +271,8 @@ export async function moveItemAction(
       return { id: input.id };
     }
     if (input.source !== "calendar-session") {
-      throw new NotAvailableYet(
+      needsApi(
+        "moveBooking",
         "Moving a court booking from HQ isn't available yet. Nothing was moved.",
       );
     }
@@ -359,7 +371,8 @@ export async function cancelItemAction(
       return { id: input.id };
     }
     if (input.source !== "calendar-session") {
-      throw new NotAvailableYet(
+      needsApi(
+        "cancelBooking",
         "Cancelling a court booking from HQ isn't available yet. Nothing was cancelled.",
       );
     }
@@ -467,7 +480,8 @@ export async function markPaidAction(input: {
       }));
       return { id: input.id };
     }
-    throw new NotAvailableYet(
+    needsApi(
+      "deskPayment",
       "Recording a payment taken at the desk isn't available from HQ yet. Nothing was changed.",
     );
   });
@@ -598,4 +612,25 @@ export async function coachAvailabilityAction(
     }),
   );
   return Object.fromEntries(entries);
+}
+
+/** Removes a block or a closure (the court opens again for bookings). */
+export async function removeBlockAction(input: {
+  readonly id: string;
+  readonly idempotencyKey: string;
+}): Promise<Result<{ id: string }>> {
+  return run("remove-block", async () => {
+    if (await isDemo()) {
+      await updateDemo((store) => ({
+        ...store,
+        created: store.created.filter((entry) => entry.id !== input.id),
+        cancelled: [...new Set([...store.cancelled, input.id])],
+      }));
+      return { id: input.id };
+    }
+    return needsApi(
+      "removeBlock",
+      "Removing a block from HQ isn't available yet. Nothing was changed.",
+    );
+  });
 }

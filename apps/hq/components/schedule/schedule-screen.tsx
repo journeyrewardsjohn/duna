@@ -11,6 +11,10 @@ import {
   errorToast,
   Field,
   FilterChip,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuTrigger,
   Notice,
   OfflineBanner,
   Select,
@@ -48,6 +52,7 @@ import {
   longDate,
   MINUTE_MS,
   namesWords,
+  onDay,
   placeDay,
   plural,
   scheduleHref,
@@ -105,6 +110,7 @@ export function ScheduleScreen({
   const [closure, setClosure] = useState<ClosureDraft | null>(null);
   const [whoOpen, setWhoOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const { permissions, timeZone } = data;
   // Coaches' availability, read once when first needed (see ensureAvailability).
   const [availability, setAvailability] = useState<Readonly<
@@ -255,10 +261,15 @@ export function ScheduleScreen({
         item.coachId === data.viewerId),
     [data.viewerId, permissions.change, permissions.checkIn],
   );
+  const caps = data.capabilities;
   const canMove = useCallback(
     (item: ScheduleItem) =>
-      permissions.change && item.movable && !item.cancelled,
-    [permissions.change],
+      permissions.change &&
+      item.movable &&
+      !item.cancelled &&
+      // Court bookings move only once their procedure exists.
+      (item.kind !== "booking" || caps.moveBooking),
+    [caps.moveBooking, permissions.change],
   );
 
   // Availability is read the first time something needs it.
@@ -296,7 +307,11 @@ export function ScheduleScreen({
       startsAt,
       endsAt: new Date(start + 60 * MINUTE_MS).toISOString(),
       ...(query.court ? { courtId: query.court } : {}),
-      ...(kind ? { kind } : {}),
+      ...(kind
+        ? { kind }
+        : caps.createBooking
+          ? {}
+          : { kind: "block" as const }),
     });
   }
 
@@ -488,8 +503,9 @@ export function ScheduleScreen({
       }));
     }
     const day = days[0]!;
+    const onThisDay = visible.filter((item) => onDay(item, day));
     if (query.by === "coach") {
-      return data.coaches
+      const coachLanes: Lane[] = data.coaches
         .filter(
           (coach) => !effectiveQuery.coach || coach.id === effectiveQuery.coach,
         )
@@ -499,6 +515,22 @@ export function ScheduleScreen({
           day,
           coachId: coach.id,
         }));
+      // A session's own coach who is not on the team list still gets a lane.
+      for (const item of onThisDay) {
+        if (
+          item.coachId &&
+          !coachLanes.some((lane) => lane.id === item.coachId)
+        ) {
+          coachLanes.push({
+            id: item.coachId,
+            label: item.coachName ?? "Coach",
+            day,
+            coachId: item.coachId,
+            readonly: true,
+          });
+        }
+      }
+      return coachLanes;
     }
     const result: Lane[] = courts
       .filter(
@@ -518,7 +550,26 @@ export function ScheduleScreen({
         day,
         courtId: court.id,
       }));
-    if (!effectiveQuery.court && visible.some((item) => !item.courtId)) {
+    // A session on a court this list does not hold (another place's, or one
+    // not set up here yet) still shows on its own court's lane.
+    for (const item of onThisDay) {
+      if (
+        item.courtId &&
+        (!effectiveQuery.court || item.courtId === effectiveQuery.court) &&
+        !result.some((lane) => lane.id === item.courtId)
+      ) {
+        result.push({
+          id: item.courtId,
+          label: item.courtName ?? "Court",
+          sublabel: item.placeName,
+          day,
+          courtId: item.courtId,
+          readonly: true,
+        });
+      }
+    }
+    // Only sessions that name no court at all.
+    if (!effectiveQuery.court && onThisDay.some((item) => !item.courtId)) {
       result.push({
         id: "no-court",
         label: "No court",
@@ -617,12 +668,83 @@ export function ScheduleScreen({
     <EmptyState icon="schedule" title={`Nothing on ${longDate(query.date)}`} />
   );
 
+  const filterControls = (
+    <>
+      {data.places.length > 1 ? (
+        <Select
+          aria-label="Place"
+          onValueChange={(value) =>
+            go({
+              place: value === "all" ? undefined : (value ?? undefined),
+              court: undefined,
+            })
+          }
+          options={[
+            { value: "all", label: "All places" },
+            ...data.places.map((place) => ({
+              value: place.id,
+              label: place.name,
+            })),
+          ]}
+          value={query.place ?? "all"}
+        />
+      ) : null}
+      {courts.length > 1 ? (
+        <Select
+          aria-label="Court"
+          onValueChange={(value) =>
+            go({ court: value === "all" ? undefined : (value ?? undefined) })
+          }
+          options={[
+            { value: "all", label: "All courts" },
+            ...courts.map((court) => ({
+              value: court.id,
+              label: court.name,
+            })),
+          ]}
+          value={query.court ?? "all"}
+        />
+      ) : null}
+      {data.coaches.length > 0 ? (
+        <Select
+          aria-label="Coach"
+          onValueChange={(value) =>
+            go({ coach: value === "all" ? undefined : (value ?? undefined) })
+          }
+          options={[
+            { value: "all", label: "All coaches" },
+            ...data.coaches.map((coach) => ({
+              value: coach.id,
+              label: coach.name,
+            })),
+          ]}
+          value={effectiveQuery.coach ?? "all"}
+        />
+      ) : null}
+      {itemKinds.map((kind) => (
+        <FilterChip
+          key={kind}
+          onPressedChange={() => kindToggle(kind)}
+          pressed={query.kinds.includes(kind)}
+        >
+          {kindFilterLabels[kind]}
+        </FilterChip>
+      ))}
+    </>
+  );
+  const activeFilters =
+    (query.place ? 1 : 0) +
+    (query.court ? 1 : 0) +
+    (query.coach ? 1 : 0) +
+    query.kinds.length;
+
   return (
     <>
       {confirm.dialog}
       <PageHeader
         actions={
           <ScheduleActions
+            canBook={caps.createBooking}
             canChange={permissions.change && !noCourts}
             hasCoaches={data.coaches.length > 0}
             onBlock={() => openCreate("block")}
@@ -672,6 +794,7 @@ export function ScheduleScreen({
             {dateLabel}
           </h2>
           <Button
+            className="sch-wide-only"
             onClick={() => setDateOpen((open) => !open)}
             size="sm"
             variant="ghost"
@@ -706,7 +829,32 @@ export function ScheduleScreen({
             ))}
           </div>
         ) : null}
+        <Button
+          className="sch-phone-only"
+          onClick={() => setFiltersOpen(true)}
+          size="sm"
+          variant="secondary"
+        >
+          {activeFilters > 0 ? `Filters · ${activeFilters}` : "Filters"}
+        </Button>
       </div>
+      <Sheet
+        onOpenChange={(open) => setFiltersOpen(open)}
+        open={filtersOpen}
+        side="bottom"
+      >
+        {filtersOpen ? (
+          <SheetContent title="Filters">
+            <div
+              aria-label="Filters"
+              className="sch-filters-sheet"
+              role="group"
+            >
+              {filterControls}
+            </div>
+          </SheetContent>
+        ) : null}
+      </Sheet>
 
       {dateOpen ? (
         <Field label="Go to date">
@@ -722,70 +870,15 @@ export function ScheduleScreen({
         </Field>
       ) : null}
 
-      <div aria-label="Filters" className="sch-filters" role="group">
-        {data.places.length > 1 ? (
-          <Select
-            aria-label="Place"
-            onValueChange={(value) =>
-              go({
-                place: value === "all" ? undefined : (value ?? undefined),
-                court: undefined,
-              })
-            }
-            options={[
-              { value: "all", label: "All places" },
-              ...data.places.map((place) => ({
-                value: place.id,
-                label: place.name,
-              })),
-            ]}
-            value={query.place ?? "all"}
-          />
-        ) : null}
-        {courts.length > 1 ? (
-          <Select
-            aria-label="Court"
-            onValueChange={(value) =>
-              go({ court: value === "all" ? undefined : (value ?? undefined) })
-            }
-            options={[
-              { value: "all", label: "All courts" },
-              ...courts.map((court) => ({
-                value: court.id,
-                label: court.name,
-              })),
-            ]}
-            value={query.court ?? "all"}
-          />
-        ) : null}
-        {data.coaches.length > 0 ? (
-          <Select
-            aria-label="Coach"
-            onValueChange={(value) =>
-              go({ coach: value === "all" ? undefined : (value ?? undefined) })
-            }
-            options={[
-              { value: "all", label: "All coaches" },
-              ...data.coaches.map((coach) => ({
-                value: coach.id,
-                label: coach.name,
-              })),
-            ]}
-            value={effectiveQuery.coach ?? "all"}
-          />
-        ) : null}
-        {itemKinds.map((kind) => (
-          <FilterChip
-            key={kind}
-            onPressedChange={() => kindToggle(kind)}
-            pressed={query.kinds.includes(kind)}
-          >
-            {kindFilterLabels[kind]}
-          </FilterChip>
-        ))}
+      <div
+        aria-label="Filters"
+        className="sch-filters sch-wide-only"
+        role="group"
+      >
+        {filterControls}
       </div>
 
-      <div className="sch-line">
+      <div className="sch-line sch-conditions">
         {conditions.state === "ready" ? (
           <section
             aria-label={`Conditions for ${longDate(query.date)}`}
@@ -835,6 +928,30 @@ export function ScheduleScreen({
         ) : null}
       </div>
 
+      {query.open && !openItem ? (
+        <Notice tone="info" title="That isn't on the schedule">
+          It may have been cancelled or moved to a day that isn't loaded.
+          Nothing was changed.
+        </Notice>
+      ) : null}
+
+      {coachView ? (
+        <Notice tone="info">
+          This is your day. Choose “All coaches” to see everyone; changes to
+          other people's bookings are for the front desk.
+        </Notice>
+      ) : null}
+
+      {isToday && query.view !== "week" && !noCourts ? (
+        <NowAndNextStrip
+          canCheckIn={canCheckIn}
+          items={visible}
+          nowMs={nowMs}
+          onCheckIn={checkIn}
+          onOpen={onOpen}
+        />
+      ) : null}
+
       {conditions.state === "ready" &&
       conditions.day.alert?.level === "stop" &&
       permissions.change ? (
@@ -859,30 +976,6 @@ export function ScheduleScreen({
         >
           Stop play on the courts affected and tell the people booked.
         </Notice>
-      ) : null}
-
-      {query.open && !openItem ? (
-        <Notice tone="info" title="That isn't on the schedule">
-          It may have been cancelled or moved to a day that isn't loaded.
-          Nothing was changed.
-        </Notice>
-      ) : null}
-
-      {coachView ? (
-        <Notice tone="info">
-          This is your day. Choose “All coaches” to see everyone; changes to
-          other people's bookings are for the front desk.
-        </Notice>
-      ) : null}
-
-      {isToday && query.view !== "week" && !noCourts ? (
-        <NowAndNextStrip
-          canCheckIn={canCheckIn}
-          items={visible}
-          nowMs={nowMs}
-          onCheckIn={checkIn}
-          onOpen={onOpen}
-        />
       ) : null}
 
       {noCourts ? (
@@ -1010,9 +1103,16 @@ export function ScheduleScreen({
           change: permissions.change,
           checkIn: openItem ? canCheckIn(openItem) : false,
           refund: permissions.refund,
+          move: openItem ? canMove(openItem) : false,
+          cancel: openItem
+            ? openItem.kind !== "booking" || caps.cancelBooking
+            : false,
+          deskPayment: caps.deskPayment,
+          removeBlock: caps.removeBlock,
         }}
       />
       <CreateSheet
+        canBook={caps.createBooking}
         coaches={coaches}
         courts={courts.length > 0 ? courts : allCourts}
         draft={createDraft}
@@ -1051,9 +1151,14 @@ export function ScheduleScreen({
   );
 }
 
-/** The header's actions: one primary (New booking), the rest beside it. */
+/**
+ * The header's actions: one primary (New booking, or Block time while
+ * bookings from HQ are switched off), the rest beside it. On a phone they
+ * fold into one "Add or change" menu so today's day comes first.
+ */
 function ScheduleActions({
   canChange,
+  canBook,
   hasCoaches,
   onNew,
   onBlock,
@@ -1061,33 +1166,66 @@ function ScheduleActions({
   onWho,
 }: {
   readonly canChange: boolean;
+  readonly canBook: boolean;
   readonly hasCoaches: boolean;
   readonly onNew: () => void;
   readonly onBlock: () => void;
   readonly onClose: () => void;
   readonly onWho: () => void;
 }) {
+  if (!canChange && !hasCoaches) return null;
   return (
-    <div aria-label="Schedule actions" className="sch-actions" role="group">
-      {canChange ? (
-        <>
-          <Button onClick={onNew} variant="primary">
-            New booking
+    <>
+      <div
+        aria-label="Schedule actions"
+        className="sch-actions sch-actions--wide"
+        role="group"
+      >
+        {canChange ? (
+          <>
+            {canBook ? (
+              <Button onClick={onNew} variant="primary">
+                New booking
+              </Button>
+            ) : null}
+            <Button
+              onClick={onBlock}
+              variant={canBook ? "secondary" : "primary"}
+            >
+              Block time
+            </Button>
+            <Button onClick={onClose} variant="secondary">
+              Close courts
+            </Button>
+          </>
+        ) : null}
+        {hasCoaches ? (
+          <Button onClick={onWho} variant="ghost">
+            Who is free…
           </Button>
-          <Button onClick={onBlock} variant="secondary">
-            Block time
-          </Button>
-          <Button onClick={onClose} variant="secondary">
-            Close courts
-          </Button>
-        </>
-      ) : null}
-      {hasCoaches ? (
-        <Button onClick={onWho} variant="ghost">
-          Who is free…
-        </Button>
-      ) : null}
-    </div>
+        ) : null}
+      </div>
+      <div className="sch-actions--phone">
+        <Menu
+          onAction={(value: unknown) => {
+            if (value === "new") onNew();
+            if (value === "block") onBlock();
+            if (value === "close") onClose();
+            if (value === "who") onWho();
+          }}
+        >
+          <MenuTrigger variant="secondary">Add or change</MenuTrigger>
+          <MenuContent>
+            {canChange && canBook ? (
+              <MenuItem value="new">New booking</MenuItem>
+            ) : null}
+            {canChange ? <MenuItem value="block">Block time</MenuItem> : null}
+            {canChange ? <MenuItem value="close">Close courts</MenuItem> : null}
+            {hasCoaches ? <MenuItem value="who">Who is free…</MenuItem> : null}
+          </MenuContent>
+        </Menu>
+      </div>
+    </>
   );
 }
 

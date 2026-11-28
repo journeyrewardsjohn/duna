@@ -64,7 +64,10 @@ export function CreateSheet({
   items,
   timeZone,
   nowMs,
+  canBook,
 }: {
+  /** Bookings and lessons can be created (capability switch); else blocks only. */
+  readonly canBook: boolean;
   readonly draft: CreateDraft | null;
   readonly onClose: () => void;
   readonly onCreated: () => void;
@@ -97,6 +100,7 @@ export function CreateSheet({
             draft={draft}
             items={items}
             key={`${draft.startsAt}:${draft.courtId ?? ""}:${draft.coachId ?? ""}`}
+            canBook={canBook}
             nowMs={nowMs}
             onCreated={onCreated}
             people={people}
@@ -117,7 +121,9 @@ function CreateForm({
   timeZone,
   nowMs,
   onCreated,
+  canBook,
 }: {
+  readonly canBook: boolean;
   readonly draft: CreateDraft;
   readonly courts: readonly CourtFacts[];
   readonly coaches: readonly CoachFacts[];
@@ -130,7 +136,7 @@ function CreateForm({
   const date = localDateOf(Date.parse(draft.startsAt), timeZone);
   const day = useMemo(() => placeDay(date, timeZone), [date, timeZone]);
   const [kind, setKind] = useState<CreateKind>(
-    draft.kind ?? (draft.coachId ? "lesson" : "booking"),
+    !canBook ? "block" : (draft.kind ?? (draft.coachId ? "lesson" : "booking")),
   );
   const [courtId, setCourtId] = useState(draft.courtId ?? courts[0]?.id ?? "");
   const [coachId, setCoachId] = useState(draft.coachId ?? "");
@@ -272,8 +278,12 @@ function CreateForm({
         onValueChange={(value: unknown) => setKind(value as CreateKind)}
         value={kind}
       >
-        <RadioOption label="Court booking" value="booking" />
-        <RadioOption label="Lesson" value="lesson" />
+        {canBook ? (
+          <>
+            <RadioOption label="Court booking" value="booking" />
+            <RadioOption label="Lesson" value="lesson" />
+          </>
+        ) : null}
         <RadioOption label="Block time" value="block" />
       </RadioGroup>
 

@@ -356,36 +356,47 @@ export function applyDemoStore(
       movable: entry.kind !== "block",
     };
   });
-  return [...items, ...created].map((item) => {
-    const moved = store.moved[item.id];
-    const court = moved?.courtId
-      ? context.courts.find((candidate) => candidate.id === moved.courtId)
-      : undefined;
-    const checks = store.checkIns[item.id] ?? {};
-    const paid = store.paid.includes(item.id);
-    return {
-      ...item,
-      ...(moved ? { startsAt: moved.startsAt, endsAt: moved.endsAt } : {}),
-      ...(court ? { courtId: court.id, courtName: court.name } : {}),
-      ...(store.cancelled.includes(item.id)
-        ? { cancelled: true, status: "cancelled" }
-        : {}),
-      ...(paid ? { paidMinor: item.amountMinor } : {}),
-      people: [
-        ...item.people,
-        ...(store.roster[item.id]?.added ?? []).map((person): ItemPerson => ({
-          ...person,
-          checkedIn: false,
-        })),
-      ]
-        .filter((person) => !store.roster[item.id]?.removed.includes(person.id))
-        .map((person) => ({
-          ...person,
-          ...(person.id in checks ? { checkedIn: checks[person.id]! } : {}),
-          ...(paid && person.payment === "due"
-            ? { payment: "paid" as const }
+  return (
+    [...items, ...created]
+      // A removed block is gone, not shown as cancelled.
+      .filter(
+        (item) => !(item.kind === "block" && store.cancelled.includes(item.id)),
+      )
+      .map((item) => {
+        const moved = store.moved[item.id];
+        const court = moved?.courtId
+          ? context.courts.find((candidate) => candidate.id === moved.courtId)
+          : undefined;
+        const checks = store.checkIns[item.id] ?? {};
+        const paid = store.paid.includes(item.id);
+        return {
+          ...item,
+          ...(moved ? { startsAt: moved.startsAt, endsAt: moved.endsAt } : {}),
+          ...(court ? { courtId: court.id, courtName: court.name } : {}),
+          ...(store.cancelled.includes(item.id)
+            ? { cancelled: true, status: "cancelled" }
             : {}),
-        })),
-    };
-  });
+          ...(paid ? { paidMinor: item.amountMinor } : {}),
+          people: [
+            ...item.people,
+            ...(store.roster[item.id]?.added ?? []).map(
+              (person): ItemPerson => ({
+                ...person,
+                checkedIn: false,
+              }),
+            ),
+          ]
+            .filter(
+              (person) => !store.roster[item.id]?.removed.includes(person.id),
+            )
+            .map((person) => ({
+              ...person,
+              ...(person.id in checks ? { checkedIn: checks[person.id]! } : {}),
+              ...(paid && person.payment === "due"
+                ? { payment: "paid" as const }
+                : {}),
+            })),
+        };
+      })
+  );
 }

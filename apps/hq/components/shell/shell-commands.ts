@@ -139,11 +139,20 @@ const schedule: readonly ShellCommand[] = [
     keywords: ["calendar", "day", "jump", "date"],
   },
   {
+    // Opens the create sheet, which offers only what works here (blocks
+    // until bookings from HQ are switched on: schedule-capabilities.ts).
     value: `go:${hqHref("schedule")}?intent=book`,
-    label: "Book a court",
+    label: "Add to the schedule",
     group: "Schedule",
     icon: "court",
-    keywords: ["booking", "reserve", "walk-in", "rental", "lesson"],
+    keywords: [
+      "book a court",
+      "booking",
+      "reserve",
+      "walk-in",
+      "block",
+      "lesson",
+    ],
   },
   {
     value: `go:${hqHref("schedule")}?intent=who`,
