@@ -22,8 +22,10 @@ import { participationDemo } from "@duna/core/demo/participation";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  adultProcedure,
   organizationProcedure,
   protectedProcedure,
+  publicProcedure,
   rateLimitMiddleware,
   router,
 } from "../auth";
@@ -51,7 +53,42 @@ import {
   participationRunAnywaySchema,
   participationSetDefaultsInputSchema,
   participationSetDefaultsResultSchema,
+  participationCreateInviteInputSchema,
+  participationInviteInputSchema,
+  participationInviteLinkSchema,
+  participationInviteSchema,
+  participationJoinWaitlistInputSchema,
+  participationJoinWaitlistSchema,
+  participationKeepRuleInputSchema,
+  participationKeepRuleSchema,
+  participationLeaveWaitlistInputSchema,
+  participationLeaveWaitlistSchema,
+  participationMergeDivisionsInputSchema,
+  participationMergeDivisionsSchema,
+  participationMergeSessionsInputSchema,
+  participationMergeSessionsSchema,
+  participationRuleToReviewSchema,
+  participationSetPickupRuleInputSchema,
+  participationSetSubjectRuleInputSchema,
 } from "../contracts/participation";
+import {
+  createParticipationInvite,
+  resolveParticipationInvite,
+} from "../services/participation/invites";
+import {
+  mergeParticipationDivisions,
+  mergeParticipationSessions,
+} from "../services/participation/merge";
+import {
+  participationRulesToReview,
+  reviewSubjectParticipationRule,
+  setSubjectParticipationRule,
+} from "../services/participation/subject-rules";
+import { loadSubjectFacts } from "../services/participation/subjects";
+import {
+  joinParticipationWaitlist,
+  leaveParticipationWaitlist,
+} from "../services/participation/waitlist";
 import {
   IdempotencyConflictError,
   IdempotencyInProgressError,
@@ -378,6 +415,123 @@ export const participationOperatorRouter = router({
       );
     }),
 
+  /** Merge a thin session into another of the same offering (strong tier). */
+  mergeSessions: money
+    .use(interventions)
+    .input(participationMergeSessionsInputSchema)
+    .output(participationMergeSessionsSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.mergeSessions;
+      return idempotent({
+        ctx,
+        procedure: "mergeSessions",
+        key: input.idempotencyKey,
+        request: input,
+        execute: () =>
+          mergeParticipationSessions({
+            organizationId: ctx.organizationId,
+            actorPersonId: ctx.actor.personId,
+            fromOccurrenceId: input.fromOccurrenceId,
+            intoOccurrenceId: input.intoOccurrenceId,
+            requestId: ctx.requestId,
+            now: ctx.now,
+          }),
+      });
+    }),
+
+  /** Merge two thin divisions of one event (moves registrations; no money moves). */
+  mergeDivisions: write
+    .use(interventions)
+    .input(participationMergeDivisionsInputSchema)
+    .output(participationMergeDivisionsSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.mergeDivisions;
+      return idempotent({
+        ctx,
+        procedure: "mergeDivisions",
+        key: input.idempotencyKey,
+        request: input,
+        execute: async () => {
+          const facts = await loadSubjectFacts(
+            "division",
+            input.fromDivisionId,
+          );
+          if (!facts || facts.organizationId !== ctx.organizationId) {
+            throw new ParticipationError(
+              "NOT_FOUND",
+              "This division was not found.",
+            );
+          }
+          return mergeParticipationDivisions({
+            actorPersonId: ctx.actor.personId,
+            fromDivisionId: input.fromDivisionId,
+            intoDivisionId: input.intoDivisionId,
+            now: ctx.now,
+          });
+        },
+      });
+    }),
+
+  /** A group rule on an event session, a division or a club pickup. */
+  setSubjectRule: write
+    .use(interventions)
+    .input(participationSetSubjectRuleInputSchema)
+    .output(participationSetDefaultsResultSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.subjectRule;
+      return idempotent({
+        ctx,
+        procedure: "setSubjectRule",
+        key: input.idempotencyKey,
+        request: input,
+        execute: () =>
+          setSubjectParticipationRule({
+            organizationId: ctx.organizationId,
+            actorPersonId: ctx.actor.personId,
+            subjectType: input.subjectType,
+            subjectId: input.subjectId,
+            rules: input.rules,
+            requestId: ctx.requestId,
+            now: ctx.now,
+          }),
+      });
+    }),
+
+  /** "Rules to review": legacy minimums mapped to "run" (decision 7). */
+  rulesToReview: read
+    .output(z.array(participationRuleToReviewSchema))
+    .query(({ ctx }) => {
+      if (usesDemoData()) return participationDemo.rulesToReview;
+      return guarded(async () => [
+        ...(await participationRulesToReview({
+          organizationId: ctx.organizationId,
+          now: ctx.now,
+        })),
+      ]);
+    }),
+
+  /** Keep a reviewed legacy rule as it is ("Turn on cancel" uses setSubjectRule). */
+  keepRule: write
+    .input(participationKeepRuleInputSchema)
+    .output(participationKeepRuleSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.keptRule;
+      return idempotent({
+        ctx,
+        procedure: "keepRule",
+        key: input.idempotencyKey,
+        request: input,
+        execute: () =>
+          reviewSubjectParticipationRule({
+            actor: ctx.actor,
+            organizationId: ctx.organizationId,
+            subjectType: input.subjectType,
+            subjectId: input.subjectId,
+            now: ctx.now,
+          }),
+      });
+    }),
+
   /** Attendance: the assigned coach or staff with `sessions:write`; never a money scope. */
   recordAttendance: read
     .input(participationRecordAttendanceInputSchema)
@@ -410,7 +564,116 @@ export const participationOperatorRouter = router({
     }),
 });
 
+const waitlistWrites = rateLimitMiddleware({
+  id: "participation-waitlist",
+  capacity: 20,
+  refillPerMinute: 10,
+});
+
+export const participationPublicRouter = router({
+  /** The invite landing (`/i/[code]`): no names, no roster. */
+  invite: publicProcedure
+    .use(
+      rateLimitMiddleware({
+        id: "participation-invite",
+        capacity: 60,
+        refillPerMinute: 30,
+      }),
+    )
+    .input(participationInviteInputSchema)
+    .output(participationInviteSchema)
+    .query(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.invite;
+      return guarded(() =>
+        resolveParticipationInvite({ code: input.code, now: ctx.now }),
+      );
+    }),
+});
+
 export const participationPlayerRouter = router({
+  joinWaitlist: protectedProcedure
+    .use(waitlistWrites)
+    .input(participationJoinWaitlistInputSchema)
+    .output(participationJoinWaitlistSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.waitlistJoined;
+      return idempotent({
+        ctx,
+        procedure: "joinWaitlist",
+        key: input.idempotencyKey,
+        request: input,
+        execute: () =>
+          joinParticipationWaitlist({
+            actor: ctx.actor,
+            subjectType: input.subjectType,
+            subjectId: input.subjectId,
+            participantPersonId: input.participantPersonId,
+            quantity: input.quantity,
+            now: ctx.now,
+          }),
+      });
+    }),
+
+  leaveWaitlist: protectedProcedure
+    .use(waitlistWrites)
+    .input(participationLeaveWaitlistInputSchema)
+    .output(participationLeaveWaitlistSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.waitlistLeft;
+      return idempotent({
+        ctx,
+        procedure: "leaveWaitlist",
+        key: input.idempotencyKey,
+        request: input,
+        execute: () =>
+          leaveParticipationWaitlist({
+            actor: ctx.actor,
+            entryId: input.entryId,
+            now: ctx.now,
+          }),
+      });
+    }),
+
+  /** A share link for a session I hold a place in (never a junior account). */
+  createInvite: adultProcedure
+    .input(participationCreateInviteInputSchema)
+    .output(participationInviteLinkSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.inviteLink;
+      return guarded(() =>
+        createParticipationInvite({
+          actor: ctx.actor,
+          subjectType: input.subjectType,
+          subjectId: input.subjectId,
+          now: ctx.now,
+        }),
+      );
+    }),
+
+  /** A player hosting a pickup sets its group rule. */
+  setPickupRule: protectedProcedure
+    .input(participationSetPickupRuleInputSchema)
+    .output(participationSetDefaultsResultSchema)
+    .mutation(({ ctx, input }) => {
+      if (usesDemoData()) return participationDemo.subjectRule;
+      return idempotent({
+        ctx,
+        procedure: "setPickupRule",
+        key: input.idempotencyKey,
+        request: input,
+        execute: () =>
+          setSubjectParticipationRule({
+            hostPersonId: ctx.actor.personId,
+            actorPersonId: ctx.actor.personId,
+            subjectType: "pickup-session",
+            subjectId: input.pickupSessionId,
+            rules: input.rules,
+            requestId: ctx.requestId,
+            now: ctx.now,
+          }),
+      });
+    }),
+
   /**
    * The display model for one session: status, the line under it, the price
    * ladder, what I reserve and the most I can be charged, free / late

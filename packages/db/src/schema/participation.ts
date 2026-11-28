@@ -152,9 +152,9 @@ export const participationDecisions = pgTable(
   "participation_decisions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
     subjectType: varchar("subject_type", { length: 32 }).notNull(),
     /** Polymorphic: the service validates it. */
     subjectId: uuid("subject_id").notNull(),
@@ -189,6 +189,9 @@ export const participationDecisions = pgTable(
     ),
     index("participation_decisions_open_lock_idx")
       .on(table.organizationId, table.lockAt)
+      .where(sql`${table.outcome} IS NULL`),
+    index("participation_decisions_due_idx")
+      .on(table.subjectType, table.lockAt)
       .where(sql`${table.outcome} IS NULL`),
     index("participation_decisions_outcome_idx").on(
       table.organizationId,
@@ -455,9 +458,9 @@ export const participationNotices = pgTable(
   "participation_notices",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
     subjectType: varchar("subject_type", { length: 32 }).notNull(),
     subjectId: uuid("subject_id").notNull(),
     /** The guardian for a junior's booking. */

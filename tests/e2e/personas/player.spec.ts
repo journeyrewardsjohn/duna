@@ -160,3 +160,9 @@ test.describe("PL-7 Connect", () => {
 test.describe("PL-8 Health", () => {
   test.fixme("PL-8.1 See health context around my game, only where data exists [P9]", async () => {});
 });
+
+test.describe("PL-9 Group sessions", () => {
+  test.fixme("PL-9.1 Sees “Needs 2 more · confirms Thu 6:00 PM” on a session and shares the invite link [PART-8, PART-11]", async () => {});
+  test.fixme("PL-9.2 Tries to book the same session twice; sees “You’re already booked” with “Add a player” [PART-8]", async () => {});
+  test.fixme("PL-9.3 Cancels after the lock, acknowledging the final price; gets it back when the place is taken [PART-4, PART-8]", async () => {});
+});

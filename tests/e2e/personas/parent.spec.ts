@@ -75,3 +75,8 @@ test.describe("PA-7 The family's week", () => {
   });
   test.fixme("PA-7.2 Next up includes the junior's sessions, labelled with their name [P1]", async () => {});
 });
+
+test.describe("PA-8 A junior in a group session", () => {
+  test.fixme("PA-8.1 Books a clinic for a child; checkout shows “3 credits now” and the ladder [PART-8]", async () => {});
+  test.fixme("PA-8.2 The clinic is cancelled under its minimum; the guardian is told and the credits are back [PART-5, PART-8]", async () => {});
+});
