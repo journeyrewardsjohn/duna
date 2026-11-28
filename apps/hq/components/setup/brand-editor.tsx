@@ -487,10 +487,10 @@ export function BrandEditor({
             <span className="setup-brand__tile-label">Membership card</span>
             <MembershipCard
               club={club}
-              kind="Club member"
+              kind="member"
               member="Member name"
+              motion="still"
               plan={draft.membershipProgramName || "Membership"}
-              rise={false}
               status="active"
             />
           </Tideline>
