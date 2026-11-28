@@ -1,0 +1,33 @@
+{
+  "name": "@duna/tideline-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure Tideline logic shared by web and React Native: score state, rating ring, day strip, time slots, light, conditions, map pins, club marks, Concierge context, formatting.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./score": "./src/score.ts",
+    "./rating-ring": "./src/rating-ring.ts",
+    "./day-strip": "./src/day-strip.ts",
+    "./time-slots": "./src/time-slots.ts",
+    "./light": "./src/light.ts",
+    "./conditions": "./src/conditions.ts",
+    "./map-pins": "./src/map-pins.ts",
+    "./club-mark": "./src/club-mark.ts",
+    "./concierge": "./src/concierge.ts",
+    "./format": "./src/format.ts",
+    "./zoned-time": "./src/zoned-time.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "4.1.10",
+    "vitest": "^4.1.10"
+  }
+}
