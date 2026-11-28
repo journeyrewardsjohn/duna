@@ -102,7 +102,9 @@ test.describe("Tideline gallery, keyboard", () => {
 
     await trigger.focus();
     await page.keyboard.press("Enter");
-    const list = page.getByRole("listbox");
+    const list = page
+      .getByRole("listbox")
+      .and(page.locator(":not(.td-wstack__list)"));
     await expect(list).toBeVisible();
     await expect(list.getByRole("option")).toHaveCount(5);
 
@@ -136,10 +138,14 @@ test.describe("Tideline gallery, keyboard", () => {
 
     // Escape closes without changing the value.
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("listbox")).toBeVisible();
+    await expect(
+      page.getByRole("listbox").and(page.locator(":not(.td-wstack__list)")),
+    ).toBeVisible();
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("listbox")).toBeHidden();
+    await expect(
+      page.getByRole("listbox").and(page.locator(":not(.td-wstack__list)")),
+    ).toBeHidden();
     await expect(output).toHaveText("Level: Advanced");
     await expect(trigger).toBeFocused();
   });
@@ -152,7 +158,9 @@ test.describe("Tideline gallery, keyboard", () => {
 
     await input.focus();
     await page.keyboard.type("nor");
-    const list = page.getByRole("listbox");
+    const list = page
+      .getByRole("listbox")
+      .and(page.locator(":not(.td-wstack__list)"));
     await expect(list).toBeVisible();
     await expect(list.getByRole("option")).toHaveCount(1);
     await expect(list.getByRole("option")).toHaveText("Court 2, North");
@@ -250,7 +258,9 @@ test.describe("Tideline gallery, keyboard", () => {
   test("Tabs: arrows, Home and End move between tabs", async ({ page }) => {
     const tabs = page.getByRole("tablist", { name: "Matches" });
     const tab = (name: string | RegExp) => tabs.getByRole("tab", { name });
-    const panel = page.getByRole("tabpanel");
+    const panel = page
+      .getByRole("tabpanel")
+      .and(page.locator(":not(.td-walletv__sheet)"));
 
     await expect(tab("Upcoming")).toHaveAttribute("aria-selected", "true");
     await expect(panel).toHaveText("Two matches this week.");

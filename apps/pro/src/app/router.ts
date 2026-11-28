@@ -161,6 +161,23 @@ export const ROUTES = {
     "Organisations, appearance and sign-out",
     { legacy: false, listed: false },
   ),
+  // The session a coach runs (M-R2): opens in whichever tab it came from
+  // (Today, Schedule), beside the day on the open Duo and iPad.
+  session: route(
+    null,
+    "Session",
+    "schedule",
+    "Who is coming, the group's state and what to do",
+    { legacy: false, listed: false },
+  ),
+  // Courtside check-in and attendance (M-R2): whole window, works offline.
+  attendance: route(
+    null,
+    "Attendance",
+    "check",
+    "Check players in at the court, with or without signal",
+    { presentation: "window", legacy: false, listed: false },
+  ),
   tools: route(
     null,
     "Club tools",

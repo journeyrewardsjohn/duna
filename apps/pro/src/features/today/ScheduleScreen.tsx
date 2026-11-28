@@ -25,6 +25,7 @@ import {
 } from "@duna/ui/native";
 import { dayStrip, type StripDay } from "@duna/tideline-core";
 import { useState } from "react";
+import { AtRiskGroup, useOpenSession } from "../session";
 import { useShell } from "../../app/ShellContext";
 import { PreviewNotice, TopBar } from "../../app/TopBar";
 import { ROUTES, type RouteKey } from "../../app/router";
@@ -211,6 +212,7 @@ function Agenda({
 }) {
   const shell = useShell();
   const day = useDay();
+  const openSession = useOpenSession();
   const sessions = model.sessionCount;
   return (
     <View style={styles.block}>
@@ -248,7 +250,7 @@ function Agenda({
               <AgendaRow
                 item={item}
                 key={`${group.key}-${item.id}`}
-                onPress={() => shell.open("calendar", { entryId: item.id })}
+                onPress={() => openSession(item.id)}
                 showCoach={view !== "coach"}
               />
             ))}
@@ -323,6 +325,7 @@ export function SchedulePrimary({
   return (
     <DayScroll testID="schedule-primary" what="Your schedule">
       <ScheduleHead days={days} selected={model.dateKey} />
+      <AtRiskGroup testID="schedule-at-risk" />
       <ViewSwitch onChange={setView} view={view} />
       <LoadingState count={4} loading={loading} skeleton="row">
         <Agenda model={model} view={view} />

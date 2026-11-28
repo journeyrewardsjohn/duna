@@ -17,7 +17,6 @@ import {
   SatoshiText as Text,
   SatoshiTextInput as TextInput,
 } from "../../../satoshi-text";
-import { SessionArrivalBoard } from "../../../session-arrival-board";
 import {
   type ProCalendarEntry,
   type CalendarResourceFilter,
@@ -47,6 +46,7 @@ export function CalendarScreen({
   onCreate,
   onMessageGroup,
   onRecordNotes,
+  onOpenSession,
   onScan,
   onScore,
 }: {
@@ -54,6 +54,7 @@ export function CalendarScreen({
   readonly onCreate: () => void;
   readonly onMessageGroup: (entry: ProCalendarEntry) => void;
   readonly onRecordNotes: (sessionId: string) => void;
+  readonly onOpenSession: (sessionId: string) => void;
   readonly onScan: () => void;
   readonly onScore: (matchId?: string) => void;
 }) {
@@ -71,7 +72,6 @@ export function CalendarScreen({
   const [sheetMode, setSheetMode] = useState<CalendarSheetMode>("session");
   const [busyAction, setBusyAction] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
-  const [cancelReason, setCancelReason] = useState("");
   const [blockResourceType, setBlockResourceType] = useState<"court" | "coach">(
     "court",
   );
@@ -154,26 +154,6 @@ export function CalendarScreen({
     [dayKey, entries, resourceFilter, timezone],
   );
   const selectedEntry = entries.find((entry) => entry.id === selectedId);
-  const connectedPeople = new Set(
-    selectedEntry?.attendees.map((attendee) => attendee.personId) ?? [],
-  );
-  const participantCandidates =
-    workspace?.people.filter(
-      (person) =>
-        person.status === "active" &&
-        person.roles.includes("player") &&
-        !connectedPeople.has(person.personId),
-    ) ?? [];
-  const reservedEquipment = new Set(
-    selectedEntry?.equipment.map((item) => item.inventoryStockItemId) ?? [],
-  );
-  const equipmentCandidates =
-    workspace?.inventory.filter(
-      (item) =>
-        item.purpose !== "sale" &&
-        item.quantityOnHand > item.quantityReserved &&
-        !reservedEquipment.has(item.id),
-    ) ?? [];
   const blockResources =
     blockResourceType === "court"
       ? (workspace?.venues.flatMap((venue) =>
@@ -212,6 +192,8 @@ export function CalendarScreen({
     const entry = entries.find((candidate) => candidate.id === focusEntryId);
     if (!entry) return;
     setSelectedDate(calendarDayAtNoon(new Date(entry.startsAt), 0));
+    // A session's detail is its own screen; the calendar shows its day.
+    if (entry.sourceType === "session") return;
     setSelectedId(entry.id);
     setSheetMode("session");
   }, [entries, focusEntryId]);
@@ -303,7 +285,6 @@ export function CalendarScreen({
     setSelectedId(undefined);
     setSheetMode("session");
     setFeedback(undefined);
-    setCancelReason("");
   };
 
   const perform = async (key: string, action: () => Promise<unknown>) => {
@@ -329,6 +310,12 @@ export function CalendarScreen({
 
   const openEntry = (entry: ProCalendarEntry) => {
     selectionHaptic();
+    // Sessions open the courtside session screen (M-R2); bookings and
+    // blocks keep this sheet.
+    if (entry.sourceType === "session") {
+      onOpenSession(entry.id);
+      return;
+    }
     setSelectedId(entry.id);
     setSheetMode("session");
     setFeedback(undefined);
@@ -1227,406 +1214,18 @@ export function CalendarScreen({
                       )}
                     </View>
 
-                    {selectedEntry.sourceType === "session" ? (
-                      <>
-                        <SessionArrivalBoard
-                          expectedPlayers={selectedEntry.participantCount}
-                          sessionId={selectedEntry.id}
-                          startsAt={selectedEntry.startsAt}
-                          title={selectedEntry.title}
-                          venueName={selectedEntry.venueName}
-                        />
-                        <View style={styles.calendarSheetSectionHeader}>
-                          <View>
-                            <Text style={styles.calendarSheetEyebrow}>
-                              ROSTER
-                            </Text>
-                            <Text style={styles.calendarSheetSectionTitle}>
-                              {selectedEntry.attendees.length} people coming
-                            </Text>
-                          </View>
-                          <Pill tone="positive">
-                            {`${Math.max(
-                              0,
-                              selectedEntry.capacity -
-                                selectedEntry.participantCount,
-                            )} spots`}
-                          </Pill>
-                        </View>
-                        <View style={styles.calendarRoster}>
-                          {selectedEntry.attendees.length === 0 ? (
-                            <Text style={styles.calendarRosterEmpty}>
-                              No confirmed players yet.
-                            </Text>
-                          ) : (
-                            selectedEntry.attendees
-                              .filter(
-                                (
-                                  attendee,
-                                ): attendee is typeof attendee & {
-                                  readonly registrationId: string;
-                                } => Boolean(attendee.registrationId),
-                              )
-                              .map((attendee) => (
-                                <View
-                                  key={attendee.registrationId}
-                                  style={styles.calendarRosterRow}
-                                >
-                                  <View style={styles.calendarRosterAvatar}>
-                                    <Text
-                                      style={styles.calendarRosterAvatarText}
-                                    >
-                                      {personInitials(attendee.displayName)}
-                                    </Text>
-                                  </View>
-                                  <View style={styles.flex}>
-                                    <Text style={styles.calendarRosterName}>
-                                      {attendee.displayName}
-                                    </Text>
-                                    <Text style={styles.calendarRosterMeta}>
-                                      {attendee.status}
-                                      {attendee.isMinor
-                                        ? " · guardian receives updates"
-                                        : ""}
-                                    </Text>
-                                  </View>
-                                  <View style={styles.calendarRosterActions}>
-                                    {attendee.status === "checked-in" ? (
-                                      <Pill tone="positive">Here</Pill>
-                                    ) : ![
-                                        "cancelled",
-                                        "refunded",
-                                        "waitlisted",
-                                      ].includes(attendee.status) ? (
-                                      <Pressable
-                                        disabled={
-                                          busyAction ===
-                                          `check-in:${attendee.registrationId}`
-                                        }
-                                        onPress={() =>
-                                          void perform(
-                                            `check-in:${attendee.registrationId}`,
-                                            () =>
-                                              client!.operator.recordSessionAttendance.mutate(
-                                                {
-                                                  registrationId:
-                                                    attendee.registrationId,
-                                                  status: "attended",
-                                                  note: "Checked in by a coach in Duna Pro.",
-                                                  idempotencyKey:
-                                                    Crypto.randomUUID(),
-                                                },
-                                              ),
-                                          )
-                                        }
-                                        style={styles.calendarCheckInButton}
-                                      >
-                                        <Text
-                                          style={
-                                            styles.calendarCheckInButtonText
-                                          }
-                                        >
-                                          Check in
-                                        </Text>
-                                      </Pressable>
-                                    ) : null}
-                                    <Pressable
-                                      disabled={
-                                        busyAction === attendee.registrationId
-                                      }
-                                      onPress={() =>
-                                        void perform(
-                                          attendee.registrationId,
-                                          () =>
-                                            client!.operator.removeCalendarParticipant.mutate(
-                                              {
-                                                registrationId:
-                                                  attendee.registrationId,
-                                                reason:
-                                                  "Removed from the session by an organization operator in Duna Pro.",
-                                                idempotencyKey:
-                                                  Crypto.randomUUID(),
-                                              },
-                                            ),
-                                        )
-                                      }
-                                      style={styles.calendarRemoveButton}
-                                    >
-                                      <Text
-                                        style={styles.calendarRemoveButtonText}
-                                      >
-                                        Remove
-                                      </Text>
-                                    </Pressable>
-                                  </View>
-                                </View>
-                              ))
-                          )}
-                        </View>
-                        {participantCandidates.length > 0 && (
-                          <>
-                            <Text style={styles.calendarFieldLabel}>
-                              ADD A CONNECTED PLAYER
-                            </Text>
-                            <ScrollView
-                              horizontal
-                              showsHorizontalScrollIndicator={false}
-                            >
-                              <View style={styles.calendarPeopleOptions}>
-                                {participantCandidates
-                                  .slice(0, 12)
-                                  .map((person) => (
-                                    <Pressable
-                                      disabled={busyAction === person.personId}
-                                      key={person.personId}
-                                      onPress={() =>
-                                        void perform(person.personId, () =>
-                                          client!.operator.addCalendarParticipant.mutate(
-                                            {
-                                              sessionId: selectedEntry.id,
-                                              personId: person.personId,
-                                              reason:
-                                                "Added to the session by an organization operator in Duna Pro.",
-                                              idempotencyKey:
-                                                Crypto.randomUUID(),
-                                            },
-                                          ),
-                                        )
-                                      }
-                                      style={styles.calendarPersonOption}
-                                    >
-                                      <View
-                                        style={
-                                          styles.calendarPersonOptionAvatar
-                                        }
-                                      >
-                                        <Text
-                                          style={
-                                            styles.calendarPersonOptionAvatarText
-                                          }
-                                        >
-                                          {personInitials(person.displayName)}
-                                        </Text>
-                                      </View>
-                                      <Text
-                                        numberOfLines={1}
-                                        style={styles.calendarPersonOptionName}
-                                      >
-                                        {person.displayName}
-                                      </Text>
-                                      <Text
-                                        style={styles.calendarPersonOptionAdd}
-                                      >
-                                        ＋ Add
-                                      </Text>
-                                    </Pressable>
-                                  ))}
-                              </View>
-                            </ScrollView>
-                          </>
-                        )}
-
-                        <View style={styles.calendarSheetSectionHeader}>
-                          <View>
-                            <Text style={styles.calendarSheetEyebrow}>
-                              EQUIPMENT
-                            </Text>
-                            <Text style={styles.calendarSheetSectionTitle}>
-                              Reserved for this session
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.calendarRoster}>
-                          {selectedEntry.equipment.length === 0 ? (
-                            <Text style={styles.calendarRosterEmpty}>
-                              No equipment reserved.
-                            </Text>
-                          ) : (
-                            selectedEntry.equipment.map((item) => (
-                              <View
-                                key={item.reservationId}
-                                style={styles.calendarRosterRow}
-                              >
-                                <View style={styles.calendarEquipmentIcon}>
-                                  <Text
-                                    style={styles.calendarEquipmentIconText}
-                                  >
-                                    ◇
-                                  </Text>
-                                </View>
-                                <View style={styles.flex}>
-                                  <Text style={styles.calendarRosterName}>
-                                    {item.label}
-                                  </Text>
-                                  <Text style={styles.calendarRosterMeta}>
-                                    {item.quantity} reserved
-                                  </Text>
-                                </View>
-                                <Pressable
-                                  disabled={busyAction === item.reservationId}
-                                  onPress={() =>
-                                    void perform(item.reservationId, () =>
-                                      client!.operator.removeCalendarEquipment.mutate(
-                                        {
-                                          reservationId: item.reservationId,
-                                          reason:
-                                            "Equipment reservation removed in Duna Pro.",
-                                          idempotencyKey: Crypto.randomUUID(),
-                                        },
-                                      ),
-                                    )
-                                  }
-                                  style={styles.calendarRemoveButton}
-                                >
-                                  <Text style={styles.calendarRemoveButtonText}>
-                                    Remove
-                                  </Text>
-                                </Pressable>
-                              </View>
-                            ))
-                          )}
-                        </View>
-                        {equipmentCandidates.length > 0 && (
-                          <>
-                            <Text style={styles.calendarFieldLabel}>
-                              AVAILABLE EQUIPMENT
-                            </Text>
-                            <ScrollView
-                              horizontal
-                              showsHorizontalScrollIndicator={false}
-                            >
-                              <View style={styles.calendarOptionRow}>
-                                {equipmentCandidates
-                                  .slice(0, 12)
-                                  .map((item) => (
-                                    <Pressable
-                                      disabled={busyAction === item.id}
-                                      key={item.id}
-                                      onPress={() =>
-                                        void perform(item.id, () =>
-                                          client!.operator.addCalendarEquipment.mutate(
-                                            {
-                                              sessionId: selectedEntry.id,
-                                              inventoryStockItemId: item.id,
-                                              quantity: 1,
-                                              reason:
-                                                "Reserved for the session in Duna Pro.",
-                                              idempotencyKey:
-                                                Crypto.randomUUID(),
-                                            },
-                                          ),
-                                        )
-                                      }
-                                      style={styles.calendarEquipmentOption}
-                                    >
-                                      <Text
-                                        style={
-                                          styles.calendarEquipmentOptionTitle
-                                        }
-                                      >
-                                        {item.itemTitle}
-                                      </Text>
-                                      <Text
-                                        style={
-                                          styles.calendarEquipmentOptionMeta
-                                        }
-                                      >
-                                        {item.quantityOnHand -
-                                          item.quantityReserved}{" "}
-                                        available
-                                      </Text>
-                                      <Text
-                                        style={
-                                          styles.calendarEquipmentOptionAction
-                                        }
-                                      >
-                                        ＋ Reserve one
-                                      </Text>
-                                    </Pressable>
-                                  ))}
-                              </View>
-                            </ScrollView>
-                          </>
-                        )}
-
-                        <View style={styles.calendarConnectedUpdate}>
-                          <Text style={styles.calendarConnectedUpdateIcon}>
-                            ◈
-                          </Text>
-                          <View style={styles.flex}>
-                            <Text style={styles.calendarConnectedUpdateTitle}>
-                              Updates are automatic
-                            </Text>
-                            <Text style={styles.calendarConnectedUpdateBody}>
-                              Players and verified guardians receive connected
-                              changes through their allowed notification
-                              channels.
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.calendarDangerZone}>
-                          <Text style={styles.calendarSheetEyebrow}>
-                            CANCEL SESSION
-                          </Text>
-                          <Text style={styles.calendarDangerTitle}>
-                            Release resources and notify everyone
-                          </Text>
-                          <TextInput
-                            multiline
-                            onChangeText={setCancelReason}
-                            placeholder="Weather, coach unavailable, venue closure…"
-                            placeholderTextColor={colors.muted}
-                            style={styles.calendarTextArea}
-                            value={cancelReason}
-                          />
-                          <Pressable
-                            disabled={
-                              busyAction === "cancel" ||
-                              cancelReason.trim().length < 3
-                            }
-                            onPress={() => {
-                              void perform("cancel", () =>
-                                client!.operator.cancelCalendarSession.mutate({
-                                  sessionId: selectedEntry.id,
-                                  reason: cancelReason.trim(),
-                                  confirmed: true,
-                                  idempotencyKey: Crypto.randomUUID(),
-                                }),
-                              ).then((saved) => {
-                                if (saved) closeSheet();
-                              });
-                            }}
-                            style={[
-                              styles.calendarDangerButton,
-                              cancelReason.trim().length < 3 &&
-                                styles.buttonDisabled,
-                            ]}
-                          >
-                            <Text style={styles.calendarDangerButtonText}>
-                              {busyAction === "cancel"
-                                ? "Cancelling…"
-                                : "Cancel and notify"}
-                            </Text>
-                          </Pressable>
-                        </View>
-                      </>
-                    ) : (
-                      <View style={styles.calendarConnectedUpdate}>
-                        <Text style={styles.calendarConnectedUpdateIcon}>
-                          ▧
+                    <View style={styles.calendarConnectedUpdate}>
+                      <Text style={styles.calendarConnectedUpdateIcon}>▧</Text>
+                      <View style={styles.flex}>
+                        <Text style={styles.calendarConnectedUpdateTitle}>
+                          {entryLabel(selectedEntry)}
                         </Text>
-                        <View style={styles.flex}>
-                          <Text style={styles.calendarConnectedUpdateTitle}>
-                            {entryLabel(selectedEntry)}
-                          </Text>
-                          <Text style={styles.calendarConnectedUpdateBody}>
-                            This protected time remains visible beside sessions
-                            so the organization avoids conflicts.
-                          </Text>
-                        </View>
+                        <Text style={styles.calendarConnectedUpdateBody}>
+                          This protected time remains visible beside sessions so
+                          the organization avoids conflicts.
+                        </Text>
                       </View>
-                    )}
+                    </View>
                   </>
                 )
               )}
@@ -1634,22 +1233,6 @@ export function CalendarScreen({
 
             {sheetMode === "session" && selectedEntry && (
               <View style={styles.calendarSheetFooter}>
-                {selectedEntry.sourceType === "session" &&
-                  ["tournament", "league", "pickup"].includes(
-                    selectedEntry.kind ?? "",
-                  ) && (
-                    <Pressable
-                      onPress={() => {
-                        closeSheet();
-                        onScore();
-                      }}
-                      style={styles.calendarSheetSecondary}
-                    >
-                      <Text style={styles.calendarSheetSecondaryText}>
-                        Live score
-                      </Text>
-                    </Pressable>
-                  )}
                 {selectedEntry.attendees.length > 0 && (
                   <Pressable
                     onPress={() => {
