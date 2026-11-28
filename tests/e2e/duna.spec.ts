@@ -283,36 +283,23 @@ test("club and coach marketing keeps both operating paths clear", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Run the whole club. Start for $0.",
+      name: "Run the whole club from one place.",
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", {
-      name: "Run every court like one connected club.",
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", {
-      name: "Your coaching business. In your hand.",
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", {
-      name: "Assistance proposes. Operators decide.",
-    }),
+    page.getByRole("heading", { name: "Open for bookings this week." }),
   ).toBeVisible();
   const plans = page.locator("#plans");
+  for (const name of ["Free", "Club", "Scale"]) {
+    await expect(plans.getByText(name, { exact: true })).toBeVisible();
+  }
+  await expect(plans.getByText("$999", { exact: true })).toHaveCount(0);
   await expect(
-    plans.getByRole("heading", { name: "Duna HQ Free" }),
-  ).toBeVisible();
+    page.getByRole("link", { name: "Talk to us" }).first(),
+  ).toHaveAttribute("href", /^mailto:support@duna\.coach/);
   await expect(
-    plans.getByRole("heading", { name: "Duna HQ Club" }),
-  ).toBeVisible();
-  await expect(
-    plans.getByRole("heading", { name: "Duna HQ Scale" }),
-  ).toBeVisible();
-  await expect(plans.getByText("$999.00", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Player-controlled summaries")).toBeVisible();
+    page.getByRole("link", { name: "Start your club free" }),
+  ).toHaveAttribute("href", /\/sign-up\?returnTo=/);
   await expectNoHorizontalOverflow(page);
 });
 
@@ -436,7 +423,7 @@ test("public rankings and rating evidence stay open and responsive", async ({
   ).toHaveAttribute("href", "/rankings?view=duna&gender=women");
   await expectNoHorizontalOverflow(page);
 
-  await page.goto("/methodology");
+  await page.goto("/sand-rating");
   await expect(
     page.getByRole("heading", {
       name: "Predict first. Learn second. Prove every gain.",
@@ -446,7 +433,7 @@ test("public rankings and rating evidence stay open and responsive", async ({
     page.getByRole("heading", { name: "No look-ahead" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Governed promotion" }),
+    page.getByRole("heading", { name: "A person promotes" }),
   ).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

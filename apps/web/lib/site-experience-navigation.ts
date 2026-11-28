@@ -162,7 +162,7 @@ export const watchNavigation: SiteExperienceNavigation = {
           icon: "rating",
         },
         {
-          href: "/methodology",
+          href: "/sand-rating",
           label: "Rating methodology",
           description: "How the rating system works",
           icon: "score",
@@ -181,7 +181,7 @@ export const watchNavigation: SiteExperienceNavigation = {
     title: "Duna for Apple Watch",
     description:
       "Score without leaving the court and carry every point back to the match timeline.",
-    href: "/apps/apple-watch",
+    href: "/apps#watch",
     action: "Explore the Watch app",
   },
 };

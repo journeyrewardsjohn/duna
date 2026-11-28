@@ -16,10 +16,36 @@ import type {
   PublicWorldRankings,
   VenueSummary,
 } from "@duna/api";
+import {
+  clubPlanCards,
+  dollars,
+  feeFacts,
+  playerPlanCards,
+  processingTerms,
+} from "../components/site/pricing/pricing-data";
 import { clubFeatures } from "./club-features";
 import { absolutePublicUrl } from "./pro-seo";
 
 const markdownContentType = "text/markdown; charset=utf-8";
+
+/** The pricing page's Markdown, from the same plan and fee tables. */
+function pricingSections(): string[] {
+  const processing = processingTerms();
+  return [
+    ...clubPlanCards(() => "/pricing").map(
+      (card) =>
+        `${card.name} (clubs and coaches): ${dollars(card.monthlyMinor)} a month or ${dollars(card.annualMinor)} a year; ${card.feeLine.toLowerCase()}; ${card.inclusions.join("; ")}.`,
+    ),
+    ...playerPlanCards("/pricing", "/pricing").map(
+      (card) =>
+        `${card.name} (players): ${dollars(card.monthlyMinor)} a month or ${dollars(card.annualMinor)} a year; ${card.feeLine.toLowerCase()}.`,
+    ),
+    `Player service fee: ${feeFacts.serviceFee} on card payments for bookings, registrations, memberships and packages, shown with the total before paying; none with Duna Premium.`,
+    `Processing is an estimate the club bears out of the booking price: card ${processing.card}; bank ${processing.bank}.`,
+    "Clubs are paid within 3 business days once a payment has settled and the session has taken place (daily payout schedule).",
+    "The terms that go with these prices are drafts until the owner approves them.",
+  ];
+}
 
 export const publicMarkdownHeaders = {
   "Cache-Control":
@@ -37,10 +63,10 @@ export const staticPublicPages = [
     sections: [
       "Find a game: search by where, when and what at /discover (open games, clinics and training, leagues, tournaments, court time, coaches; beach or indoor).",
       "Keep score with one hand: the scorekeeper in the Duna app tracks the server and every rally, on your phone and your watch.",
-      "Get your Sand Rating: when both sides confirm a result, the rating moves. The method is at /methodology.",
+      "Get your Sand Rating: when both sides confirm a result, the rating moves. How it works is at /sand-rating.",
       "Watch it back with your heart rate: film a match and see your effort laid over the video, point by point.",
       "Played somewhere Duna doesn't know yet? Add the court and your score at /app/score.",
-      "For clubs and coaches: bookings, memberships, programs and drills, payments and Ask Duna in one place, and you approve every change. See /run-your-club and the plans at /run-your-club#plans (prices are drafts until confirmed).",
+      "For clubs and coaches: bookings, memberships, programs and drills, payments and Ask Duna in one place, and you approve every change. See /run-your-club, Duna Pro for coaches at /coaches, and the plans at /pricing (prices are drafts until confirmed).",
       "Two apps: Duna for players and parents, Duna Pro for coaches and club staff.",
     ],
   },
@@ -92,79 +118,67 @@ export const staticPublicPages = [
     ],
   },
   {
-    path: "/apps/apple-watch",
-    title: "Duna for Apple Watch",
+    path: "/apps",
+    title: "The Duna apps",
     description:
-      "Score every rally from your wrist and keep the match connected without taking a phone onto the court.",
+      "Duna for players and parents, Duna Pro for coaches and club staff: scorekeeper, Sand Rating, wallet cards, film and Apple Watch, on iPhone and iPad.",
     sections: [
-      "Start or continue a Duna match from Apple Watch.",
-      "Track rally scores, sets, serving side, and match state courtside.",
-      "Check evidence-first Duna Vision framing on the paired iPhone and sync source-linked score events back to the Duna player record.",
-      "Completed scores and locally saved video can queue safely, then resume when the player’s allowed connection returns.",
+      "Duna (players and parents): find and book games, keep score with one hand, get your Sand Rating, watch matches back with your heart rate, and carry every club card in the app and your phone's wallet.",
+      "Duna Pro (coaches and club staff): the day with the conditions for each court, practice plans and drills, the roster, the scorer, and getting paid.",
+      "Apple Watch: start or continue a match and keep score from the wrist. Swipe up for a point for the top team, down for the bottom team, right to save a favourite moment, left to undo. Finished scores wait safely if the connection drops and send when it returns.",
+      "Layouts follow the window's width: one column on iPhone, list and detail side by side on the foldable when open, a sidebar on iPad. No function lives on only one size.",
+      "App Store links are not published yet.",
     ],
   },
   {
-    path: "/methodology",
-    title: "Sand Rating methodology",
+    path: "/sand-rating",
+    title: "Sand Rating",
     description:
-      "The evidence, walk-forward evaluation, calibration, model comparisons, and design choices behind Duna Sand Rating.",
-    sections: [],
+      "How the Sand Rating works: what moves it, why a result counts only when both sides confirm it, provisional and established ratings, and the evidence behind it.",
+    sections: [
+      "The Sand Rating is a number from 1.00 to 8.00. It moves only on results both sides agree on, and it shows how sure it is.",
+      "A saved match waits for confirmation. It counts when a player on each side confirms it and nobody disputes it, it is a competitive two-on-two match, and every player has a claimed profile.",
+      "What moves it: the result against the pre-match expectation, the score margin, the partner (team strength weights the weaker partner more), how certain the rating already is, repeat opponents counting for less, and a weekly cap on gains (losses are not capped).",
+      "Provisional ratings show a dash instead of a number until enough matches are played. Confidence goes Provisional, Developing, Reliable, Locked.",
+      "Method: Duna replays volleyball history in order; each model publishes its probability before it sees the result and is compared on accuracy, Brier score, log loss and calibration. A person approves any change to the live rating.",
+    ],
   },
   {
     path: "/run-your-club",
-    title: "Duna for clubs and coaches",
+    title: "Run your volleyball club",
     description:
-      "Run an indoor, beach, or combined volleyball organization with every Duna HQ feature for $0 per month.",
+      "Bookings, programs, memberships, payments, staff and your club website in one place, for beach and indoor. Start on Free and move up as you grow.",
     sections: [
-      "Solo coaches can manage a mobile calendar, check-in, private notes, public services, memberships, credit packs, player-network distribution, payments, video, and permissioned player context.",
-      "Club owners can coordinate venues, courts, equipment, multiple coaches, parents, guardians, memberships, programs, inventory, money, marketing, and reporting.",
-      "Duna HQ connects orders, credits, refunds, payouts, people, products, events, leagues, video, court maps, and operating reports without inferring unavailable financial data.",
-      "Training planning covers drill creation from a plain-language description, coach-assembled practice plans, and season programs with drafted phases. See /run-your-club/training for detail.",
-      "Duna Vision is controlled per recording: players can help improve Duna Vision with de-identified setup and geometry signals while full video remains private and reviewed before any training use.",
-      "Players control health-data sharing and visibility. Verified guardians receive appropriately scoped communication for minors.",
-      "Duna AI suggestions remain reviewable. Publishing, sending, refunding, and access changes remain explicit operator actions.",
-      "Duna HQ Free includes every feature, 10 uploaded-video hours, and 2 live hours for $0 per month with a 5% organization transaction fee plus payment processing.",
-      "Duna HQ Club is $199 per month with a 2.5% organization transaction fee and 100 upload / 10 live hours. Duna HQ Scale is $499 per month with no organization transaction fee and 500 upload / 40 live hours.",
-      "Free organizations earn another 10 uploaded-video hours and 2 live hours for each $40 in organization transaction fees collected that month. Paid plans can add recurring video capacity or pay as they go.",
+      "Bookings and programs (live today): courts, clinics, privates, leagues and open games with minimums, waitlists and a confirm time; programs and seasons on the same schedule.",
+      "Memberships and the card (live today): plans and credits, and a card in every member's phone wallet.",
+      "Payments with Duna Pay (live today): cards and bank payments, refunds, every payout listed. Money for a sale is released once the payment has settled and the session has taken place, then paid out within 3 business days on the daily schedule.",
+      "Team and schedule (live today): coaches and staff with roles, schedules and pay.",
+      "Club website (live today): a site that stays in step with your schedule; editing it by asking is in build.",
+      "Concierge (in build): texts, email and chat from one person in one thread.",
+      "Ask Duna (live today): ask a question or ask for a change; Duna shows the before and after, and nothing moves until a person approves it.",
+      "How a club starts today: create the account and name the club, add places, courts and hours, verify identity for Duna Pay, add a first session and publish. Starting from an existing website address, where Duna reads the site and proposes each detail for you to keep, edit or skip, is in build.",
+      "Plans and the fee calculator are at /pricing. Talk to a person: support@duna.coach.",
     ],
   },
   {
-    path: "/run-your-club/training-os",
-    title: "Duna Training OS",
+    path: "/coaches",
+    title: "Duna Pro for coaches",
     description:
-      "Design season-long volleyball programs, build practice plans, animate drills, manage athlete load, and sell programs with Duna Training OS.",
+      "Your coaching day in your pocket: today's sessions with the wind for each court, practice plans drawn on a court, a scorer, and getting paid.",
     sections: [
-      "Program Designer turns dates, practice frequency, tournaments, travel, objectives, roster context, and coaching style into an editable, load-aware training calendar.",
-      "Practice Planner combines timed blocks, focus areas, intensity, estimated touches, jumps, technical work, game-like play, lifting, plyometrics, warmup, and recovery.",
-      "The Drill Library supports private organization drills, shared public drills, and paid marketplace drills with normalized tags and one primary focus area.",
-      "Advanced Drill Studio models player movement, ball contacts, self-passes, sets, attack targets, ordered balls, and multiple phases before Sol creates coaching guidance and animation direction.",
-      "Programs can be sold as one offer covering every included session, with upfront payment or a fixed installment schedule. When configured, checkout clearly shows the pay-over-time total and upfront savings.",
-      "Programs and practice plans preserve the latest five non-financial versions for restore. Commercial and completed-session history remains protected.",
+      "Today: your sessions with the conditions for each court.",
+      "The plan: describe a drill in plain words and Duna drafts it for you to edit; build a session from timed blocks on one court or several; set a season's dates and Duna drafts its phases. Animated drill scenes are in build.",
+      "The scorer: keep score with one hand on your phone or your watch.",
+      "Getting paid: once a payment has settled and the session has taken place, Duna pays you out within 3 business days on the daily schedule.",
+      "Start free with no monthly fee; a fee applies only to what you sell. See /pricing.",
     ],
   },
   {
-    path: "/run-your-club/training",
-    title: "Training: drill, practice, and program planning",
+    path: "/pricing",
+    title: "Pricing",
     description:
-      "Describe a drill in plain language and Duna returns a structured plan you can correct. Build the session around it, then set the season it belongs to.",
-    sections: [
-      "Drill: Describe a drill in plain language and Duna drafts the steps, coaching cues, and scoring. The coach reviews and edits before anything is saved.",
-      "Practice: The coach assembles a timed session from their drills. Blocks can run on parallel courts. Practice plans are built by the coach rather than generated from a prompt.",
-      "Program: Set the date window, weekly recurrence, and the tournaments that matter. Duna drafts the training phases and the load leading to them, and the coach can edit any week before the program is saved. Programs schedule sessions; they do not generate practice content for each session.",
-      "Contact and load figures are planning estimates derived from each drill's pacing assumptions. They are coach planning context, not a measurement of any athlete and not a health prediction.",
-      "The page shows the Drill Studio, Practice Builder, and Program Designer screens from Duna HQ using the sample content the product ships: a First-Ball Sideout Lab drill, the 90-minute Sideout Under Pressure session that contains it across two courts, and the Fall Competition Build program that session belongs to, drawn as an eight-week strip whose phases, weekly load, current week, and Atlantic Coast Open tournament come from the program's own scheduling logic.",
-    ],
-  },
-  {
-    path: "/run-your-club/features",
-    title: "Duna HQ features",
-    description:
-      "The connected operating system for products, people, teams, events, leagues, venues, training, money, marketing, messaging, safety, video, and courtside work.",
-    sections: [
-      "Build the offer with services, memberships, credit packs, goods, equipment, rentals, pricing, fulfillment, and story-first public pages.",
-      "Run the operation with team, people, event, league, venue, and training context connected to the same day.",
-      "Grow with control through traceable money, relationship-aware marketing and messaging, guardian and privacy safeguards, Duna Vision, and Duna Pro courtside tools.",
-    ],
+      "Plans for clubs, coaches and players, and where every dollar of a booking goes. Free to start on both sides of the net.",
+    sections: pricingSections(),
   },
   ...clubFeatures.map((feature) => ({
     path: feature.href,
@@ -1286,7 +1300,8 @@ export function renderAgentsGuide(): string {
 - Public discovery hub: ${internal("/discover")}
 - Professional tour hub: ${internal("/pro")}
 - Player and Sand Rating rankings: ${internal("/rankings")}
-- Sand Rating methodology: ${internal("/methodology")}
+- How the Sand Rating works, and its method: ${internal("/sand-rating")}
+- For clubs: ${internal("/run-your-club")}; for coaches: ${internal("/coaches")}; pricing: ${internal("/pricing")}; the apps: ${internal("/apps")}
 
 ## Markdown page convention
 

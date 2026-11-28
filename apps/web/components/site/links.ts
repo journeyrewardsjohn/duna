@@ -1,9 +1,9 @@
-import { DUNA_HQ_SIGNUP_URL } from "@/lib/site-urls";
+import { DUNA_HQ_SIGNUP_URL, DUNA_HQ_URL } from "@/lib/site-urls";
 
 /**
  * Where the public site's links go today. Pages that later packages build
  * (docs/design/website.md section 8) point at the closest live page until
- * they exist; change the address here when the page ships.
+ * they exist (`/add-score`, SITE-4); change the address here when it ships.
  */
 export const siteLinks = {
   home: "/",
@@ -16,21 +16,31 @@ export const siteLinks = {
    */
   addScore: "/app/score",
   forClubs: "/run-your-club",
-  /** `/coaches` (Duna Pro) is SITE-6; until then the clubs and coaches page. */
-  forCoaches: "/run-your-club",
+  /** Duna Pro for coaches (the index above `/coaches/[handle]` profiles). */
+  forCoaches: "/coaches",
   proTour: "/pro",
-  /** `/pricing` is SITE-7; until then the plans on the clubs page. */
-  pricing: "/run-your-club#plans",
-  /** `/sand-rating` is SITE-9 (absorbs `/methodology`). */
-  sandRating: "/methodology",
+  pricing: "/pricing",
+  /** What the rating is and how it moves (absorbs `/methodology`). */
+  sandRating: "/sand-rating",
+  ratingMethod: "/sand-rating#method",
   rankings: "/rankings",
   events: "/discover",
   about: "/about",
   safety: "/safety",
-  appleWatch: "/apps/apple-watch",
+  apps: "/apps",
+  appleWatch: "/apps#watch",
+  /**
+   * A conversation with a person. There is no sales form backend: the
+   * support address already published in the legal documents.
+   */
+  talkToUs:
+    "mailto:support@duna.coach?subject=" +
+    encodeURIComponent("Running my club on Duna"),
   signIn: "/sign-in",
   signUp: "/sign-up",
   app: "/app",
+  /** Duna Premium is bought from the player's settings (signed in). */
+  premium: "/app/settings#membership",
   startClub: DUNA_HQ_SIGNUP_URL,
 } as const;
 
@@ -43,3 +53,17 @@ export const siteNavigation = [
   { label: "Pro Tour", href: siteLinks.proTour },
   { label: "Pricing", href: siteLinks.pricing },
 ] as const;
+
+/**
+ * Sign-up for a club plan: HQ's sign-up, returning to onboarding with the
+ * plan and billing period chosen here (the same hand-off the old clubs page
+ * used, so onboarding keeps reading it).
+ */
+export function clubSignupHref(
+  planId: string,
+  interval: "month" | "year" = "month",
+  source = "website",
+): string {
+  const returnTo = `/onboarding?plan=${planId}&interval=${interval}&source=${source}`;
+  return `${DUNA_HQ_URL}/sign-up?returnTo=${encodeURIComponent(returnTo)}`;
+}
