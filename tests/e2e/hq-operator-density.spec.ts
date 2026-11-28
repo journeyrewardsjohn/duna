@@ -37,6 +37,26 @@ async function expectContainedPage(page: Page) {
   ).toBeLessThanOrEqual(28);
 }
 
+/**
+ * A rebuilt screen on the HQ shell: no sideways scroll, and exactly one title
+ * in the shell's display role (Jost, at least 22 px, at most the shell's
+ * 32 px; docs/design/hq-shell.md). The 28 px cap above is the legacy pages'.
+ */
+async function expectShellPage(page: Page) {
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+    ),
+  ).toBe(true);
+  const title = page.locator("main h1");
+  await expect(title).toHaveCount(1);
+  const size = await title.evaluate((node) =>
+    parseFloat(getComputedStyle(node).fontSize),
+  );
+  expect(size).toBeGreaterThanOrEqual(22);
+  expect(size).toBeLessThanOrEqual(32);
+}
+
 // Runs under the configured desktop, tablet and mobile projects. These checks
 // cover navigation and local UI state; they do not prove provider transactions.
 test("compact Activities keeps every operational destination and accessible table headers", async ({
@@ -183,7 +203,7 @@ test("compact Money navigation remains usable in dark mode and narrow layouts", 
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(`${base}/money/refund-policies`);
   await expect(refunds).toHaveAttribute("aria-current", "page");
-  await expectContainedPage(page);
+  await expectShellPage(page);
   await page.evaluate(async () => {
     await document.fonts.ready;
     window.scrollTo(0, 0);
