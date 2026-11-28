@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolveLayout } from "../../../../packages/ui/src/native/layout/resolve-layout";
+import { swipeCompletes } from "./edge-swipe";
 import { homeArrangement, shellPlan } from "./layout-plan";
 import {
   INITIAL_TAB,
@@ -52,6 +53,8 @@ describe("route table", () => {
       expect(ROUTES[key].legacy).toBe(false);
     // The wallet was rebuilt by WALLET-2 and draws its own title.
     expect(ROUTES.wallet).toMatchObject({ legacy: false, ownTitle: true });
+    // The profile was rebuilt by M-P5; the person's name is its title.
+    expect(ROUTES.you).toMatchObject({ legacy: false, ownTitle: true });
     const legacy: RouteKey[] = [
       "coaches",
       "plans",
@@ -59,7 +62,6 @@ describe("route table", () => {
       "video",
       "health",
       "training",
-      "you",
       "messages",
       "ai",
       "predictions",
@@ -244,5 +246,33 @@ describe("scoring routes (M-P4a)", () => {
       targetId: "m1",
       nonce: 4,
     });
+  });
+});
+
+describe("no dead ends (owner feedback 28 Nov)", () => {
+  it("every route can be left: Back returns a pushed route to its tab, Close a window to where it came from", () => {
+    for (const key of Object.keys(ROUTES) as RouteKey[]) {
+      const route = ROUTES[key];
+      const opened = run(
+        { type: "select-tab", tab: "connect" },
+        { type: "open", route: key },
+      );
+      const left =
+        route.presentation === "window"
+          ? shellReducer(opened, { type: "close-window" })
+          : shellReducer(opened, { type: "back", tab: route.tab });
+      expect(left.window, key).toBeNull();
+      expect(left.stacks[route.tab], key).toBeNull();
+      if (route.presentation === "window")
+        expect(left.tab, key).toBe("connect");
+    }
+  });
+
+  it("an edge swipe goes back past a third of the width or with a flick", () => {
+    expect(swipeCompletes(140, 0, 390)).toBe(true);
+    expect(swipeCompletes(80, 0, 390)).toBe(false);
+    expect(swipeCompletes(60, 0.9, 390)).toBe(true);
+    expect(swipeCompletes(10, 2, 390)).toBe(false);
+    expect(swipeCompletes(200, 0, 0)).toBe(false);
   });
 });

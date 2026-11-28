@@ -154,11 +154,13 @@ export const ROUTES = {
     "whistle",
     "Programs, practice and coaching notes",
   ),
+  // The profile (M-P5): the person first, then four named sections.
   you: route(
     "improve",
     "Profile",
     "player",
-    "Your details, artwork and privacy",
+    "Your details, clubs and settings",
+    { legacy: false, ownTitle: true },
   ),
   // Connect: Concierge, Ask Duna, wallet and the account.
   messages: route(

@@ -291,11 +291,7 @@ function TrainingCourt() {
   );
 }
 
-export function PlayerTrainingScreen({
-  onBack,
-}: {
-  readonly onBack: () => void;
-}) {
+export function PlayerTrainingScreen() {
   const runtime = usePlayerRuntime();
   const palette = lightPalette;
   const workspace = runtime.training ?? previewTraining();
@@ -364,9 +360,6 @@ export function PlayerTrainingScreen({
           { backgroundColor: palette.canvas },
         ]}
       >
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Text style={{ color: palette.text }}>‹ Plans</Text>
-        </Pressable>
         <Text style={[styles.eyebrow, { color: palette.accent }]}>
           DUNA TRAINING
         </Text>
@@ -391,13 +384,6 @@ export function PlayerTrainingScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.topline}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={onBack}
-            style={styles.backButton}
-          >
-            <Text style={{ color: palette.text }}>‹ Plans</Text>
-          </Pressable>
           <Text style={[styles.eyebrow, { color: palette.accent }]}>
             DUNA TRAINING
           </Text>
@@ -835,12 +821,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     minHeight: 38,
-  },
-  backButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 60,
   },
   eyebrow: { fontSize: 12, fontWeight: "800", letterSpacing: 1.6 },
   phase: { fontSize: 12, fontWeight: "700" },
