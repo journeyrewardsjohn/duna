@@ -659,6 +659,9 @@ importers:
       '@duna/scheduling':
         specifier: workspace:*
         version: link:../scheduling
+      '@duna/tideline-core':
+        specifier: workspace:*
+        version: link:../tideline-core
       '@mendable/firecrawl-js':
         specifier: 4.32.0
         version: 4.32.0
