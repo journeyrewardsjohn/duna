@@ -1,6 +1,6 @@
 import type { SurfaceContract } from "./types";
 
-/** Signed-in Player web (`apps/web/app/app/**` and its components). Owners: P1, P3–P9. */
+/** Signed-in Player web (`apps/web/app/(legacy)/app/**` and its components). Owners: P1, P3–P9. */
 export const web: SurfaceContract = {
   surface: "web",
   owners: "P1, P3, P4, P5, P6, P7, P8, P9",
@@ -8,7 +8,7 @@ export const web: SurfaceContract = {
   checks: [
     {
       kind: "includes",
-      file: "apps/web/app/app/page.tsx",
+      file: "apps/web/app/(legacy)/app/page.tsx",
       values: [
         "futureBookings",
         "nextPersonalEvent",
@@ -29,7 +29,7 @@ export const web: SurfaceContract = {
     },
     {
       kind: "excludes",
-      file: "apps/web/app/app/pickup/[slug]/edit/page.tsx",
+      file: "apps/web/app/(legacy)/app/pickup/[slug]/edit/page.tsx",
       values: ["SiteHeader"],
       message:
         "The pickup editor must not nest the public SiteHeader inside PlayerShell",
@@ -49,6 +49,8 @@ export const web: SurfaceContract = {
     ...[
       "apps/web/app/qa-font-system/page.tsx",
       "apps/web/app/qa-font-system/directory/page.tsx",
+      "apps/web/app/(legacy)/qa-font-system/page.tsx",
+      "apps/web/app/(next)/qa-font-system/page.tsx",
     ].map(
       (path) =>
         ({

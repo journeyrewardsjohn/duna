@@ -9,7 +9,7 @@ import {
   changeDunaPlusAction,
   openDunaPlusPortalAction,
   startDunaPlusAction,
-} from "@/app/app/settings/actions";
+} from "@/app/(legacy)/app/settings/actions";
 
 type Membership = NonNullable<PlayerSettings["membership"]>;
 type Plan = PlayerSettings["dunaPlusPlans"][number];

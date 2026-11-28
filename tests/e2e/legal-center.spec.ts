@@ -72,7 +72,7 @@ test.describe("Legal center", () => {
       terms.getByRole("link", { name: /read the draft/ }),
     ).toHaveAttribute("href", "/legal/terms/draft");
     // Which terms apply to me?
-    await page.getByText("I run a club").click();
+    await main.getByText("I run a club").click();
     await expect(
       main.getByRole("link", { name: "Duna Pay Terms" }).first(),
     ).toBeVisible();
@@ -195,10 +195,10 @@ test.describe("Legal center", () => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto("/legal/cookies");
     await page.keyboard.press("Tab");
-    const skip = page.getByRole("link", { name: "Skip to the document" });
+    const skip = page.getByRole("link", { name: "Skip to content" });
     await expect(skip).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page.locator("#legal-content")).toBeFocused();
+    await expect(page.locator("#main")).toBeFocused();
     const copy = page.getByRole("button", {
       name: "Copy link to “4. What we do not use”",
     });

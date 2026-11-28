@@ -7,7 +7,24 @@ function isProtectedRoute(pathname: string): boolean {
   return pathname === "/app" || pathname.startsWith("/app/");
 }
 
+/**
+ * Public addresses that moved (docs/design/website.md §2.2), each with its
+ * Markdown companion. 301, query string kept.
+ */
+const movedPublicPages: Readonly<Record<string, string>> = {
+  // The player landing page is the home page now.
+  "/players": "/",
+  "/players.md": "/index.md",
+};
+
 async function routeProxy(request: NextRequest): Promise<NextResponse> {
+  const moved = movedPublicPages[request.nextUrl.pathname];
+  if (moved) {
+    const destination = request.nextUrl.clone();
+    destination.pathname = moved;
+    return NextResponse.redirect(destination, 301);
+  }
+
   if (request.nextUrl.pathname.endsWith(".md")) {
     const markdown = request.nextUrl.clone();
     const canonicalPath = request.nextUrl.pathname.slice(0, -".md".length);

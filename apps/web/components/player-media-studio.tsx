@@ -14,7 +14,7 @@ import {
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { createPlayerMediaWorkflowAction } from "@/app/app/settings/actions";
+import { createPlayerMediaWorkflowAction } from "@/app/(legacy)/app/settings/actions";
 import {
   playerMediaPath,
   validatePlayerMediaInput,

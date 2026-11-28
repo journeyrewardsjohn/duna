@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { claimOrganizationInvitationAction } from "@/app/join/organization/[inviteToken]/actions";
+import { claimOrganizationInvitationAction } from "@/app/(legacy)/join/organization/[inviteToken]/actions";
 
 export function OrganizationInvitationPanel({
   invitation,
