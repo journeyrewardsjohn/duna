@@ -29,7 +29,6 @@ import {
 } from "./navigation";
 import { EventsTable } from "./events-table";
 import { EventHistoryWorkspace } from "./event-history-workspace";
-import { PeopleWorkspace } from "./people-workspace";
 import { SessionDraftManager } from "./session-draft-manager";
 import { TicketApprovalQueue } from "./ticket-approval-queue";
 import { DunaAiWorkspace } from "./duna-ai-workspace";
@@ -762,16 +761,14 @@ export function ModulePanel({
           ? { href: "/events/create?type=league", label: "Create league" }
           : module === "places"
             ? { href: hqRoutes.placeCreate, label: "Add venue" }
-            : module === "people"
-              ? { href: hqRoutes.memberInvite, label: "Invite person" }
-              : module === "marketing"
-                ? {
-                    href: hqRoutes.marketingCreate,
-                    label: "Create campaign",
-                  }
-                : module === "money"
-                  ? { href: hqRoutes.moneySetup, label: "Configure money" }
-                  : undefined;
+            : module === "marketing"
+              ? {
+                  href: hqRoutes.marketingCreate,
+                  label: "Create campaign",
+                }
+              : module === "money"
+                ? { href: hqRoutes.moneySetup, label: "Configure money" }
+                : undefined;
   // Until H9 turns them into in-page filters, the old sidebar children are a
   // row of type links inside the Events list.
   const typeLinks =
@@ -826,8 +823,6 @@ export function ModulePanel({
 
       {module === "places" ? (
         <VenuePortfolioPanel workspace={workspace} />
-      ) : module === "people" ? (
-        <PeopleWorkspace workspace={workspace} />
       ) : module === "events" ? (
         <EventsTable
           dashboard={dashboard}

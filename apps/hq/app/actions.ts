@@ -388,73 +388,6 @@ export async function updateOrganizationProfileAction(
   }
 }
 
-export async function issueOrganizationCreditsAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    const created = await caller.operator.issueOrganizationCredits({
-      personId: field(formData, "personId"),
-      credits: numberField(formData, "credits"),
-      expiresAt: optionalField(formData, "expiresAt")
-        ? new Date(field(formData, "expiresAt")).toISOString()
-        : undefined,
-      reason: field(formData, "reason"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      "Organization credits posted as a balanced ledger entry.",
-      undefined,
-      created.id,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function refundOrganizationOrderAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const disposition = field(formData, "disposition");
-    if (
-      disposition !== "original-payment" &&
-      disposition !== "organization-credit"
-    ) {
-      throw new Error("Choose the original payment or organization credits.");
-    }
-    const caller = await getServerCaller();
-    const created = await caller.operator.refundOrganizationOrder({
-      orderId: field(formData, "orderId"),
-      amountMinor: moneyMinor(formData, "amount"),
-      disposition,
-      credits:
-        disposition === "organization-credit"
-          ? numberField(formData, "credits")
-          : undefined,
-      reason: field(formData, "reason"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      disposition === "organization-credit"
-        ? "Refund recorded and organization credits issued."
-        : "Refund submitted and the reversal journal posted.",
-      undefined,
-      created.id,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
 export async function createSessionNoteAction(
   _previous: OperatorActionState,
   formData: FormData,
@@ -584,34 +517,6 @@ export async function recordActivityAttendanceAction(
     return result(
       "success",
       `Attendance marked ${status.replaceAll("-", " ")}.`,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
-
-export async function updateMemberProfileAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    await caller.operator.updateMemberProfile({
-      personId: field(formData, "personId"),
-      displayName: field(formData, "displayName"),
-      email: optionalField(formData, "email"),
-      phoneE164: optionalField(formData, "phoneE164"),
-      homeMarket: optionalField(formData, "homeMarket"),
-      experienceSummary: optionalField(formData, "experienceSummary"),
-      reason:
-        field(formData, "reason") ||
-        "Updated with the customer by an operator.",
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      "Profile details updated and added to the audit trail.",
     );
   } catch (error) {
     return errorState(error);
@@ -1109,39 +1014,6 @@ type CreateEventDraftPayload = Parameters<
 type UpdateEventDraftPayload = Parameters<
   ServerCaller["operator"]["updateEventDraft"]
 >[0];
-
-export async function createPlayerInvitationAction(
-  _previous: OperatorActionState,
-  formData: FormData,
-): Promise<OperatorActionState> {
-  try {
-    const caller = await getServerCaller();
-    const created = await caller.operator.createPlayerInvitation({
-      invitedName: field(formData, "invitedName"),
-      invitedEmail: optionalField(formData, "invitedEmail"),
-      invitedPhoneE164: optionalField(formData, "invitedPhoneE164"),
-      relationship:
-        field(formData, "relationship") === "member" ? "member" : "player",
-      isMinor: field(formData, "isMinor") === "true",
-      guardianName: optionalField(formData, "guardianName"),
-      guardianEmail: optionalField(formData, "guardianEmail"),
-      guardianPhoneE164: optionalField(formData, "guardianPhoneE164"),
-      confirmed: confirmed(formData),
-      idempotencyKey: crypto.randomUUID(),
-    });
-    revalidateOperator();
-    return result(
-      "success",
-      created.status === "sent"
-        ? "Invitation sent by SMS."
-        : "Invitation created. SMS will send after Sent.dm has a non-empty API key and approved template.",
-      undefined,
-      created.id,
-    );
-  } catch (error) {
-    return errorState(error);
-  }
-}
 
 export async function grantOrganizationAccessAction(
   _previous: OperatorActionState,

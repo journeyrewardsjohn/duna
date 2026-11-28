@@ -568,3 +568,59 @@ test.describe("CO-15 Group sessions that fill up", () => {
   });
   test.fixme("CO-15.5 Asks Duna to make every clinic need 4 players; a proposal card shows before, after and affected sessions [PART-6]", async () => {});
 });
+
+test.describe("CO-16 Look after the club's people", () => {
+  test("CO-16.1 Find a member by name or phone and see what needs attention", async ({
+    page,
+  }) => {
+    await openHqArea(page, "People");
+    await page.getByRole("searchbox", { name: "Search people" }).fill("0122");
+    const list = page.getByRole("list", { name: "People" });
+    await expect(
+      list.getByRole("link", { name: "Jordan Smith" }),
+    ).toBeVisible();
+    await expect(list).toContainText("Payment failed");
+    await page.getByRole("searchbox", { name: "Search people" }).fill("");
+    await page.getByRole("button", { name: /^Needs attention, \d+$/ }).click();
+    await expect(page).toHaveURL(/segment=attention/);
+    await expect(list.getByRole("link", { name: "Maya Chen" })).toHaveCount(0);
+  });
+
+  test("CO-16.2 A junior's page says who the guardian is and shows no contact for the child", async ({
+    page,
+  }) => {
+    await page.goto(hq("/people?segment=juniors"));
+    await page
+      .getByRole("list", { name: "People" })
+      .getByRole("link", { name: "Ava Patel" })
+      .click();
+    await expect(page).toHaveURL(/\/people\/[0-9a-f-]+$/);
+    await expectPageReady(page, "Ava Patel");
+    await expect(page.getByText(/^Junior\./).first()).toBeVisible();
+    await expect(page.getByRole("main")).not.toContainText("@example.com");
+    await page
+      .getByRole("navigation", { name: "Ava Patel" })
+      .getByRole("link", { name: "Family" })
+      .click();
+    await expect(page.getByText(/never contacts Ava directly/)).toBeVisible();
+  });
+
+  test("CO-16.3 Give a member credits through a strong confirmation that restates them", async ({
+    page,
+  }) => {
+    await page.goto(
+      hq("/people/10000000-0000-4000-8000-000000000201/memberships"),
+    );
+    await expectPageReady(page, "Maya Chen");
+    const form = page.getByRole("form", { name: "Give credits" });
+    await form.getByRole("spinbutton", { name: "Credits" }).fill("2");
+    await form.getByRole("textbox", { name: "Why" }).fill("Rained-out clinic");
+    await form.getByRole("button", { name: "Review credits" }).click();
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText("Give Maya Chen 2 credits?");
+    await expect(dialog).toContainText("2 credits");
+    await expect(dialog).toContainText("Maya Chen");
+    await dialog.getByRole("button", { name: "Don't give credits" }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+});

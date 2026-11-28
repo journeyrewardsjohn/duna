@@ -56,22 +56,24 @@ test("HQ page tasks retain context and secondary navigation stays reachable", as
   page,
 }) => {
   const { writes } = await installAskDunaFixture(page);
-  await page.goto(`${hqBaseUrl}/people`);
+  await page.goto(`${hqBaseUrl}/marketing`);
   await page.getByText("Ask Duna about this page", { exact: true }).click();
-  const prompt = page.getByRole("textbox", { name: "Ask Duna about people" });
+  const prompt = page.getByRole("textbox", {
+    name: "Ask Duna about marketing",
+  });
   await prompt.fill("Find the people who need a follow-up.");
   await prompt.press("Enter");
   await expect(
     page.getByRole("button", { name: "Approve change" }),
   ).toBeVisible();
-  await expect(page).toHaveURL(`${hqBaseUrl}/people`);
+  await expect(page).toHaveURL(`${hqBaseUrl}/marketing`);
   expect(
     writes.find((row) => row.path === "conversations")?.body,
   ).toMatchObject({
-    page: "/people",
+    page: "/marketing",
     title: "Find the people who need a follow-up.",
   });
-  await page.goto(`${hqBaseUrl}/people`);
+  await page.goto(`${hqBaseUrl}/marketing`);
   // The IA has no "More tools": every area is in the sidebar and Settings is
   // at its foot. The phone keeps a More drawer for the rest.
   const sidebar = page.locator(".hq-sidebar");

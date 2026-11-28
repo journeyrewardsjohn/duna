@@ -33,7 +33,6 @@ import {
   Smartphone,
   UserRoundCheck,
   UserRoundX,
-  UserPlus,
   Users,
   UsersRound,
   UploadCloud,
@@ -55,7 +54,6 @@ import {
   createCourtAction,
   createMarketingCampaignAction,
   createMarketingFlowAction,
-  createPlayerInvitationAction,
   createProgramSessionAction,
   createRatePlanAction,
   createVenueAction,
@@ -77,11 +75,7 @@ import {
   optimizeImageUpload,
 } from "@/lib/media-storage";
 import type { OperatorPanel } from "./navigation";
-import {
-  CommerceSettingsControls,
-  PeopleRefundControls,
-  PeopleWalletControls,
-} from "./commerce-controls";
+import { CommerceSettingsControls } from "./commerce-controls";
 import { SessionDraftManager } from "./session-draft-manager";
 
 const initialOperatorActionState: OperatorActionState = {
@@ -377,160 +371,6 @@ function MoneyInput({
       </span>
       {hint && <small className="operator-money-input__hint">{hint}</small>}
     </label>
-  );
-}
-
-function PlayerInvitationComposer({
-  workspace,
-}: {
-  readonly workspace: OperatorWorkspace;
-}) {
-  const [isMinor, setIsMinor] = useState(false);
-  const [state, action, pending] = useActionState(
-    createPlayerInvitationAction,
-    initialOperatorActionState,
-  );
-  return (
-    <div className="operator-controls-grid operator-people-controls">
-      <section className="hq-card operator-control-card">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">People · invite</span>
-            <h2>Add a player without creating an identity for them.</h2>
-            <p>
-              Adults claim their own profile. Minors are routed to a parent or
-              guardian and remain private while the relationship is reviewed.
-            </p>
-          </div>
-          <UserPlus aria-hidden size={24} />
-        </header>
-        <form action={action} className="operator-form">
-          <div className="operator-form-grid operator-form-grid--two">
-            <label>
-              <span>Player name</span>
-              <input name="invitedName" required />
-            </label>
-            <label>
-              <span>Relationship</span>
-              <select name="relationship" defaultValue="player">
-                <option value="player">Player</option>
-                <option value="member">Member</option>
-              </select>
-            </label>
-            {!isMinor && (
-              <>
-                <label>
-                  <span>Player email</span>
-                  <input name="invitedEmail" type="email" />
-                </label>
-                <label>
-                  <span>Player mobile · E.164</span>
-                  <input
-                    name="invitedPhoneE164"
-                    inputMode="tel"
-                    placeholder="+17045550123"
-                  />
-                </label>
-              </>
-            )}
-          </div>
-          <label className="operator-switch">
-            <input
-              type="checkbox"
-              name="isMinor"
-              value="true"
-              checked={isMinor}
-              onChange={(event) => setIsMinor(event.target.checked)}
-            />
-            <span>
-              <strong>This player is a minor</strong>
-              Send the invitation to a parent or guardian and create the child
-              profile only after acceptance.
-            </span>
-          </label>
-          {isMinor && (
-            <fieldset className="operator-guardian-fields">
-              <legend>Parent or guardian</legend>
-              <div className="operator-form-grid operator-form-grid--two">
-                <label>
-                  <span>Name</span>
-                  <input name="guardianName" required />
-                </label>
-                <label>
-                  <span>Email</span>
-                  <input name="guardianEmail" type="email" />
-                </label>
-                <label className="operator-field--wide">
-                  <span>Mobile · E.164</span>
-                  <input
-                    name="guardianPhoneE164"
-                    inputMode="tel"
-                    placeholder="+17045550123"
-                  />
-                </label>
-              </div>
-            </fieldset>
-          )}
-          <label className="operator-confirmation">
-            <input type="checkbox" name="confirmed" value="true" required />
-            <span>
-              <strong>I checked this recipient.</strong>
-              SMS is transactional. A minor’s guardian must accept before the
-              player joins the roster.
-            </span>
-          </label>
-          <div className="operator-form-footer">
-            <ActionNotice state={state} />
-            <SubmitButton pending={pending}>Create invitation</SubmitButton>
-          </div>
-        </form>
-      </section>
-      <section className="hq-card operator-control-card operator-invite-status">
-        <header className="hq-card-heading">
-          <div>
-            <span className="hq-eyebrow">Invitation rail</span>
-            <h2>{workspace.invitations.length} recent invitations</h2>
-            <p>
-              SMS uses Sent.dm. Email delivery remains a configuration gate.
-            </p>
-          </div>
-          <Badge tone={workspace.deliveryProviders.sms ? "live" : "warning"}>
-            SMS {workspace.deliveryProviders.sms ? "ready" : "needs key"}
-          </Badge>
-        </header>
-        <div className="operator-compact-list">
-          {workspace.invitations.map((invitation) => (
-            <article key={invitation.id}>
-              <span>
-                <strong>{invitation.invitedName}</strong>
-                <small>
-                  {invitation.isMinor ? "Minor · guardian routed" : "Adult"} ·{" "}
-                  {invitation.deliveryChannel ?? "link"} ·{" "}
-                  {invitation.deliveryStatus}
-                </small>
-              </span>
-              <Badge
-                tone={
-                  invitation.status === "claimed"
-                    ? "live"
-                    : invitation.status === "pending"
-                      ? "warning"
-                      : "neutral"
-                }
-              >
-                {invitation.status}
-              </Badge>
-            </article>
-          ))}
-          {workspace.invitations.length === 0 && (
-            <div className="hq-empty">
-              <strong>No invitations yet.</strong>
-              <span>The first player invitation will appear here.</span>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -3168,17 +3008,6 @@ export function OperatorControls({
         <MarketingFlowComposer workspace={workspace} />
         <MarketingCampaignComposer />
         <MessageComposer workspace={workspace} />
-      </div>
-    );
-  }
-  if (module === "people") {
-    return (
-      <div className="commerce-controls">
-        <div className="operator-controls-grid">
-          <PeopleWalletControls workspace={workspace} />
-          <PeopleRefundControls workspace={workspace} />
-        </div>
-        <PlayerInvitationComposer workspace={workspace} />
       </div>
     );
   }

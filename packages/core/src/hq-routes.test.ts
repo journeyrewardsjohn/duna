@@ -124,7 +124,7 @@ describe("HQ route map", () => {
     expect(hqHref("ask")).toBe("/ask");
     expect(hqHref("ask", { conversation: "abc" })).toBe("/ask/abc");
     expect(hqHref("schedule")).toBe("/schedule");
-    expect(hqModuleHref("people")).toBe("/people");
+    expect(hqModuleHref("events")).toBe("/events");
     expect(hqHref("place", { venueId: "v1" })).toBe("/setup/places/v1");
     expect(() =>
       hqHref("member", { personId: "" } as { personId: string }),

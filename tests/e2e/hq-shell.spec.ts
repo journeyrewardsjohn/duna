@@ -176,9 +176,9 @@ test("a page not rebuilt yet opens from the new shell, and Today opens from it",
   await openToday(page);
   await page
     .getByRole("navigation", { name: "Duna HQ" })
-    .getByRole("link", { name: "People" })
+    .getByRole("link", { name: "Marketing" })
     .click();
-  await expect(page).toHaveURL(hq("/people"));
+  await expect(page).toHaveURL(hq("/marketing"));
   await expect(page.locator(".hqs")).toHaveCount(0);
   await page
     .getByRole("navigation", { name: "Operator modules" })

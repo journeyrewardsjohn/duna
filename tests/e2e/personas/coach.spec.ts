@@ -213,3 +213,22 @@ test.describe("CH-9 Group sessions that need players", () => {
     ).toHaveAttribute("href", /\/inbox\?compose=new/);
   });
 });
+
+test.describe("CH-10 The people I coach", () => {
+  test("CH-10.1 Open a player's page without payments; health only where the player shared it", async ({
+    page,
+  }) => {
+    await page.goto(hq("/people"));
+    await expectPageReady(page, "People");
+    await page
+      .getByRole("list", { name: "People" })
+      .getByRole("link", { name: "Maya Chen" })
+      .click();
+    await expectPageReady(page, "Maya Chen");
+    const tabs = page.getByRole("navigation", { name: "Maya Chen" });
+    await expect(tabs.getByRole("link", { name: "Bookings" })).toBeVisible();
+    await expect(tabs.getByRole("link", { name: "Payments" })).toHaveCount(0);
+    // Maya shared a health summary with the club, which reaches coaches.
+    await expect(tabs.getByRole("link", { name: "Health" })).toBeVisible();
+  });
+});

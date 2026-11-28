@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { getHqSession, hasScope } from "./hq-session";
 import { PageHeader } from "./page-header";
 import { parseSidebarMode, SIDEBAR_STORAGE_KEY } from "./nav-state";
+import { peopleCapabilitiesNow } from "../people/people-data";
 import { ShellFrame } from "./shell-frame";
 import type { ShellSession } from "./session-types";
 
@@ -84,8 +85,20 @@ export async function RequireScope({
 export async function HqShell({ children }: { readonly children: ReactNode }) {
   const [session, jar] = await Promise.all([getHqSession(), cookies()]);
   const sidebar = parseSidebarMode(jar.get(SIDEBAR_STORAGE_KEY)?.value);
+  // People's import and merge appear in the palette only when their
+  // procedures exist and this person may change people.
+  const switched = peopleCapabilitiesNow();
+  const canChangePeople =
+    session.access === "operator" && hasScope(session, "members:write");
   return (
-    <ShellFrame session={session} sidebar={sidebar}>
+    <ShellFrame
+      peopleCommands={{
+        import: canChangePeople && switched.import,
+        merge: canChangePeople && switched.merge,
+      }}
+      session={session}
+      sidebar={sidebar}
+    >
       {session.access === "operator" ? (
         children
       ) : (

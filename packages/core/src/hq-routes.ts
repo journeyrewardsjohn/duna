@@ -22,10 +22,21 @@ export const hqRoutes = {
   /** Schedule (H-SCHEDULE): the club calendar, its filters in the query string. */
   schedule: "/schedule",
 
-  // People and play. People, Events, Marketing and Reports lists are served
-  // by the generic module page; see hqModuleHref.
+  // People and play. Events, Marketing and Reports
+  // lists are served by the generic module page; see hqModuleHref.
+  /** People (H-PEOPLE): the list, adding, importing, merging, each person. */
+  people: "/people",
+  /** Add a person (the old "Invite a person" address). */
   memberInvite: "/people/invite",
+  peopleImport: "/people/import",
+  peopleMerge: "/people/merge",
   member: "/people/[personId]",
+  memberMemberships: "/people/[personId]/memberships",
+  memberBookings: "/people/[personId]/bookings",
+  memberPayments: "/people/[personId]/payments",
+  memberFamily: "/people/[personId]/family",
+  memberDocuments: "/people/[personId]/documents",
+  memberNotes: "/people/[personId]/notes",
   memberHealth: "/people/[personId]/health",
   /** Team (H-TEAM): the roster, coverage, pay, and each member as an object. */
   team: "/team",
@@ -164,7 +175,6 @@ export function isHqDevOnlyRoute(path: string): boolean {
 export const hqOperatorModuleSlugs = [
   "events",
   "marketing",
-  "people",
   "reports",
 ] as const;
 

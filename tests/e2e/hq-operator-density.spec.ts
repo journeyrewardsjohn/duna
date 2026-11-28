@@ -134,51 +134,6 @@ test("compact Activities keeps every operational destination and accessible tabl
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("compact People retains search, family filters and keyboard profile access", async ({
-  page,
-}, info) => {
-  await page.goto(`${base}/people`);
-  await clearAssistant(page);
-  const table = page.getByRole("table", {
-    name: "People directory",
-    exact: true,
-  });
-  await expect(table).toBeVisible();
-  await expect(table.getByRole("columnheader")).toHaveCount(6);
-  const search = page.getByRole("searchbox", {
-    name: "Search people",
-    exact: true,
-  });
-  await search.fill("no-person-matches-this-qa-query");
-  await expect(table.getByRole("rowheader")).toHaveCount(0);
-  await search.clear();
-  for (const name of ["Junior players", "Parents & guardians", "Everyone"]) {
-    const filter = page.getByRole("button", { name, exact: true });
-    await filter.click();
-    await expect(filter).toHaveAttribute("aria-pressed", "true");
-  }
-  const region = page.getByRole("region", {
-    name: "People directory",
-    exact: true,
-  });
-  await region.focus();
-  await expect(region).toBeFocused();
-  await expectContainedPage(page);
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    window.scrollTo(0, 0);
-  });
-  await page.screenshot({
-    path: info.outputPath("people-compact.png"),
-    fullPage: true,
-  });
-  const profile = table.getByRole("rowheader").first().getByRole("link");
-  await expect(profile).toHaveAttribute("href", /^\/people\/.+/);
-  await profile.focus();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/people\/[^/]+$/);
-});
-
 test("compact Money navigation remains usable in dark mode and narrow layouts", async ({
   page,
 }, info) => {
