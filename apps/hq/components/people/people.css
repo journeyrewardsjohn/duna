@@ -609,6 +609,15 @@
       justify-content: space-between;
     }
 
+    .people-grants .people-num,
+    .people-bookings .people-num,
+    .people-payments .people-num {
+      color: var(--td-text);
+      font: var(--td-type-label);
+      font-family: var(--td-font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
     .people-notes > li {
       display: grid;
       gap: var(--td-space-1);
