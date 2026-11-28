@@ -22,7 +22,10 @@ export function ThumbBar() {
     window.addEventListener("scroll", update, { passive: true });
     return () => window.removeEventListener("scroll", update);
   }, []);
-  if (pathname?.startsWith("/add-score")) return null;
+  // On /discover its "Find a game" is the page itself.
+  if (pathname?.startsWith("/add-score") || pathname?.startsWith("/discover")) {
+    return null;
+  }
   return (
     <div
       aria-hidden={!shown}

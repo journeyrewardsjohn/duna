@@ -55,8 +55,11 @@ test.describe("VI-1 Arrive and choose an audience", () => {
 test.describe("VI-2 Look around without an account", () => {
   test("VI-2.1 Discover play without signing in", async ({ page }) => {
     await page.goto("/discover");
-    await expectPageReady(page, "Find your game.");
-    await expect(page.getByRole("button", { name: /^WHERE:/ })).toBeVisible();
+    await expectPageReady(page, "Find a game");
+    await expect(page.getByRole("button", { name: /^Where:/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^When:/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^What:/ })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
   });
   test("VI-2.2 Open a public event page", async ({ page }) => {
     await page.goto("/events/sunset-open-qualifier");
@@ -69,6 +72,22 @@ test.describe("VI-2 Look around without an account", () => {
   test("VI-2.4 Read the rankings", async ({ page }) => {
     await page.goto("/rankings");
     await expectPageReady(page);
+  });
+  test("VI-2.5 Open a venue from the search and see how to book or join", async ({
+    page,
+  }) => {
+    await page.goto("/discover?where=Manhattan%20Beach%20Pier");
+    await page
+      .getByRole("link", { name: "Manhattan Beach Pier", exact: true })
+      .first()
+      .click();
+    await expectPageReady(page, "Manhattan Beach Pier");
+    await expect(
+      page.getByRole("heading", { level: 2, name: "Book a court" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: "On this week" }),
+    ).toBeVisible();
   });
 });
 
@@ -85,6 +104,16 @@ test.describe("VI-3 Decide to book", () => {
     await page.goto("/app/checkout/serve-receive-lab");
     await expect(page).toHaveURL(
       /\/sign-in\?returnTo=%2Fapp%2Fcheckout%2Fserve-receive-lab$/,
+    );
+  });
+  test("VI-3.3 Booking a court signs the visitor in and returns them to the same venue and time", async ({
+    page,
+  }) => {
+    await page.goto(
+      "/app/venues/10000000-0000-4000-8000-000000000002?date=2026-12-05&start=2026-12-05T10%3A00",
+    );
+    await expect(page).toHaveURL(
+      /\/sign-in\?returnTo=%2Fapp%2Fvenues%2F10000000-0000-4000-8000-000000000002%3Fdate%3D2026-12-05%26start%3D2026-12-05T10%253A00$/,
     );
   });
 });

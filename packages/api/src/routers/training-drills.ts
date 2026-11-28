@@ -8,8 +8,9 @@
  *   public.trainingDrills    publicProcedure (the store; read-only)
  *
  * Every procedure returns its fixture from @duna/core/demo/training-drills
- * in demo mode and throws `notImplementedYet` otherwise until B5 lands the
- * service in ../services/training-drills/. The store and purchases honour
+ * in demo mode and calls the B5 service in ../services/training-drills/
+ * otherwise (the library and drill detail are for coaches: the service
+ * checks "training:write"). The store and purchases honour
  * the `training.storefront` kill switch. Nothing here takes a payment: a
  * paid purchase stays pending until the person completes checkout.
  */
@@ -21,7 +22,7 @@ import {
   publicProcedure,
   router,
 } from "../auth";
-import type { ApiContext } from "../context";
+import type { ApiActor, ApiContext } from "../context";
 import {
   trainingDrillsDetailSchema,
   trainingDrillsDrillInputSchema,
@@ -42,13 +43,33 @@ import {
 } from "../contracts/training-drills";
 import { isFeatureEnabled } from "../feature-flag-evaluator";
 import { usesDemoData } from "../services/data-source";
-import { notImplementedYet } from "./not-implemented";
+import * as service from "../services/training-drills";
+import {
+  followedPeople,
+  type TrainingContext,
+} from "../services/training-programs";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
 
 const DOMAIN = "training-drills";
 const read = organizationProcedure("training:read");
 const write = organizationProcedure("training:write");
 const demo = trainingDrillsDemo;
+
+function trainingContext(ctx: {
+  readonly actor: ApiActor;
+  readonly organizationId: string;
+  readonly requestId: string;
+  readonly now: Date;
+  readonly ipAddress?: string;
+}): TrainingContext {
+  return {
+    actor: ctx.actor,
+    organizationId: ctx.organizationId,
+    requestId: ctx.requestId,
+    now: ctx.now,
+    ...(ctx.ipAddress ? { ipAddress: ctx.ipAddress } : {}),
+  };
+}
 
 function demoDetail(drillId: string) {
   if (drillId === demo.detail.id) return demo.detail;
@@ -94,7 +115,7 @@ export const trainingDrillsOperatorRouter = router({
   library: read
     .input(trainingDrillsLibraryInputSchema)
     .output(trainingDrillsLibrarySchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           scope: input.scope,
@@ -105,45 +126,45 @@ export const trainingDrillsOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "library");
+      return service.library(trainingContext(ctx), input);
     }),
 
   /** Drill detail with versions, scene, review checks and listing (DL-Detail). */
   drill: read
     .input(trainingDrillsDrillInputSchema)
     .output(trainingDrillsDetailSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) return demoDetail(input.drillId);
-      return notImplementedYet(DOMAIN, "drill");
+      return service.drillDetail(trainingContext(ctx), input.drillId);
     }),
 
   /** Create a drill or save a new version (scene validated by packages/training-scene). */
   saveVersion: write
     .input(trainingDrillsSaveVersionInputSchema)
     .output(trainingDrillsDetailSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return demoDetail(input.drillId ?? demo.summaries[1]!.id);
       }
-      return notImplementedYet(DOMAIN, "saveVersion");
+      return service.saveVersion(trainingContext(ctx), input);
     }),
 
   /** "Private → Our club". */
   setScope: write
     .input(trainingDrillsSetScopeInputSchema)
     .output(trainingDrillsDetailSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return { ...demoDetail(input.drillId), scope: input.scope };
       }
-      return notImplementedYet(DOMAIN, "setScope");
+      return service.setScope(trainingContext(ctx), input);
     }),
 
   /** Start the checks a public listing needs (scene, no personal data, Duna review). */
   submitForReview: write
     .input(trainingDrillsSubmitForReviewInputSchema)
     .output(trainingDrillsDetailSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...demoDetail(input.drillId),
@@ -151,14 +172,14 @@ export const trainingDrillsOperatorRouter = router({
           reviewChecks: demo.reviewChecks,
         };
       }
-      return notImplementedYet(DOMAIN, "submitForReview");
+      return service.submitForReview(trainingContext(ctx), input);
     }),
 
   /** Create or change the listing (DL-Share); it is listed only once approved. */
   saveListing: write
     .input(trainingDrillsSaveListingInputSchema)
     .output(trainingDrillsListingSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const existing = demo.listings.find(
           (item) => item.drillId === input.drillId,
@@ -174,13 +195,17 @@ export const trainingDrillsOperatorRouter = router({
           status: "pending-review" as const,
         };
       }
-      return notImplementedYet(DOMAIN, "saveListing");
+      return service.saveListing(
+        trainingContext(ctx),
+        input,
+        await storefrontEnabled(ctx),
+      );
     }),
 
   delist: write
     .input(trainingDrillsListingInputSchema)
     .output(trainingDrillsListingSchema)
-    .mutation(({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       if (usesDemoData()) {
         return {
           ...demoListing(input.listingId),
@@ -188,16 +213,20 @@ export const trainingDrillsOperatorRouter = router({
           delistedAt: "2026-11-27T18:30:00.000Z",
         };
       }
-      return notImplementedYet(DOMAIN, "delist");
+      return service.delist(trainingContext(ctx), input.listingId);
     }),
 
   /** The Duna store: listed drills from every club (DL-Store). */
   store: read
     .input(trainingDrillsStoreInputSchema)
     .output(trainingDrillsStoreSchema)
-    .query(({ ctx }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) return demoStore(ctx);
-      return notImplementedYet(DOMAIN, "store");
+      return service.store(
+        { actor: ctx.actor, organizationId: ctx.organizationId },
+        input,
+        await storefrontEnabled(ctx),
+      );
     }),
 
   /** Free: complete at once. Paid: pending until the person completes checkout. */
@@ -231,13 +260,15 @@ export const trainingDrillsOperatorRouter = router({
           ...(paid ? {} : { completedAt: "2026-11-27T18:30:00.000Z" }),
         };
       }
-      return notImplementedYet(DOMAIN, "purchase");
+      return service.purchase(trainingContext(ctx), input, true);
     }),
 
-  purchases: read.output(trainingDrillsPurchasesSchema).query(() => {
-    if (usesDemoData()) return { items: [...demo.purchases] };
-    return notImplementedYet(DOMAIN, "purchases");
-  }),
+  purchases: read
+    .output(trainingDrillsPurchasesSchema)
+    .query(async ({ ctx }) => {
+      if (usesDemoData()) return { items: [...demo.purchases] };
+      return service.purchases(trainingContext(ctx));
+    }),
 });
 
 export const trainingDrillsPlayerRouter = router({
@@ -249,7 +280,7 @@ export const trainingDrillsPlayerRouter = router({
   drill: protectedProcedure
     .input(trainingDrillsDrillInputSchema)
     .output(trainingDrillsDetailSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const detail = demoDetail(input.drillId);
         if (detail.status !== "published") {
@@ -257,7 +288,12 @@ export const trainingDrillsPlayerRouter = router({
         }
         return detail;
       }
-      return notImplementedYet(DOMAIN, "drill");
+      return service.playerDrill(
+        ctx.actor,
+        input.drillId,
+        await followedPeople(ctx.actor),
+        ctx.now,
+      );
     }),
 });
 
@@ -270,16 +306,16 @@ export const trainingDrillsPublicRouter = router({
   store: publicProcedure
     .input(trainingDrillsStoreInputSchema)
     .output(trainingDrillsStoreSchema)
-    .query(({ ctx }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) return demoStore(ctx);
-      return notImplementedYet(DOMAIN, "store");
+      return service.store({}, input, await storefrontEnabled(ctx));
     }),
 
   /** One public listing with its drill summary. */
   listing: publicProcedure
     .input(trainingDrillsListingInputSchema)
     .output(trainingDrillsStoreItemSchema)
-    .query(({ input }) => {
+    .query(async ({ input, ctx }) => {
       if (usesDemoData()) {
         const item = demo.store.find(
           (entry) => entry.listing.id === input.listingId,
@@ -287,6 +323,9 @@ export const trainingDrillsPublicRouter = router({
         if (!item) throw new TRPCError({ code: "NOT_FOUND" });
         return item;
       }
-      return notImplementedYet(DOMAIN, "listing");
+      return service.publicListing(
+        input.listingId,
+        await storefrontEnabled(ctx),
+      );
     }),
 });

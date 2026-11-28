@@ -11281,6 +11281,21 @@ export const trainingDrills = pgTable(
       table.organizationId,
       table.updatedAt,
     ),
+    // B4/B5: library search ("bounded, indexed"): ILIKE on title and
+    // summary uses trigram indexes; the scope tabs filter on scope.
+    index("training_drill_org_scope_updated_idx").on(
+      table.organizationId,
+      table.scope,
+      table.updatedAt,
+    ),
+    index("training_drill_title_trgm_idx").using(
+      "gin",
+      table.title.op("gin_trgm_ops"),
+    ),
+    index("training_drill_summary_trgm_idx").using(
+      "gin",
+      table.summary.op("gin_trgm_ops"),
+    ),
     check(
       "training_drill_activity_valid",
       sql`${table.activityKind} IN ('drill', 'warmup', 'cool-down', 'conditioning', 'strength', 'plyometrics', 'film', 'meeting', 'recovery', 'assessment', 'break', 'transition')`,
@@ -11564,6 +11579,10 @@ export const trainingPracticePlanBlocks = pgTable(
       table.practicePlanVersionId,
       table.startsAtMinute,
     ),
+    // B5: "used in plans" and a player's access to a drill join on it.
+    index("training_plan_block_drill_version_idx")
+      .on(table.drillVersionId)
+      .where(sql`${table.drillVersionId} IS NOT NULL`),
     check(
       "training_plan_block_time_valid",
       sql`${table.startsAtMinute} >= 0 AND ${table.durationMinutes} > 0 AND ${table.transitionMinutes} >= 0`,
@@ -11860,6 +11879,10 @@ export const trainingEvents = pgTable(
       table.programId,
       table.startsAt,
     ),
+    // B4: where a practice plan is used (latest session per plan).
+    index("training_event_plan_version_idx")
+      .on(table.practicePlanVersionId)
+      .where(sql`${table.practicePlanVersionId} IS NOT NULL`),
     check(
       "training_event_time_valid",
       sql`${table.endsAt} > ${table.startsAt}`,

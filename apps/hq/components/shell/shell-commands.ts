@@ -61,13 +61,6 @@ const create: readonly ShellCommand[] = [
     keywords: ["member", "player", "guardian", "invite"],
   },
   {
-    value: `go:${hqHref("teamInvite")}`,
-    label: "Invite a team member",
-    group: "Create",
-    icon: "partner",
-    keywords: ["coach", "staff"],
-  },
-  {
     value: `go:${hqHref("inboxCreate")}`,
     label: "Send an update",
     group: "Create",
@@ -133,6 +126,38 @@ const money: readonly ShellCommand[] = [
     group: "Money",
     icon: "clock",
     keywords: ["hold", "reserve", "owed"],
+  },
+];
+
+/** Team (H-TEAM): inviting, cover and pay, by the words people use. */
+const team: readonly ShellCommand[] = [
+  {
+    value: `go:${hqHref("teamInvite")}`,
+    label: "Invite a coach",
+    group: "Team",
+    icon: "user-plus",
+    keywords: ["staff", "team member", "manager", "front desk", "invite"],
+  },
+  {
+    value: `go:${hqHref("teamCoverage")}?at=thu-18`,
+    label: "Who is free Thursday at 6?",
+    group: "Team",
+    icon: "schedule",
+    keywords: ["available", "free", "cover", "substitute", "coach"],
+  },
+  {
+    value: `go:${hqHref("teamCoverage")}`,
+    label: "Find cover for a session",
+    group: "Team",
+    icon: "coach",
+    keywords: ["coverage", "substitute", "sick", "time off", "gap"],
+  },
+  {
+    value: `go:${hqHref("teamPay")}`,
+    label: "Run team pay",
+    group: "Team",
+    icon: "wallet",
+    keywords: ["payroll", "pay run", "export", "coaches pay"],
   },
 ];
 
@@ -243,6 +268,7 @@ export const shellCommands: readonly ShellCommand[] = [
   ...places,
   ...create,
   ...money,
+  ...team,
   ...offerings,
   ...setup,
   ...run,

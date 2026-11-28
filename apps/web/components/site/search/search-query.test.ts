@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { discoveryCriteriaFromQuery } from "../../../lib/discovery-query";
+import { parseDiscoverQuery } from "../../discover/search-state";
 import { editDistance, fuzzyScore } from "./fuzzy";
 import {
   DEFAULT_SEARCH,
   discoveryHref,
   type SearchState,
+  toDiscoverState,
   whatText,
   whenRange,
   whenText,
@@ -17,8 +18,8 @@ function query(href: string) {
   return Object.fromEntries(new URL(href, "https://duna.coach").searchParams);
 }
 
-describe("home search → discovery address", () => {
-  it("sends a place, this week and two kinds the way discovery reads them", () => {
+describe("home search → find-a-game address", () => {
+  it("sends a place, this week and two kinds the way /discover reads them", () => {
     const state: SearchState = {
       where: {
         kind: "place",
@@ -33,7 +34,7 @@ describe("home search → discovery address", () => {
       surface: "beach",
     };
     const href = discoveryHref(state, thursday);
-    expect(href.startsWith("/discover/results?")).toBe(true);
+    expect(href.startsWith("/discover?")).toBe(true);
     const params = query(href);
     expect(params).toMatchObject({
       where: "place",
@@ -41,36 +42,28 @@ describe("home search → discovery address", () => {
       address: "Hermosa Beach, CA, USA",
       lat: "33.86220",
       lng: "-118.39950",
-      when: "next-7-days",
-      what: "matches,training",
+      when: "week",
+      what: "open,clinic",
       surface: "beach",
     });
-    // The discovery page's own parser accepts every part of it.
-    const criteria = discoveryCriteriaFromQuery(params);
-    expect(criteria.location).toMatchObject({
-      mode: "place",
-      label: "Hermosa Beach",
-    });
-    expect(criteria.when.preset).toBe("next-7-days");
-    expect(criteria.what).toEqual(["matches", "training"]);
-  });
-
-  it("defaults to anywhere, this week, for you", () => {
-    const params = query(discoveryHref(DEFAULT_SEARCH, thursday));
-    expect(params.where).toBe("anywhere");
-    expect(params.when).toBe("next-7-days");
-    expect(params.what).toBe("for-you");
-    expect(params.surface).toBeUndefined();
-  });
-
-  it("maps Coaches and Clinics to the one discovery kind without repeating it", () => {
-    const params = query(
-      discoveryHref({ ...DEFAULT_SEARCH, what: ["clinic", "coach"] }, thursday),
+    // The page's own parser gives back the same search.
+    expect(parseDiscoverQuery(params, thursday)).toEqual(
+      toDiscoverState(state),
     );
-    expect(params.what).toBe("training");
   });
 
-  it("sends Near me as the current location and Any time as flexible", () => {
+  it("defaults to the bare page with this week", () => {
+    expect(discoveryHref(DEFAULT_SEARCH, thursday)).toBe("/discover?when=week");
+  });
+
+  it("keeps Coaches and Clinics apart", () => {
+    const params = query(
+      discoveryHref({ ...DEFAULT_SEARCH, what: ["coach", "clinic"] }, thursday),
+    );
+    expect(params.what).toBe("clinic,coach");
+  });
+
+  it("sends Near me as the current location and Any time as nothing", () => {
     const params = query(
       discoveryHref(
         {
@@ -81,15 +74,12 @@ describe("home search → discovery address", () => {
         thursday,
       ),
     );
-    expect(params).toMatchObject({
-      where: "current",
-      lat: "25.79000",
-      when: "flexible",
-    });
-    expect(discoveryCriteriaFromQuery(params).location.mode).toBe("current");
+    expect(params).toMatchObject({ where: "current", lat: "25.79000" });
+    expect(params.when).toBeUndefined();
+    expect(parseDiscoverQuery(params).where.kind).toBe("near-me");
   });
 
-  it("turns Today, Tonight, the weekend and a picked day into a custom range", () => {
+  it("works out Tonight and the weekend, and sends a picked day as a date", () => {
     const tonight = whenRange({ kind: "preset", preset: "tonight" }, thursday)!;
     expect(tonight.start.getHours()).toBe(16);
     expect(tonight.end.getDate()).toBe(26);
@@ -113,9 +103,12 @@ describe("home search → discovery address", () => {
         thursday,
       ),
     );
-    expect(day.when).toBe("custom");
-    expect(new Date(day.start!).getDate()).toBe(2);
-    expect(discoveryCriteriaFromQuery(day).when.preset).toBe("custom");
+    expect(day).toMatchObject({ when: "dates", from: "2026-12-02" });
+    expect(parseDiscoverQuery(day).when).toEqual({
+      kind: "dates",
+      from: "2026-12-02",
+      to: "2026-12-02",
+    });
   });
 
   it("says each choice in the row in words", () => {

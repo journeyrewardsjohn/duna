@@ -8657,7 +8657,7 @@ body[data-zone="operator"]
   box-shadow: var(--shadow-small);
 }
 
-body[data-zone="operator"] :is(.schedule-dropzone, .team-blackouts__form) {
+body[data-zone="operator"] :is(.schedule-dropzone) {
   background: var(--surface-2);
 }
 

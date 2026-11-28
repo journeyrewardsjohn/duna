@@ -19,8 +19,10 @@ import { OperatorCreateScreen } from "../../operator-create";
 import { SessionNotesScreen } from "../../session-notes";
 import { TicketScannerScreen } from "../../ticket-scanner";
 import { TournamentControl } from "../../tournament-control";
+import { AvailabilityScreen, TimeAwayScreen } from "../features/availability";
 import { CalendarScreen } from "../features/calendar";
 import { ScorerScreen } from "../features/courtside";
+import { CoverScreen } from "../features/cover";
 import { MoreScreen } from "../features/more";
 import { PeopleScreen } from "../features/people";
 import { AttendanceScreen, SessionScreen } from "../features/session";
@@ -151,6 +153,9 @@ export const SCREENS = {
       palette={legacyPalette()}
     />
   ),
+  availability: () => <AvailabilityScreen />,
+  timeAway: () => <TimeAwayScreen />,
+  cover: () => <CoverScreen />,
   people: (_entry, { shell }) => (
     <PeopleScreen
       onMessage={(personId) => openMessages(shell, personId)}

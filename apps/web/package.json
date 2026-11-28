@@ -20,6 +20,7 @@
     "@duna/messaging-client": "workspace:*",
     "@duna/observability": "workspace:*",
     "@duna/pricing": "workspace:*",
+    "@duna/tideline-core": "workspace:*",
     "@duna/ui": "workspace:*",
     "@livekit/components-react": "2.9.23",
     "@livekit/protocol": "1.50.4",
