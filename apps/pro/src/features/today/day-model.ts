@@ -94,6 +94,13 @@ export interface DayAtRiskInput {
   readonly capacity: number;
   readonly lockAt: string;
   readonly displayState: string;
+  readonly subjectType?: string;
+  readonly catalogItemId?: string;
+  readonly timezone?: string;
+  readonly coachNames?: readonly string[];
+  /** Present only for people who may see money (`payments:read`). */
+  readonly atStakeCredits?: number;
+  readonly atStakeMinor?: number;
 }
 
 export type EntryState =

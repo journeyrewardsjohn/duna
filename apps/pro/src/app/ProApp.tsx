@@ -37,6 +37,7 @@ import {
   type FoundationsOptions,
 } from "../features/dev/Foundations";
 import { ProLayoutLab, layoutLabAutostart } from "../features/dev/LayoutLab";
+import { AttendanceProvider } from "../features/session";
 import { ConditionsSheet, DayProvider, useDay } from "../features/today";
 import { darkStyles, lightStyles, setActiveStyles } from "../legacy/styles";
 import { darkColors, lightColors, setActivePalette } from "../shared/palette";
@@ -244,99 +245,101 @@ export function ProApp() {
     <DevicePostureProvider>
       <ShellContext.Provider value={shell}>
         <DayProvider>
-          <StatusBar
-            style={
-              windowRoute && ROUTES[windowRoute.key].live
-                ? "light"
-                : statusBar === "light"
+          <AttendanceProvider>
+            <StatusBar
+              style={
+                windowRoute && ROUTES[windowRoute.key].live
                   ? "light"
-                  : "dark"
-            }
-          />
-          <View style={styles.fill}>
-            <NavigationChrome
-              hidden={
-                (tabletop && dayTab && !state.stacks[state.tab]) ||
-                Boolean(windowRoute)
+                  : statusBar === "light"
+                    ? "light"
+                    : "dark"
               }
-              onSelect={(key) => {
-                // iPad's sidebar-adaptable tab bar reports its first tab once
-                // while it mounts; that echo is not a person's choice.
-                if (Date.now() - mountedAt.current < 1_500) return;
-                haptics.selection();
-                dispatch({ type: "select-tab", tab: key as TabKey });
-              }}
-              selected={state.tab}
-              tabs={TABS.map((tab) => ({
-                key: tab.key,
-                title: tabTitle(tab.key, audience),
-                systemImage: tab.systemImage,
-                ...(tab.key === "inbox" && unreadMessages > 0
-                  ? {
-                      badge:
-                        unreadMessages > 99 ? "99+" : String(unreadMessages),
-                    }
-                  : {}),
-                content: (
-                  <TabRoot
-                    onTabletopChange={setTabletop}
-                    state={state}
-                    tab={tab.key}
-                  />
-                ),
-              }))}
             />
-            {windowContent ? (
-              <View
-                style={[
-                  StyleSheet.absoluteFill,
-                  styles.window,
-                  { backgroundColor: themeColors.ground },
-                ]}
-                testID={`window-${windowRoute?.key}`}
-              >
-                {windowRoute && ROUTES[windowRoute.key].live ? (
-                  <LiveZone>
+            <View style={styles.fill}>
+              <NavigationChrome
+                hidden={
+                  (tabletop && dayTab && !state.stacks[state.tab]) ||
+                  Boolean(windowRoute)
+                }
+                onSelect={(key) => {
+                  // iPad's sidebar-adaptable tab bar reports its first tab once
+                  // while it mounts; that echo is not a person's choice.
+                  if (Date.now() - mountedAt.current < 1_500) return;
+                  haptics.selection();
+                  dispatch({ type: "select-tab", tab: key as TabKey });
+                }}
+                selected={state.tab}
+                tabs={TABS.map((tab) => ({
+                  key: tab.key,
+                  title: tabTitle(tab.key, audience),
+                  systemImage: tab.systemImage,
+                  ...(tab.key === "inbox" && unreadMessages > 0
+                    ? {
+                        badge:
+                          unreadMessages > 99 ? "99+" : String(unreadMessages),
+                      }
+                    : {}),
+                  content: (
+                    <TabRoot
+                      onTabletopChange={setTabletop}
+                      state={state}
+                      tab={tab.key}
+                    />
+                  ),
+                }))}
+              />
+              {windowContent ? (
+                <View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    styles.window,
+                    { backgroundColor: themeColors.ground },
+                  ]}
+                  testID={`window-${windowRoute?.key}`}
+                >
+                  {windowRoute && ROUTES[windowRoute.key].live ? (
+                    <LiveZone>
+                      <SafeAreaProvider style={styles.fill}>
+                        {windowContent}
+                      </SafeAreaProvider>
+                    </LiveZone>
+                  ) : (
                     <SafeAreaProvider style={styles.fill}>
                       {windowContent}
                     </SafeAreaProvider>
-                  </LiveZone>
-                ) : (
-                  <SafeAreaProvider style={styles.fill}>
-                    {windowContent}
-                  </SafeAreaProvider>
-                )}
+                  )}
+                </View>
+              ) : null}
+              {/* Ask Duna stays mounted so its conversation survives closing it. */}
+              <View
+                pointerEvents={windowRoute?.key === "ai" ? "auto" : "none"}
+                style={[
+                  StyleSheet.absoluteFill,
+                  windowRoute?.key === "ai"
+                    ? [styles.window, { backgroundColor: themeColors.ground }]
+                    : styles.hidden,
+                ]}
+                testID="window-ai"
+              >
+                <ThemeOverride theme={legacyDark ? "dark" : "light"}>
+                  <DunaAiScreen
+                    onClose={() => dispatch({ type: "close-window" })}
+                    palette={askDunaPalette()}
+                    pathname={`/${windowTab}`}
+                  />
+                </ThemeOverride>
               </View>
-            ) : null}
-            {/* Ask Duna stays mounted so its conversation survives closing it. */}
-            <View
-              pointerEvents={windowRoute?.key === "ai" ? "auto" : "none"}
-              style={[
-                StyleSheet.absoluteFill,
-                windowRoute?.key === "ai"
-                  ? [styles.window, { backgroundColor: themeColors.ground }]
-                  : styles.hidden,
-              ]}
-              testID="window-ai"
-            >
-              <ThemeOverride theme={legacyDark ? "dark" : "light"}>
-                <DunaAiScreen
-                  onClose={() => dispatch({ type: "close-window" })}
-                  palette={askDunaPalette()}
-                  pathname={`/${windowTab}`}
-                />
-              </ThemeOverride>
+              <NewSheet
+                onClose={() => dispatch({ type: "close-sheet" })}
+                onOpen={(route) => dispatch({ type: "open", route })}
+                visible={state.sheet === "new"}
+              />
+              <ShellConditions
+                dateKey={conditionsDate}
+                onClose={() => setConditionsDate(undefined)}
+              />
             </View>
-            <NewSheet
-              onClose={() => dispatch({ type: "close-sheet" })}
-              onOpen={(route) => dispatch({ type: "open", route })}
-              visible={state.sheet === "new"}
-            />
-            <ShellConditions
-              dateKey={conditionsDate}
-              onClose={() => setConditionsDate(undefined)}
-            />
-          </View>
+          </AttendanceProvider>
         </DayProvider>
       </ShellContext.Provider>
       {layoutLabOpen && mode === "preview" ? (

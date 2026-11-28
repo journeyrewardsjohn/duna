@@ -54,6 +54,8 @@ export interface DayData {
   readonly lastFreshAt: Date | null;
   /** The at-risk list: its own state, so a failure never hides the day. */
   readonly atRiskStatus: BlockStatus;
+  /** Sessions under their minimum (`operator.participation.atRisk`; preview fixtures). */
+  readonly atRisk: readonly DayAtRiskInput[];
   readonly refresh: () => Promise<void>;
   readonly refreshing: boolean;
   readonly build: (dateKey?: string) => DayModel;
@@ -214,6 +216,7 @@ function useDayData(): DayData {
     failure,
     lastFreshAt,
     atRiskStatus,
+    atRisk: risk,
     refresh,
     refreshing,
     build,

@@ -5,6 +5,7 @@ import type { SurfaceContract } from "./types";
 const migrated: readonly string[] = [
   "apps/pro/src/app",
   "apps/pro/src/features/today",
+  "apps/pro/src/features/session",
 ];
 
 /** Duna Pro native (`apps/pro`). Owners: M-F5, M-R0 … M-R6, M-N1 for app config. */

@@ -2,12 +2,10 @@ import {
   CLUB_MARK_SIZES,
   ClubLockup,
   ClubMark,
-  MembershipCard,
   WindowAvatar,
 } from "@duna/ui/tideline";
 import { type GalleryExample, type GalleryGroup } from "../gallery";
 import styles from "../gallery.module.css";
-import { WalletDemo } from "./kit/wallet-demo";
 
 const group: GalleryGroup = {
   id: "identity",
@@ -165,119 +163,6 @@ const examples: GalleryExample[] = [
         </span>
       </div>
     ),
-  },
-  {
-    group,
-    order: 20,
-    title: "MembershipCard · active with a code",
-    content: (
-      <MembershipCard
-        club={sunset}
-        code="SBC-0148-NW"
-        image="/media/event-library/duna-event-golden-hour-pickup.webp"
-        kind="Club member"
-        member="Noa Williams"
-        plan="Annual member"
-        since="Member since Mar 2024"
-        status="active"
-        validThrough="Mar 31, 2027"
-      />
-    ),
-  },
-  {
-    group,
-    order: 21,
-    title: "MembershipCard · active, no pass issued",
-    content: (
-      <MembershipCard
-        club={harbor}
-        member="Noa Williams"
-        plan="Drop-in member"
-        status="active"
-        validThrough="[date]"
-      />
-    ),
-  },
-  {
-    group,
-    order: 22,
-    title: "MembershipCard · pending (brand at full strength)",
-    content: (
-      <MembershipCard
-        club={publicCourts}
-        kind="Approved player · public beach"
-        member="Noa Williams"
-        plan="Approved player"
-        since="Applied Nov 24"
-        status="pending"
-      />
-    ),
-  },
-  {
-    group,
-    order: 23,
-    title: "MembershipCard · paused and expired",
-    content: (
-      <div className={styles.stack}>
-        <MembershipCard
-          club={cove}
-          member="Mara Lewis"
-          plan="Monthly member"
-          status="paused"
-        />
-        <MembershipCard
-          club={tileClub}
-          member="Bartholomew Featherstonehaugh-Montgomery"
-          plan="Season pass"
-          status="expired"
-          validThrough="Oct 31, 2026"
-        />
-      </div>
-    ),
-  },
-  {
-    group,
-    order: 24,
-    title: "MembershipCard · compact strips",
-    content: (
-      <div className={styles.stack}>
-        <MembershipCard
-          club={sunset}
-          compact
-          member="Noa Williams"
-          plan="Annual member"
-          status="active"
-        />
-        <MembershipCard
-          club={harbor}
-          compact
-          member="Noa Williams"
-          plan="Drop-in member"
-          status="paused"
-        />
-        <MembershipCard
-          club={publicCourts}
-          compact
-          member="Noa Williams"
-          plan="Approved player"
-          status="pending"
-        />
-        <MembershipCard
-          club={cove}
-          compact
-          member="Noa Williams"
-          plan="Monthly member"
-          status="expired"
-          validThrough="Oct 31"
-        />
-      </div>
-    ),
-  },
-  {
-    group,
-    order: 30,
-    title: "WalletStack · tap a strip to open that card",
-    content: <WalletDemo />,
   },
   {
     group,
