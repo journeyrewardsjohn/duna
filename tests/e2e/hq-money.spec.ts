@@ -157,10 +157,14 @@ test("a refund restates the amount and sends one request on a double click", asy
     }
   });
   await dialog.getByRole("button", { name: /^Refund \$270\.00$/ }).dblclick();
-  // Demo has no connected database: the dialog says so honestly, with a reference.
-  await expect(dialog.or(page.getByRole("status"))).toContainText(
-    /isn't set up yet|Nothing was changed|Refund of \$270\.00 sent/,
-  );
+  // Demo has no connected database: the dialog keeps the honest answer.
+  await expect(
+    page
+      .getByText(
+        /isn't set up yet|Nothing was changed|Refund of \$270\.00 sent/,
+      )
+      .first(),
+  ).toBeVisible();
   expect(actions).toHaveLength(1);
 });
 

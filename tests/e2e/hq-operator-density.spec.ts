@@ -160,15 +160,25 @@ test("compact Money navigation remains usable in dark mode and narrow layouts", 
   await page.goto(`${base}/money`);
   await clearAssistant(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  const nav = page.getByRole("navigation", { name: "Money sections" });
-  await expect(nav.getByRole("link")).toHaveCount(5);
+  // Money's S3 SubNav: eight tabs; on a wide row five links and "More", on
+  // a narrow container all eight in one scrolling row.
+  const nav = page.getByRole("navigation", { name: "Money" });
+  const links = nav.locator("a[data-nav-id]:visible");
+  const more = nav.getByRole("button", { name: "More" });
+  if (await more.isVisible()) {
+    await expect(links).toHaveCount(5);
+    await more.click();
+    await expect(
+      page.getByRole("link", { name: "Duna Pay setup", exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+  } else {
+    await expect(links).toHaveCount(8);
+  }
   await expect(
-    nav.getByRole("link", { name: "Balance", exact: true }),
+    nav.getByRole("link", { name: "Overview", exact: true }),
   ).toHaveAttribute("aria-current", "page");
-  const refunds = nav.getByRole("link", {
-    name: "Refund Policies",
-    exact: true,
-  });
+  const refunds = nav.getByRole("link", { name: "Refunds", exact: true });
   await refunds.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(`${base}/money/refund-policies`);
