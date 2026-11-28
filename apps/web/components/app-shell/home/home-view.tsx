@@ -12,7 +12,8 @@ import {
   Notice,
   RatingRing,
   Rise,
-  WalletStack,
+  assignWalletArt,
+  clubSummaryCard,
   type WalletCard,
 } from "@duna/ui/tideline";
 import type { ReactNode } from "react";
@@ -397,15 +398,23 @@ function ThisWeek({ model }: { readonly model: HomeModel }) {
   );
 }
 
-function membershipStatus(
-  wallet: HomeClubWallet,
-): "active" | "paused" | "expired" | "pending" {
-  const status = wallet.membershipStatus?.toLowerCase() ?? "";
-  if (wallet.status === "frozen" || status.includes("pause")) return "paused";
-  if (wallet.status === "closed" || /cancel|expire|ended/.test(status))
-    return "expired";
-  if (/pending|incomplete|trial|past/.test(status)) return "pending";
-  return "active";
+/** A club summary as a card (art assigned per wallet so neighbours differ). */
+function clubCards(
+  wallets: readonly HomeClubWallet[],
+  memberName: string,
+): WalletCard[] {
+  const art = assignWalletArt(
+    wallets.map((wallet) => ({ id: wallet.organizationId })),
+  );
+  return wallets.map((wallet, index) => {
+    const card = clubSummaryCard(wallet);
+    return {
+      ...card,
+      club: { name: wallet.organizationName },
+      member: memberName,
+      art: art[index]!,
+    };
+  });
 }
 
 function Clubs({
@@ -448,30 +457,29 @@ function Clubs({
       ) : wallets.data.length === 1 ? (
         <a className="aph-card-link" href={APP_ROUTES.wallet.path}>
           <MembershipCard
-            club={{ name: wallets.data[0]!.organizationName }}
-            kind="Club member"
-            line={`${wallets.data[0]!.credits} credits`}
-            member={memberName}
-            status={membershipStatus(wallets.data[0]!)}
-            {...(wallets.data[0]!.membershipName
-              ? { plan: wallets.data[0]!.membershipName }
-              : {})}
+            {...clubCards(wallets.data, memberName)[0]!}
+            label={`Open your wallet: ${wallets.data[0]!.organizationName} card`}
           />
         </a>
       ) : (
-        <WalletStack
-          cards={wallets.data.map((wallet): WalletCard => ({
-            id: wallet.organizationId,
-            club: { name: wallet.organizationName },
-            member: memberName,
-            kind: "Club member",
-            status: membershipStatus(wallet),
-            line: `${wallet.credits} credits`,
-            ...(wallet.membershipName ? { plan: wallet.membershipName } : {}),
-          }))}
-          className="aph-wallet"
-          label="Your club cards"
-        />
+        <ul className="aph-wallet">
+          {clubCards(wallets.data, memberName)
+            .slice(0, 4)
+            .map((card) => (
+              <li key={card.id}>
+                <a
+                  className="aph-card-link"
+                  href={`${APP_ROUTES.wallet.path}?card=${encodeURIComponent(card.id)}`}
+                >
+                  <MembershipCard
+                    {...card}
+                    label={`Open ${card.club.name} card in your wallet`}
+                    size="strip"
+                  />
+                </a>
+              </li>
+            ))}
+        </ul>
       )}
     </Section>
   );

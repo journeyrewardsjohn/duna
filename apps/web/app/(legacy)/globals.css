@@ -2178,29 +2178,6 @@
   line-height: 1.45;
 }
 
-.organization-membership-actions {
-  display: grid;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.organization-membership-actions button {
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--text-1) 18%, transparent);
-  border-radius: 999px;
-  color: var(--text-1);
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  min-height: 36px;
-  padding: 0 14px;
-}
-
-.organization-membership-actions small {
-  color: var(--text-2);
-  line-height: 1.4;
-}
-
 .catalog-checkout-panel > p.catalog-payment-expectation {
   color: var(--text-2);
   font-size: 0.75rem;
@@ -20649,117 +20626,6 @@ html {
   font-size: 2rem;
 }
 
-.prediction-wallet-section {
-  border: 1px solid color-mix(in srgb, #2b729e 25%, var(--color-line));
-}
-
-.prediction-wallet-summary {
-  display: grid;
-  gap: 0.7rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.prediction-wallet-summary > article {
-  background: var(--color-canvas);
-  border: 1px solid var(--color-line);
-  border-radius: 18px;
-  display: grid;
-  gap: 0.25rem;
-  padding: 0.9rem;
-}
-
-.prediction-wallet-summary__icon {
-  align-items: center;
-  background: #e7f0f8;
-  border-radius: 12px;
-  color: #246b9b;
-  display: flex;
-  height: 42px;
-  justify-content: center;
-  margin-bottom: 0.45rem;
-  width: 42px;
-}
-
-:root[data-theme="dark"] .prediction-wallet-summary__icon {
-  background: #163146;
-}
-
-.prediction-wallet-summary small,
-.prediction-wallet-summary p,
-.prediction-wallet-positions small,
-.prediction-wallet-positions span {
-  color: var(--color-bone-muted);
-  font-size: 0.75rem;
-}
-
-.prediction-wallet-summary .duna-numeric {
-  font-family: var(--font-display);
-  font-size: 2.5rem;
-  letter-spacing: -0.03em;
-}
-
-.prediction-wallet-summary p {
-  line-height: 1.45;
-  margin: 0.35rem 0 0;
-}
-
-.prediction-wallet-positions {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 0.8rem;
-}
-
-.prediction-wallet-positions > section {
-  border: 1px solid var(--color-line);
-  border-radius: 18px;
-  overflow: hidden;
-}
-
-.prediction-wallet-positions > section > header,
-.prediction-wallet-positions article {
-  align-items: center;
-  display: grid;
-  gap: 0.7rem;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  padding: 0.75rem;
-}
-
-.prediction-wallet-positions > section > header {
-  background: var(--color-canvas);
-  display: flex;
-  justify-content: space-between;
-}
-
-.prediction-wallet-positions h3 {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  margin: 0;
-}
-
-.prediction-wallet-positions article + article {
-  border-top: 1px solid var(--color-line);
-}
-
-.prediction-wallet-positions article > div {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.prediction-wallet-positions article strong {
-  font-size: 0.75rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.prediction-wallet-positions article .duna-numeric {
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  text-align: right;
-}
-
 @media (max-width: 980px) {
   .prediction-market-detail,
   .tournament-markets__layout {
@@ -20797,11 +20663,6 @@ html {
     align-items: start;
     flex-direction: column;
     gap: 0.5rem;
-  }
-
-  .prediction-wallet-summary,
-  .prediction-wallet-positions {
-    grid-template-columns: 1fr;
   }
 
   .professional-match-card__market {
@@ -32320,329 +32181,11 @@ a {
 }
 
 /* Wallet */
-.wallet-page {
-  margin: 0 auto;
-  max-width: 1180px;
-  width: 100%;
-}
-
-.wallet-page > .page-heading-row {
-  margin-bottom: 1.5rem;
-}
 
 .wallet-grid {
   display: grid;
   gap: 0.9rem;
   grid-template-columns: minmax(0, 1.45fr) minmax(290px, 0.65fr);
-}
-
-.wallet-balance-card {
-  background: var(--color-aqua);
-  border-radius: 26px;
-  color: var(--color-ink);
-  display: flex;
-  flex-direction: column;
-  min-height: 300px;
-  overflow: hidden;
-  padding: clamp(1.35rem, 2.8vw, 2rem);
-  position: relative;
-}
-
-.wallet-balance-card::after {
-  border: 1px solid rgb(var(--ink-rgb) / 14%);
-  border-radius: 50%;
-  content: "";
-  height: 430px;
-  position: absolute;
-  right: -240px;
-  top: -210px;
-  width: 430px;
-}
-
-.wallet-balance-card__mark {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  position: relative;
-  z-index: 2;
-}
-
-.wallet-balance-card__mark span {
-  font-family: var(--font-display);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-}
-
-.wallet-balance-card > span {
-  font-size: 0.75rem;
-  margin-top: 2.25rem;
-}
-
-.wallet-balance-card > .duna-numeric {
-  font-size: clamp(3.2rem, 6vw, 5rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.wallet-balance-card__actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: auto;
-}
-
-.wallet-balance-card__actions button {
-  align-items: center;
-  background: var(--color-ink);
-  border: 0;
-  border-radius: 999px;
-  color: var(--td-text-inverse);
-  display: flex;
-  font-size: 0.75rem;
-  font-weight: 700;
-  gap: 0.4rem;
-  min-height: 42px;
-  padding: 0 0.9rem;
-}
-
-.wallet-balance-card__actions button:disabled {
-  color: var(--td-text-inverse);
-  opacity: 0.74;
-}
-
-.wallet-balance-card > small {
-  font-size: 0.75rem;
-  margin-top: 0.75rem;
-  opacity: 0.66;
-}
-
-.wallet-side-cards {
-  display: grid;
-  gap: 0.9rem;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-}
-
-.wallet-side-cards article {
-  align-items: center;
-  background: var(--color-depth);
-  border: 1px solid rgb(var(--overlay-rgb) / 8%);
-  border-radius: 20px;
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: auto 1fr auto;
-  min-height: 0;
-  padding: clamp(1rem, 2vw, 1.25rem);
-}
-
-.wallet-side-cards__icon {
-  align-items: center;
-  background: rgb(var(--accent-rgb) / 8%);
-  border-radius: 13px;
-  color: var(--color-aqua);
-  display: flex;
-  height: 45px;
-  justify-content: center;
-  width: 45px;
-}
-
-.wallet-side-cards article > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.wallet-side-cards small {
-  color: var(--td-text-3);
-  font-size: 0.75rem;
-}
-
-.wallet-side-cards .duna-numeric,
-.wallet-side-cards strong {
-  font-size: 1rem;
-}
-
-.wallet-side-cards span:last-child {
-  color: var(--color-bone-muted);
-  font-size: 0.75rem;
-}
-
-.organization-credit-section {
-  margin-top: 1.25rem;
-}
-
-.organization-credit-section .dashboard-section__heading > p {
-  color: var(--color-bone-muted);
-  font-size: 0.75rem;
-  margin: 0;
-}
-
-.organization-credit-grid {
-  display: grid;
-  gap: 0.85rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.organization-credit-grid > article {
-  background: var(--color-depth);
-  border: 1px solid rgb(var(--overlay-rgb) / 8%);
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-  min-height: 230px;
-  padding: 1.1rem;
-}
-
-.organization-credit-card__top {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 1.4rem;
-}
-
-.organization-credit-grid > article > small {
-  color: var(--color-bone-muted);
-  font-size: 0.75rem;
-}
-
-.organization-credit-grid > article > .duna-numeric {
-  font-size: 2.8rem;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.organization-credit-grid > article > span {
-  color: var(--color-bone-muted);
-  font-size: 0.75rem;
-}
-
-.organization-credit-grid > article > p {
-  border-top: 1px solid rgb(var(--overlay-rgb) / 7%);
-  display: flex;
-  font-size: 0.75rem;
-  justify-content: space-between;
-  margin: 0.8rem 0 0;
-  padding-top: 0.7rem;
-}
-
-.organization-credit-grid > article > p span {
-  color: var(--color-bone-muted);
-  text-transform: capitalize;
-}
-
-.organization-credit-grid > article > a {
-  align-items: center;
-  color: var(--color-aqua);
-  display: inline-flex;
-  font-size: 0.75rem;
-  font-weight: 700;
-  gap: 0.3rem;
-  margin-top: auto;
-  padding-top: 1rem;
-}
-
-.organization-credit-grid > .organization-credit-card--empty {
-  align-items: flex-start;
-  color: var(--color-bone-muted);
-  gap: 0.55rem;
-  justify-content: center;
-  min-height: 165px;
-}
-
-.organization-credit-card--empty strong {
-  color: var(--color-bone);
-  font-size: 0.8rem;
-}
-
-.wallet-activity {
-  background: rgb(var(--overlay-rgb) / 3%);
-  border: 1px solid rgb(var(--overlay-rgb) / 7%);
-  border-radius: 18px;
-  overflow: hidden;
-}
-
-.wallet-activity article {
-  align-items: center;
-  border-top: 1px solid rgb(var(--overlay-rgb) / 7%);
-  display: grid;
-  gap: 0.85rem;
-  grid-template-columns: auto 1fr auto minmax(100px, auto);
-  padding: 1rem;
-}
-
-.wallet-activity article:first-child {
-  border-top: 0;
-}
-
-.wallet-activity__icon {
-  align-items: center;
-  background: rgb(var(--overlay-rgb) / 5%);
-  border-radius: 12px;
-  display: flex;
-  height: 42px;
-  justify-content: center;
-  width: 42px;
-}
-
-.wallet-activity__icon--prize {
-  background: var(--td-energy-wash);
-  color: var(--td-energy-ink);
-}
-
-.wallet-activity__icon--refund {
-  background: rgb(var(--positive-rgb) / 10%);
-  color: var(--color-positive);
-}
-
-.wallet-activity article > span:nth-child(2) {
-  display: flex;
-  flex-direction: column;
-}
-
-.wallet-activity strong {
-  font-size: 0.76rem;
-}
-
-.wallet-activity small {
-  color: var(--td-text-3);
-  font-size: 0.75rem;
-}
-
-.wallet-activity article > .duna-numeric {
-  text-align: right;
-}
-
-.wallet-activity article.wallet-activity__empty {
-  grid-template-columns: auto 1fr;
-  min-height: 92px;
-}
-
-.wallet-activity__empty > span:nth-child(2) {
-  justify-content: center;
-}
-
-.wallet-note {
-  align-items: flex-start;
-  background: rgb(var(--accent-rgb) / 6%);
-  border: 1px solid rgb(var(--accent-rgb) / 15%);
-  border-radius: 18px;
-  color: var(--color-aqua);
-  display: flex;
-  gap: 0.8rem;
-  margin-top: 1rem;
-  padding: 1rem;
-}
-
-.wallet-note strong {
-  color: var(--color-bone);
-  font-size: 0.76rem;
-}
-
-.wallet-note p {
-  color: var(--color-bone-muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  margin: 0.3rem 0 0;
 }
 
 /* Court booking */
@@ -32991,22 +32534,6 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .wallet-balance-card {
-    min-height: 310px;
-  }
-
-  .wallet-activity article {
-    grid-template-columns: auto 1fr auto;
-  }
-
-  .wallet-activity .duna-badge {
-    display: none;
-  }
-
-  .wallet-activity article > .duna-numeric {
-    font-size: 0.75rem;
-  }
-
   .court-choice-grid,
   .court-booking-fields {
     grid-template-columns: 1fr;
@@ -33044,8 +32571,7 @@ a {
 .ask-duna__avatar,
 .ask-duna__message--user,
 .ask-duna__composer button,
-.pickup-prompt > a,
-.wallet-balance-card {
+.pickup-prompt > a {
   color: var(--color-on-primary);
 }
 
@@ -38992,71 +38518,6 @@ button.selected > .choice-radio {
   grid-row: 1 / span 2;
 }
 
-.prediction-wallet-section {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  overflow: visible;
-  padding-inline: 0;
-}
-
-.prediction-wallet-summary small,
-.prediction-wallet-summary p,
-.prediction-wallet-positions small,
-.prediction-wallet-positions span {
-  font-size: 0.875rem;
-}
-
-.prediction-wallet-summary p {
-  line-height: 1.55;
-}
-
-.prediction-wallet-positions > section {
-  background: var(--color-surface);
-}
-
-.prediction-wallet-position-row {
-  align-items: center;
-  color: inherit;
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  min-height: 92px;
-  padding: 0.9rem;
-  text-decoration: none;
-}
-
-.prediction-wallet-position-row + .prediction-wallet-position-row {
-  border-top: 1px solid var(--color-line);
-}
-
-.prediction-wallet-position-row:hover {
-  background: color-mix(in srgb, #e8f2f6 55%, var(--color-surface));
-}
-
-.prediction-wallet-position-row > div {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.prediction-wallet-position-row > div:first-child strong {
-  font-size: 0.9rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.prediction-wallet-position-row .duna-numeric {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  text-align: right;
-}
-
-.prediction-wallet-position-row > svg {
-  color: var(--color-bone-muted);
-}
-
 .pro-event-content {
   max-width: 1480px;
 }
@@ -39251,29 +38712,6 @@ button.selected > .choice-radio {
 
   .tournament-markets__quotes button {
     flex: 1;
-  }
-
-  .prediction-wallet-position-row {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-  }
-
-  .prediction-wallet-position-row > svg {
-    display: none;
-  }
-
-  .prediction-wallet-position-row .duna-badge {
-    grid-column: 2;
-  }
-
-  .prediction-wallet-section .dashboard-section__heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.55rem;
-  }
-
-  .prediction-wallet-section .dashboard-section__heading > p {
-    line-height: 1.45;
-    margin: 0;
   }
 }
 
@@ -39627,16 +39065,6 @@ button.selected > .choice-radio {
 .wallet-section-nav small {
   color: var(--color-bone-muted);
   font-size: 0.75rem;
-}
-
-.prediction-wallet-section .dashboard-section__heading > a {
-  align-items: center;
-  color: var(--color-aqua-deep);
-  display: inline-flex;
-  font-size: 0.88rem;
-  font-weight: 800;
-  gap: 0.35rem;
-  text-decoration: none;
 }
 
 .prediction-portfolio-page {

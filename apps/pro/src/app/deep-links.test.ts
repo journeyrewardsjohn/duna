@@ -83,11 +83,11 @@ describe("every link lands in the new shell", () => {
     expect(land("duna-pro://messages")?.window?.key).toBe("messages");
   });
 
-  it("the coach-day Live Activity opens the session in Schedule", () => {
+  it("the coach-day Live Activity opens the session screen in the tab showing", () => {
     expect(land("duna-pro://session/s1")).toMatchObject({
-      tab: "schedule",
+      tab: "today",
       window: null,
-      pane: { key: "calendar", entryId: "s1" },
+      pane: { key: "session", entryId: "s1" },
     });
   });
 

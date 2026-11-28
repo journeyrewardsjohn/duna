@@ -105,6 +105,48 @@ describe("route table", () => {
     expect(routesForTab("money")).toEqual(["money", "getPaid"]);
     expect(routesForTab("schedule")).toEqual(["calendar", "checkin", "events"]);
   });
+
+  it("the session (M-R2) opens where it was chosen; attendance covers the window, not live", () => {
+    expect(ROUTES.session).toMatchObject({
+      tab: null,
+      presentation: "pane",
+      legacy: false,
+      listed: false,
+    });
+    expect(ROUTES.attendance).toMatchObject({
+      tab: null,
+      presentation: "window",
+      legacy: false,
+      live: false,
+    });
+    let state = shellReducer(initialShellState(), {
+      type: "select-tab",
+      tab: "schedule",
+    });
+    state = shellReducer(state, {
+      type: "open",
+      route: "session",
+      entryId: "s1",
+    });
+    expect(state.tab).toBe("schedule");
+    expect(state.stacks.schedule).toMatchObject({
+      key: "session",
+      entryId: "s1",
+    });
+    state = shellReducer(state, {
+      type: "open",
+      route: "attendance",
+      entryId: "s1",
+    });
+    expect(state.window).toMatchObject({
+      from: "schedule",
+      entry: { key: "attendance", entryId: "s1" },
+    });
+    // Closing attendance returns to the session it came from.
+    state = shellReducer(state, { type: "close-window" });
+    expect(state.window).toBeNull();
+    expect(state.stacks.schedule?.key).toBe("session");
+  });
 });
 
 describe("shell reducer", () => {
