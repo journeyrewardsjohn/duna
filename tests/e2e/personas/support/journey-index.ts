@@ -73,6 +73,14 @@ const expandRange = (prefix: string, from: string, to: string) => {
 };
 
 /**
+ * New packages named by the "Assigned gaps" table in
+ * docs/plan/persona-journeys.md. FAM is family and household (web and the
+ * Player app); H15 is the health consent screens (the server part shipped
+ * in H1). Move an id out of this list when the plan tables list it.
+ */
+export const assignedPackages = ["FAM", "H15"] as const;
+
+/**
  * Work-package ids from docs/plan/web-hq-backend.md (unprefixed) and
  * docs/plan/mobile.md (written `M-<id>` outside that file, per
  * docs/plan/README.md).
@@ -94,6 +102,9 @@ export function readPlanPackageIds(): Set<string> {
       expandRange(prefix, from, to).forEach((id) => ids.add(id));
   }
   if (/\bW3-0\b/.test(web)) ids.add("W3-0");
+  // Packages assigned in docs/plan/persona-journeys.md ("Assigned gaps") that
+  // the plan tables do not list yet.
+  for (const id of assignedPackages) ids.add(id);
 
   const mobile = readFileSync(
     path.join(repoRoot, "docs/plan/mobile.md"),

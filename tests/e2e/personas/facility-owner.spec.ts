@@ -37,7 +37,7 @@ test.describe("FO-3 Stop play", () => {
 });
 
 test.describe("FO-4 Players reach the facility", () => {
-  test.fixme("FO-4.1 A player finds the facility and requests access on the web [GAP]", async () => {});
+  test.fixme("FO-4.1 A player finds the facility and requests access on the web [B9, P3]", async () => {});
   test("FO-4.2 Today opens for the facility's operator", async ({ page }) => {
     await openHqArea(page, "Today");
   });

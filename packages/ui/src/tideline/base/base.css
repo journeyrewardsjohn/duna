@@ -201,8 +201,9 @@
 
     /*
      * 24 grid, 1.75 stroke, square ends, mitred joins. Sizes: 14 in chips and
-     * dense rows, 16 inline (sm), 20 in buttons, rows and inputs (default),
-     * 24 in navigation (lg).
+     * dense rows (chip), 16 inline, 20 in buttons, rows and inputs (control, the
+     * default), 24 in navigation (nav). `Icon` in `packages/ui/src/icons` sets the
+     * same values inline; these classes keep them true when a page resets svg.
      */
 
     .td-icon {
@@ -219,6 +220,11 @@
     .td-icon--lg {
       width: var(--td-size-icon-nav);
       height: var(--td-size-icon-nav);
+    }
+
+    .td-icon--chip {
+      width: var(--td-size-icon-chip);
+      height: var(--td-size-icon-chip);
     }
 
     @media (max-width: 599px) {

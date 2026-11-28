@@ -407,9 +407,55 @@
   align-content: end;
 }
 
-.iconChip {
-  width: var(--td-size-icon-chip);
-  height: var(--td-size-icon-chip);
+.iconSheets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--td-space-4);
+  align-items: start;
+}
+
+.iconSheet {
+  display: grid;
+  gap: var(--td-space-4);
+  padding: var(--td-space-4);
+  border: 1px solid var(--td-line);
+  border-radius: var(--td-radius-lg);
+}
+
+.iconFamily {
+  display: grid;
+  gap: var(--td-space-2);
+}
+
+.iconFamily h3 {
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.iconGlyphs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: var(--td-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.iconGlyph {
+  display: grid;
+  gap: var(--td-space-1);
+  align-content: start;
+  min-width: 0;
+}
+
+.iconGlyph .td-code {
+  overflow-wrap: anywhere;
+}
+
+.iconSizesRow {
+  display: flex;
+  align-items: center;
+  gap: var(--td-space-2);
 }
 
 .motion {
@@ -517,6 +563,10 @@
 
 @media (max-width: 599px) {
   .typeRole {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .iconSheets {
     grid-template-columns: minmax(0, 1fr);
   }
 

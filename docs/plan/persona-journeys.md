@@ -313,6 +313,24 @@ Steps no package in either plan delivers:
    `player.facility`; no web UI package requests access.
 7. **Stop play from Pro** (FO-3.n): not in the Pro plan.
 
+## Assigned gaps
+
+The orchestrator's assignment of the seven gaps above (27 November 2026). The
+matching `test.fixme` titles in `tests/e2e/personas/` now end in these ids, and
+`fixme-owners.spec.ts` accepts `FAM` and `H15` through `assignedPackages` in
+`tests/e2e/personas/support/journey-index.ts` until the plan tables list them.
+
+| Step   | Gap                                       | Package                  | Notes                                                                                                                                                                |
+| ------ | ----------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PA-1.2 | Add a junior                              | FAM (new)                | Family and household, on the web and in the Player app                                                                                                               |
+| PA-1.3 | Invite a second guardian                  | FAM (new)                | Same package                                                                                                                                                         |
+| PA-2.2 | Choose the junior at checkout             | P5 with FAM              | P5 rebuilds booking; FAM supplies the dependents                                                                                                                     |
+| PA-4.1 | Junior health-sharing consent             | H15 (new)                | Health consent screens. The server part shipped in H1: ages 13 and over, guardian approval, US only. (`H2` is already the Schedule package, so the new id is `H15`.) |
+| PA-5.1 | Player-side cancel with refund            | P5 with B2               | Refund rules in `payout-policy.md` and `apps/web/content/legal/booking-and-refunds.md`                                                                               |
+| PA-6.1 | Junior waivers                            | FAM with H11             | `/waivers/complete` exists                                                                                                                                           |
+| FO-4.1 | A player asks a facility for access (web) | B9 with a new page in P3 | B9 adds `player.facility`; the web page belongs to P3's area                                                                                                         |
+| FO-3.n | Stop play from the coach app              | M-R2                     | Native step, not counted in the coverage table                                                                                                                       |
+
 ## Defects the checks found on `main`
 
 Found in demo mode by the persona suite and its probe of every HQ and web route
