@@ -67,9 +67,12 @@ It generates
 manifest with `search_duna_feature_knowledge` when someone asks what Duna can do
 or how a feature is used or managed.
 
-The pull-request verification workflow runs `pnpm knowledge:check`. If a change
-to the source guides or API procedures makes the committed manifest stale, CI
-fails with the command required to regenerate it. The generated fingerprint is
+The manifest is generated on demand and is not committed (it is git-ignored),
+so pull requests never conflict on it. It is regenerated on `pnpm install` and
+as a turbo dependency of build, typecheck, lint, test and dev, and before each
+app build. `pnpm knowledge:check` verifies that generation succeeds, is
+deterministic and well formed, and that the output has not been committed. The
+generated fingerprint is
 also returned with feature searches so runtime traces can identify the exact
 knowledge revision used by a deployment.
 
@@ -77,7 +80,7 @@ When adding or materially changing a feature:
 
 1. implement the typed server operation and role boundary;
 2. update the owning surface guide and the product acceptance matrix;
-3. run `pnpm knowledge:generate`;
+3. nothing to regenerate: the manifest is built on demand;
 4. add a golden prompt/action test for the new user intent;
 5. run `pnpm knowledge:check` and the affected package tests;
 6. deploy the exact reviewed commit and verify the signed-in role that should be

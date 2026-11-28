@@ -38,6 +38,7 @@
     "verify:design-system": "tsx scripts/verify-design-system.ts",
     "verify:readable-type": "tsx scripts/verify-readable-type.ts",
     "verify:single-react-types": "tsx scripts/verify-single-react-types.ts",
+    "postinstall": "tsx scripts/generate-duna-feature-knowledge.ts",
     "knowledge:generate": "tsx scripts/generate-duna-feature-knowledge.ts",
     "knowledge:check": "tsx scripts/generate-duna-feature-knowledge.ts --check",
     "tideline:tokens": "tsx scripts/build-tideline-tokens.ts",
