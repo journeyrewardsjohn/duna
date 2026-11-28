@@ -68,6 +68,8 @@ async function handle(request: Request, { params }: Route) {
             records: [],
           });
       }
+      // Writes still refuse a foreign origin before saying anything else.
+      if (request.method !== "GET") assertAskDunaOrigin(request);
       return json({ error: notConfigured.message, ...notConfigured }, 503);
     }
     if (request.method !== "GET") assertAskDunaOrigin(request);
