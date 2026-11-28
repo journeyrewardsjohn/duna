@@ -202,7 +202,11 @@ export function operatorPanelHref(panel: OperatorPanel): string {
  * turns them into in-page filters.
  */
 export const productNavigationItems = [
-  { slug: "all-products", label: "All offerings", href: hqModuleHref("offerings") },
+  {
+    slug: "all-products",
+    label: "All offerings",
+    href: hqModuleHref("offerings"),
+  },
   {
     slug: "services",
     label: "Services",

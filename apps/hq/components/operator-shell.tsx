@@ -9,6 +9,7 @@ import {
   Menu,
   MessageCircle,
   Search,
+  Settings2,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -147,10 +148,25 @@ export async function OperatorShell({
                     <span>{item.label}</span>
                   </Link>
                 ))}
+              <Link
+                className={active === "settings" ? "active" : undefined}
+                href={operatorModuleHref("settings")}
+              >
+                <Settings2 aria-hidden size={18} />
+                <span>Settings</span>
+              </Link>
             </div>
           </details>
         </nav>
         <div className="hq-sidebar__meta">
+          <Link
+            aria-current={active === "settings" ? "page" : undefined}
+            href={operatorModuleHref("settings")}
+            title="Settings"
+          >
+            <Settings2 aria-hidden size={18} />
+            <span>Settings</span>
+          </Link>
           <Link aria-label="Open Duna Admin" href="/admin" title="Duna Admin">
             <ShieldCheck aria-hidden size={18} />
             <span>Admin</span>

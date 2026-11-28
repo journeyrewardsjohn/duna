@@ -340,14 +340,14 @@ for each persona. Each is recorded with its owner in
 | Page                                  | Evidence                                                                                                       | Owner  |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------ |
 | Every HQ page                         | `GET /api/ask-duna/conversations` answers 401 to the demo actor; the console logs an error on every page       | S1     |
-| HQ `/messages`, web `/app/messages`   | `GET /api/messaging/updates` answers 503 in demo mode instead of an honest "live updates not configured" state | H3, P7 |
+| HQ `/inbox`, web `/app/messages`      | `GET /api/messaging/updates` answers 503 in demo mode instead of an honest "live updates not configured" state | H3, P7 |
 | Web `/discover/map`                   | `GET /api/mapbox/token` answers 503 without a token, instead of a normal "not configured yet" response         | C3     |
-| HQ `/promo-codes`                     | "This page couldn't load": a Server Components error for every persona                                         | H13    |
+| HQ `/marketing/promo-codes`           | "This page couldn't load": a Server Components error for every persona                                         | H13    |
 | Web `/app/video`                      | "This page couldn't load": a Server Components error (React error 419 for the player)                          | P9     |
-| HQ `/payments/*` as a coach           | "This page couldn't load" instead of a permission-denied state                                                 | H10    |
+| HQ `/money/*` as a coach              | "This page couldn't load" instead of a permission-denied state                                                 | H10    |
 | Every HQ page as a player or guardian | "This page couldn't load" instead of "You need access" (a member who is not staff)                             | S1     |
 | HQ `/training/practice-plans/create`  | Block search field has no accessible name                                                                      | H7     |
-| HQ `/audiences`                       | Search field has no accessible name                                                                            | H13    |
+| HQ `/marketing/audiences`             | Search field has no accessible name                                                                            | H13    |
 | HQ `/ask`, `/account`                 | No main landmark                                                                                               | S1     |
 
 Not counted as app defects: third-party CDN fonts (the legacy Satoshi and DM

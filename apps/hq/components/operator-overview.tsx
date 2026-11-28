@@ -493,9 +493,7 @@ export function OperatorOverview({
                       title: topAlert.title,
                       detail: topAlert.detail,
                       href:
-                        topAlert.id === "stripe"
-                          ? "/money/setup"
-                          : "/schedule",
+                        topAlert.id === "stripe" ? "/money/setup" : "/schedule",
                     },
                   ]
                 : nearlyFull[0]

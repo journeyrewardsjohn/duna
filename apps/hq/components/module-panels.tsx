@@ -1272,7 +1272,10 @@ export function ModulePanel({
                 : module === "team"
                   ? { href: hqRoutes.teamInvite, label: "Invite team member" }
                   : module === "marketing"
-                    ? { href: hqRoutes.marketingCreate, label: "Create campaign" }
+                    ? {
+                        href: hqRoutes.marketingCreate,
+                        label: "Create campaign",
+                      }
                     : module === "money"
                       ? { href: hqRoutes.moneySetup, label: "Configure money" }
                       : module === "schedule"
@@ -1331,9 +1334,7 @@ export function ModulePanel({
         </nav>
       )}
 
-      {(module === "events" ||
-        module === "leagues" ||
-        module === "money") && (
+      {(module === "events" || module === "leagues" || module === "money") && (
         <TicketApprovalQueue approvals={ticketApprovals} />
       )}
 

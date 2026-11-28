@@ -67,9 +67,9 @@ describe("HQ route map", () => {
   it("fails for an entry whose page.tsx does not exist", () => {
     // The first check above is what keeps entries honest; prove it bites.
     const withGhost = [...templates, "/no-such-hq-page"];
-    expect(withGhost.filter((template) => !filesystem.has(template))).toEqual(
-      ["/no-such-hq-page"],
-    );
+    expect(withGhost.filter((template) => !filesystem.has(template))).toEqual([
+      "/no-such-hq-page",
+    ]);
   });
 
   it("keeps no address the IA retired (docs/plan/s2-route-map.md)", () => {

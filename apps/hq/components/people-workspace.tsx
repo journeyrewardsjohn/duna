@@ -305,10 +305,7 @@ export function PeopleWorkspace({
             </header>
             <div>
               {needsAttention.slice(0, 4).map((person) => (
-                <Link
-                  href={`/people/${person.personId}`}
-                  key={person.personId}
-                >
+                <Link href={`/people/${person.personId}`} key={person.personId}>
                   <span>{initials(person.displayName)}</span>
                   <span>
                     <strong>{person.displayName}</strong>

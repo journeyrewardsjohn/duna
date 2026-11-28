@@ -275,11 +275,7 @@ export default async function OrganizationMessagesPage({
               <strong>Inbox</strong>
               {inbox.totalUnread > 0 && <i>{inbox.totalUnread}</i>}
             </header>
-            <form
-              action="/inbox"
-              className={styles.inboxSearch}
-              role="search"
-            >
+            <form action="/inbox" className={styles.inboxSearch} role="search">
               <input type="hidden" name="filter" value={activeFilter} />
               <input type="hidden" name="view" value="inbox" />
               <input
