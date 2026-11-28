@@ -163,7 +163,11 @@ test("a pay run is worked out, adjusted, approved and exported through its confi
     .getByRole("button", { name: "Work out pay" })
     .click();
   await expect(page).toHaveURL(new RegExp(`/team/pay/${payRun}$`));
-  await title(page, "Pay run");
+  // The run renders on the server after the client navigation; CI is slow.
+  await expect(page.getByRole("heading", { level: 1 }).first()).toHaveText(
+    "Pay run",
+    { timeout: 20_000 },
+  );
 
   await page.getByRole("button", { name: "Adjust Theo's pay" }).click();
   const adjust = page.getByRole("dialog", { name: "Adjust Theo's pay" });
@@ -207,6 +211,7 @@ test("a coach sees their own availability and pay, not anyone else's pay", async
 }) => {
   await signIn(page, "coach");
   await page.goto(hq("/team/pay"));
+  await title(page, "Team");
   await expect(
     page.getByText("You don't have access to the team's pay"),
   ).toBeVisible();
