@@ -8,6 +8,7 @@ import {
 import { tokenEasing } from "./easing";
 import { useReducedMotion } from "./reduced-motion";
 import { rallyDelay, verbTiming } from "./timing";
+import { runWithWatchdog, settleValues } from "./watchdog";
 
 export type RiseEdge = "bottom" | "top" | "left" | "right";
 
@@ -72,8 +73,10 @@ export function Rise({
       easing: tokenEasing("rise"),
       useNativeDriver: true,
     });
-    animation.start();
-    return () => animation.stop();
+    return runWithWatchdog(animation, {
+      timeline: delay + timing.duration,
+      settle: settleValues([[progress, 1]]),
+    });
   }, [appear, delay, progress, reduceMotion, trigger]);
 
   const horizontal = from === "left" || from === "right";
@@ -182,8 +185,10 @@ export function Cross({
       easing: tokenEasing("cross"),
       useNativeDriver: true,
     });
-    animation.start();
-    return () => animation.stop();
+    return runWithWatchdog(animation, {
+      timeline: timing.duration,
+      settle: settleValues([[progress, 1]]),
+    });
   }, [crossKey, progress, reduceMotion]);
 
   const distance = Math.max(48, width * 0.32);

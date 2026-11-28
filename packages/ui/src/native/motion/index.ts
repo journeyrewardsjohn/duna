@@ -14,6 +14,12 @@ export {
 } from "./timing";
 export { tokenEasing } from "./easing";
 export {
+  runWithWatchdog,
+  settleValues,
+  WATCHDOG_SLACK_MS,
+  type WatchdogOptions,
+} from "./watchdog";
+export {
   HapticsProvider,
   hapticsFor,
   useHaptics,
