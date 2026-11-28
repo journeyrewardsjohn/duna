@@ -8,8 +8,8 @@ import { DUNA_HQ_SIGNUP_URL, DUNA_HQ_URL } from "@/lib/site-urls";
 export const siteLinks = {
   home: "/",
   findGame: "/discover",
-  /** The discovery page that reads Where · When · What from its address. */
-  searchResults: "/discover/results",
+  /** The find-a-game page reads Where · When · What from its address. */
+  searchResults: "/discover",
   /** Add a score and where you played, no account needed (SITE-3). */
   addScore: "/add-score",
   forClubs: "/run-your-club",

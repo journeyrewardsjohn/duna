@@ -10,7 +10,8 @@
     "./eligibility": "./src/eligibility.ts",
     "./flags": "./src/flags.ts",
     "./providers": "./src/providers.ts",
-    "./hq-routes": "./src/hq-routes.ts"
+    "./hq-routes": "./src/hq-routes.ts",
+    "./training-scene": "./src/training-scene/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

@@ -221,6 +221,10 @@ export const trainingDrillPurchases = pgTable(
     index("training_drill_purchase_buyer_org_idx").on(
       table.buyerOrganizationId,
     ),
+    // B5: a person's own purchases ("purchased" library tab, purchases list).
+    index("training_drill_purchase_buyer_person_idx")
+      .on(table.buyerPersonId)
+      .where(sql`${table.buyerPersonId} IS NOT NULL`),
     check(
       "training_drill_purchase_status_valid",
       oneOf(table.status, trainingDrillPurchaseStatuses),

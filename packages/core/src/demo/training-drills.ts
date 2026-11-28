@@ -7,6 +7,7 @@
  * creators are placeholders for the fictional demo club.
  */
 import { demoOrganization, demoPeople, demoPlayer } from "../demo";
+import { trainingSceneExamples } from "../training-scene";
 import { demoId } from "./ids";
 
 const id = (n: number) => demoId("training-drills", n);
@@ -143,9 +144,100 @@ export const trainingDrillsDemoSummaries = [
       focus: "Serving",
     },
   ),
+  ...(
+    [
+      ["partner-pepper", "Partner pepper", "club", "Ball control", 2, 8],
+      [
+        "serving-deep-targets",
+        "Serving to deep targets",
+        "club",
+        "Serving",
+        4,
+        10,
+      ],
+      ["dig-to-transition", "Dig to transition", "club", "Defence", 3, 12],
+      ["king-of-the-court", "King of the court", "club", "Games", 6, 20],
+      [
+        "indoor-receive-outside",
+        "Receive to outside attack",
+        "club",
+        "Serve-receive",
+        6,
+        15,
+      ],
+      ["short-serve-ladder", "Short serve ladder", "club", "Serving", 2, 10],
+      ["line-shot-reads", "Line shot reads", "club", "Defence", 3, 12],
+      ["setter-dump-drill", "Setter dump", "club", "Setting", 3, 10],
+      ["block-and-pull", "Block and pull", "club", "Blocking", 2, 15],
+      ["cut-shot-corners", "Cut shot corners", "club", "Attacking", 2, 12],
+      ["freeball-to-kill", "Free ball to kill", "club", "Transition", 4, 15],
+      ["wash-drill", "Wash drill", "club", "Games", 8, 20],
+      ["hand-set-ladder", "Hand-set ladder", "personal", "Setting", 1, 8],
+      ["serve-and-cover", "Serve and cover", "personal", "Serving", 2, 10],
+      ["two-ball-pepper", "Two-ball pepper", "personal", "Ball control", 3, 8],
+      ["sand-footwork", "Sand footwork circuit", "duna", "Warm-up", 1, 10],
+      [
+        "jump-landing-basics",
+        "Jump-landing basics",
+        "duna",
+        "Conditioning",
+        1,
+        8,
+      ],
+      ["shoulder-prep", "Shoulder prep", "duna", "Warm-up", 1, 6],
+      ["queen-of-the-court", "Queen of the court", "duna", "Games", 6, 20],
+      ["deep-dish-defence", "Deep dish defence", "duna", "Defence", 2, 12],
+      [
+        "option-attack-reads",
+        "Option attack reads",
+        "duna",
+        "Attacking",
+        2,
+        12,
+      ],
+      ["cool-down-mobility", "Cool-down mobility", "duna", "Cool-down", 1, 8],
+    ] as const
+  ).map(([slug, title, scope, focus, min, minutes], index) =>
+    drill(
+      101 + index,
+      slug,
+      title,
+      scope,
+      scope === "personal" ? "draft" : "published",
+      scope === "duna" ? "approved" : "not-submitted",
+      {
+        focus,
+        players: { min, max: Math.max(min, min * 2), recommended: min },
+        durationMinutes: minutes,
+        load: 30 + ((index * 7) % 50),
+        touches: 20 + index * 11,
+        jumps: (index * 5) % 40,
+        ...(scope === "duna"
+          ? { sourceLabel: "Duna library", author: undefined }
+          : scope === "personal"
+            ? { author: mara }
+            : {}),
+        usedInPlans: index % 3,
+      },
+    ),
+  ),
 ].map(({ author: drillAuthor, ...rest }) =>
   drillAuthor ? { ...rest, author: drillAuthor } : rest,
 );
+
+/** Example scenes from the drill studio; the invalid one names a missing spot. */
+function sceneDocument(
+  n: number,
+  validationStatus: "unchecked" | "valid" | "invalid",
+): Record<string, unknown> {
+  const base = trainingSceneExamples[n % trainingSceneExamples.length]!;
+  if (validationStatus !== "invalid") return { ...base };
+  const slots = (base.slots as readonly Record<string, unknown>[]).map(
+    (slot, index) =>
+      index === 0 ? { ...slot, spot: "outside-the-antenna" } : slot,
+  );
+  return { ...base, slots };
+}
 
 const scene = (
   n: number,
@@ -156,16 +248,8 @@ const scene = (
   id: id(n),
   drillVersionId,
   modelVersion: 2,
-  document: {
-    modelVersion: 2,
-    units: "metres-from-net-centre",
-    slots: [
-      { id: "S1", side: "far", x: 0, y: 7 },
-      { id: "P1", side: "near", x: -2, y: -5 },
-      { id: "P2", side: "near", x: 2, y: -5 },
-    ],
-    steps: [{ verb: "serve", from: "S1", to: "P1" }],
-  },
+  /** A real v2 scene (`@duna/core/training-scene`), so players can render it. */
+  document: sceneDocument(n, validationStatus),
   derived:
     validationStatus === "unchecked"
       ? {}
@@ -180,8 +264,8 @@ const scene = (
     validationStatus === "invalid"
       ? [
           {
-            rule: "ball-path-crosses-antenna",
-            message: "The serve passes outside the antenna.",
+            rule: "ref-spot",
+            message: 'Unknown spot "outside-the-antenna".',
           },
         ]
       : [],
@@ -197,6 +281,8 @@ export const trainingDrillsDemoScenes = [
   scene(41, id(20), "invalid", "ai"),
   scene(42, id(30), "valid", "converted"),
   scene(43, id(31), "unchecked", "coach"),
+  scene(44, id(32), "valid", "coach"),
+  scene(45, id(33), "valid", "converted"),
 ];
 
 const listing = (

@@ -19,13 +19,22 @@ export const hqRoutes = {
   /** Retired by the IA (its cards have homes); package B4 removes it. */
   activities: "/activities",
 
-  // People and play. People, Team, Events, Schedule, Marketing and
+  // People and play. People, Events, Schedule, Marketing and
   // Reports lists are served by the generic module page; see hqModuleHref.
   memberInvite: "/people/invite",
   member: "/people/[personId]",
   memberHealth: "/people/[personId]/health",
+  /** Team (H-TEAM): the roster, coverage, pay, and each member as an object. */
+  team: "/team",
   teamInvite: "/team/invite",
+  teamCoverage: "/team/coverage",
+  teamPay: "/team/pay",
+  teamPayRun: "/team/pay/[payRunId]",
   teamMember: "/team/[personId]",
+  teamMemberAvailability: "/team/[personId]/availability",
+  teamMemberSessions: "/team/[personId]/sessions",
+  teamMemberPay: "/team/[personId]/pay",
+  teamMemberAccess: "/team/[personId]/access",
   training: "/training",
   trainingDrillCreate: "/training/drills/create",
   trainingDrillCreateAdvanced: "/training/drills/create/advanced",
@@ -154,7 +163,6 @@ export const hqOperatorModuleSlugs = [
   "people",
   "reports",
   "schedule",
-  "team",
 ] as const;
 
 /** Admin module slugs served by apps/hq/app/admin/[module]/page.tsx. */

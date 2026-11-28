@@ -50,6 +50,8 @@ describe("route table", () => {
     expect(ROUTES.discover.legacy).toBe(false);
     for (const key of ["score", "result", "live", "performance"] as const)
       expect(ROUTES[key].legacy).toBe(false);
+    // The wallet was rebuilt by WALLET-2 and draws its own title.
+    expect(ROUTES.wallet).toMatchObject({ legacy: false, ownTitle: true });
     const legacy: RouteKey[] = [
       "coaches",
       "plans",
@@ -60,7 +62,6 @@ describe("route table", () => {
       "you",
       "messages",
       "ai",
-      "wallet",
       "predictions",
     ];
     for (const key of legacy) expect(ROUTES[key].legacy).toBe(true);

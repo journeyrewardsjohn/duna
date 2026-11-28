@@ -52,17 +52,8 @@ async function routeProxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.rewrite(markdown, { request: { headers } });
   }
 
-  if (
-    request.nextUrl.pathname === "/app/discover" ||
-    request.nextUrl.pathname.startsWith("/app/discover/")
-  ) {
-    const publicDiscover = request.nextUrl.clone();
-    publicDiscover.pathname = request.nextUrl.pathname.replace(
-      /^\/app\/discover/,
-      "/discover",
-    );
-    return NextResponse.redirect(publicDiscover);
-  }
+  // `/app/discover` is the signed-in twin of `/discover` (SITE-4): it is
+  // served in the Player shell, no longer redirected to the public page.
 
   if (!isWorkOSAuthKitConfigured()) {
     if (
