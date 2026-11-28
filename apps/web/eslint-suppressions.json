@@ -1,0 +1,27 @@
+{
+  "app/api/cron/health-retention/route.ts": {
+    "no-console": {
+      "count": 1
+    }
+  },
+  "app/api/stripe/webhook/route.ts": {
+    "no-console": {
+      "count": 1
+    }
+  },
+  "app/api/wallet/members/[token]/route.ts": {
+    "no-console": {
+      "count": 1
+    }
+  },
+  "app/api/wallet/passes/[token]/route.ts": {
+    "no-console": {
+      "count": 1
+    }
+  },
+  "app/app/settings/actions.ts": {
+    "no-console": {
+      "count": 3
+    }
+  }
+}

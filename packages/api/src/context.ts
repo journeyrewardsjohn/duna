@@ -10,6 +10,7 @@ import {
   people,
   playerSourceConnections,
 } from "@duna/db";
+import { log } from "@duna/observability";
 import { WorkOS, type User } from "@workos-inc/node";
 import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
@@ -636,9 +637,9 @@ export async function createApiContextFromRequest(
     });
     return createApiContext({ ...base, actor, useDemoActor: false });
   } catch (error) {
-    console.warn("WorkOS request authentication failed", {
+    log.warn("auth.request.unauthenticated", {
       requestId: base.requestId,
-      reason: error instanceof Error ? error.message : "Unknown error",
+      error,
     });
     return createApiContext({ ...base, useDemoActor: false });
   }

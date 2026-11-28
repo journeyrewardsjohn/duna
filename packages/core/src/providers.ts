@@ -176,6 +176,13 @@ export const providerRegistry = {
     requires: [["HIGGSFIELD_API_TOKEN"], ["HIGGSFIELD_WORKSPACE_ID"]],
     features: [],
   },
+  sentry: {
+    label: "Sentry (error reporting)",
+    productionNote:
+      "A Sentry organisation with a project for Web and one for HQ; each project's DSN in NEXT_PUBLIC_SENTRY_DSN on its Vercel project. Readable stack traces also need SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT at build time. Until the DSN is set, errors are still written to Duna's structured logs.",
+    requires: [["NEXT_PUBLIC_SENTRY_DSN", "SENTRY_DSN"]],
+    features: [],
+  },
 } as const satisfies Readonly<Record<string, ProviderDefinition>>;
 
 export type ProviderKey = keyof typeof providerRegistry;
