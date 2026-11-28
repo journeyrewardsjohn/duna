@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  contrastRatio,
-  NIGHT_COURT,
-  parseHexColor,
-  SALT,
-} from "./club-mark";
+import { contrastRatio, NIGHT_COURT, parseHexColor, SALT } from "./club-mark";
 import { encodeQr, qrPath } from "./qr";
 import {
   assignWalletArt,
