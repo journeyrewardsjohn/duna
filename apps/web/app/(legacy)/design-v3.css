@@ -3342,49 +3342,6 @@ body {
 }
 
 /* Profile settings — identity is curated, never a free-form picker. */
-.settings-identity-style {
-  padding: clamp(1rem, 3vw, 1.5rem);
-  border: 1px solid var(--hairline);
-  border-radius: 20px;
-  background: var(--surface-1);
-}
-
-.settings-player-accents {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-}
-
-.settings-player-accents button {
-  display: grid;
-  gap: 0.5rem;
-  min-width: 0;
-  padding: 0.65rem;
-  color: var(--text-2);
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface-2);
-  text-align: left;
-}
-
-.settings-player-accents button i {
-  display: block;
-  width: 100%;
-  height: 2.25rem;
-  border-radius: 8px;
-  background: var(--player-accent);
-}
-
-.settings-player-accents button[aria-pressed="true"] {
-  border-color: var(--text-1);
-  box-shadow: inset 0 0 0 1px var(--text-1);
-}
-
-.settings-player-accents button:disabled {
-  cursor: not-allowed;
-  opacity: 0.52;
-}
 
 /* Branded recovery surface — legible in either user theme. */
 .not-found-v3 {
@@ -3688,10 +3645,6 @@ body {
     border-radius: 12px 0 0 12px;
   }
 
-  .settings-player-accents {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .not-found-v3__stage {
     grid-template-columns: 1fr;
     min-height: 0;
@@ -3785,22 +3738,9 @@ body {
  * and meaningful data uses the full Archivo width system.
  */
 
-.calendar-picker,
-.calendar-picker__rail-shell,
-.calendar-picker__rail {
+.calendar-picker {
   min-width: 0;
   max-width: 100%;
-}
-
-.calendar-picker__pill > strong {
-  font-family: var(--font-data);
-  font-feature-settings: "tnum" 1;
-  font-variant-numeric: tabular-nums;
-  font-variation-settings:
-    "wdth" 94,
-    "wght" 800;
-  font-weight: 800;
-  letter-spacing: -0.02em;
 }
 
 .campaign-event-list__date .duna-numeric {
@@ -4425,14 +4365,6 @@ body {
 }
 
 @media (max-width: 560px) {
-  .calendar-picker__rail-shell {
-    grid-template-columns: 2.375rem minmax(0, 1fr) 2.375rem;
-  }
-
-  .calendar-picker__open {
-    grid-column: 1 / -1;
-  }
-
   .pro-player-team-card {
     grid-template-columns: minmax(6.5rem, 0.28fr) minmax(0, 1fr);
   }
