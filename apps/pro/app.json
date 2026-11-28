@@ -13,30 +13,54 @@
       "bundleIdentifier": "com.duna.pro",
       "appleTeamId": "4AMCKQA9GL",
       "icon": {
-        "light": "./assets/icon-light.png",
-        "dark": "./assets/icon.png",
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png",
         "tinted": "./assets/icon-tinted.png"
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSSupportsLiveActivities": true,
         "NSSupportsLiveActivitiesFrequentUpdates": true,
-        "NSCameraUsageDescription": "Duna Pro uses the camera to photograph products, scan check-ins, and support club operations.",
-        "NSMicrophoneUsageDescription": "Duna Pro uses the microphone only when a coach records a LiveKit session note.",
-        "NSPhotoLibraryUsageDescription": "Duna Pro uses selected photos for product and member media.",
-        "NSLocationWhenInUseUsageDescription": "Duna Pro uses location for secure in-person payment readers and, when you choose, a private session arrival reminder active only from 60 minutes before until 30 minutes after start time.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "After you choose a session arrival reminder, background location keeps the coach Lock Screen ETA current only during the private arrival window. Duna Pro stops it automatically 30 minutes after start.",
+        "NSCameraUsageDescription": "Duna Pro uses the camera to scan player and ticket codes at check-in and to photograph products and member media.",
+        "NSMicrophoneUsageDescription": "Duna Pro uses the microphone only when you record a voice note or talk during a live coaching session.",
+        "NSPhotoLibraryUsageDescription": "Duna Pro uses the photos you choose for products and member media.",
+        "NSLocationWhenInUseUsageDescription": "Duna Pro uses your location to connect to in-person payment readers and, when you choose, for a private arrival reminder from 60 minutes before until 30 minutes after a session starts.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Only after you choose a session arrival reminder, Duna Pro keeps your arrival time on the Lock Screen current in the background, during that window only. It stops on its own 30 minutes after the start.",
         "UIBackgroundModes": ["location", "remote-notification"],
-        "NSBluetoothAlwaysUsageDescription": "Duna Pro uses Bluetooth to connect to supported payment readers.",
-        "NSBluetoothPeripheralUsageDescription": "Duna Pro uses Bluetooth to connect to supported payment readers.",
-        "NSLocalNetworkUsageDescription": "Duna Pro uses the local network to connect to supported payment readers."
+        "NSBluetoothAlwaysUsageDescription": "Duna Pro uses Bluetooth to connect to supported card readers for in-person payments.",
+        "NSBluetoothPeripheralUsageDescription": "Duna Pro uses Bluetooth to connect to supported card readers for in-person payments.",
+        "NSLocalNetworkUsageDescription": "Duna Pro uses the local network to find and connect to supported card readers for in-person payments.",
+        "NSCalendarsUsageDescription": "Duna Pro reads the calendars you approve on this device so your personal commitments show beside your sessions. It does not add or change events.",
+        "NSCalendarsFullAccessUsageDescription": "Duna Pro reads the calendars you approve on this device so your personal commitments show beside your sessions. It does not add or change events."
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1", "0A2A.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1", "85F4.1"]
+          }
+        ]
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/monochrome-icon.png",
-        "backgroundColor": "#0D1114"
+        "backgroundColor": "#F4F2EC"
       },
       "package": "com.duna.pro",
       "permissions": [
@@ -59,8 +83,8 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "Duna Pro reads calendars you approve on this device so coaches can see personal commitments beside organization sessions.",
-          "remindersPermission": "Duna Pro does not add reminders without a coach choosing to do so."
+          "calendarPermission": "Duna Pro reads the calendars you approve on this device so your personal commitments show beside your sessions. It does not add or change events.",
+          "remindersPermission": false
         }
       ],
       [
@@ -77,8 +101,8 @@
       [
         "@config-plugins/react-native-webrtc",
         {
-          "cameraPermission": "Duna Pro uses the camera to photograph products and support club operations.",
-          "microphonePermission": "Duna Pro uses the microphone only when a coach records a LiveKit session note."
+          "cameraPermission": "Duna Pro uses the camera to scan player and ticket codes at check-in and to photograph products and member media.",
+          "microphonePermission": "Duna Pro uses the microphone only when you record a voice note or talk during a live coaching session."
         }
       ],
       [
@@ -86,44 +110,51 @@
         {
           "tapToPayCheck": true,
           "appDelegate": true,
-          "locationWhenInUsePermission": "Duna Pro uses location while connecting to secure in-person payment readers.",
-          "bluetoothAlwaysUsagePermission": "Duna Pro uses Bluetooth to connect to supported payment readers.",
-          "bluetoothPeripheralPermission": "Duna Pro uses Bluetooth to connect to supported payment readers.",
-          "localNetworkUsagePermission": "Duna Pro uses the local network to connect to supported payment readers."
+          "locationWhenInUsePermission": "Duna Pro uses your location to connect to in-person payment readers and, when you choose, for a private arrival reminder from 60 minutes before until 30 minutes after a session starts.",
+          "bluetoothAlwaysUsagePermission": "Duna Pro uses Bluetooth to connect to supported card readers for in-person payments.",
+          "bluetoothPeripheralPermission": "Duna Pro uses Bluetooth to connect to supported card readers for in-person payments.",
+          "localNetworkUsagePermission": "Duna Pro uses the local network to find and connect to supported card readers for in-person payments."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Duna Pro uses selected photos for product and member media.",
-          "cameraPermission": "Duna Pro uses the camera to photograph products and support club operations."
+          "photosPermission": "Duna Pro uses the photos you choose for products and member media.",
+          "cameraPermission": "Duna Pro uses the camera to scan player and ticket codes at check-in and to photograph products and member media.",
+          "microphonePermission": "Duna Pro uses the microphone only when you record a voice note or talk during a live coaching session."
         }
       ],
       [
         "expo-camera",
         {
-          "cameraPermission": "Duna Pro uses the camera to scan player registration and fan ticket QR codes at tournament gates."
+          "cameraPermission": "Duna Pro uses the camera to scan player and ticket codes at check-in and to photograph products and member media.",
+          "microphonePermission": "Duna Pro uses the microphone only when you record a voice note or talk during a live coaching session.",
+          "recordAudioAndroid": false
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Duna Pro uses location for secure in-person payment readers and, when you choose, a private session arrival reminder active only from 60 minutes before until 30 minutes after start time.",
-          "locationAlwaysAndWhenInUsePermission": "After you choose a session arrival reminder, background location keeps the coach Lock Screen ETA current only during the private arrival window. Duna Pro stops it automatically 30 minutes after start.",
+          "locationWhenInUsePermission": "Duna Pro uses your location to connect to in-person payment readers and, when you choose, for a private arrival reminder from 60 minutes before until 30 minutes after a session starts.",
+          "locationAlwaysAndWhenInUsePermission": "Only after you choose a session arrival reminder, Duna Pro keeps your arrival time on the Lock Screen current in the background, during that window only. It stops on its own 30 minutes after the start.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": true
+          "isAndroidForegroundServiceEnabled": true,
+          "locationAlwaysPermission": false,
+          "locationFullAccuracyPermission": false,
+          "motionUsagePermission": false
         }
       ],
       [
         "expo-splash-screen",
         {
-          "image": "./assets/duna-launch-poster-v3.png",
-          "resizeMode": "cover",
-          "backgroundColor": "#071625",
+          "image": "./assets/splash-blank.png",
+          "imageWidth": 64,
+          "resizeMode": "contain",
+          "backgroundColor": "#0E1A22",
           "dark": {
-            "image": "./assets/duna-launch-poster-v3.png",
-            "backgroundColor": "#071625"
+            "image": "./assets/splash-blank.png",
+            "backgroundColor": "#0E1A22"
           }
         }
       ],
@@ -165,7 +196,12 @@
           ]
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       "expo-sqlite",
       "expo-status-bar",
       "expo-video",

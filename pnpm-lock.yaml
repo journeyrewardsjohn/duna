@@ -190,6 +190,9 @@ importers:
       '@duna/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@duna/tideline-core':
+        specifier: workspace:*
+        version: link:../../packages/tideline-core
       '@duna/ui':
         specifier: workspace:*
         version: link:../../packages/ui

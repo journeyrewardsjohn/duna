@@ -1,3 +1,4 @@
+import { View } from "react-native";
 import { installReactNativeErrorHandler } from "@duna/observability";
 import {
   AppErrorBoundary,
@@ -9,7 +10,6 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SplashScreen from "expo-splash-screen";
 import { useState } from "react";
-import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { PlayerRuntimeProvider } from "../../runtime";
 import { hapticsAdapter } from "./haptics-adapter";
