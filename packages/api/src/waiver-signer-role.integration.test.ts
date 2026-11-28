@@ -2,7 +2,7 @@
  * WAIVER-FIX: a guardian's waiver signature for a junior (signer role
  * "parent-or-guardian", 18 characters) and a teen's own acknowledgement
  * ("player-acknowledgement", 22) are stored through the real service path
- * and read back. Before migration 0124 `waiver_executions.signer_role` was
+ * and read back. Before migration 0123 `waiver_executions.signer_role` was
  * varchar(16) and both inserts failed.
  *
  * Also guards the whole defect class: every `column IN (...)` CHECK in the

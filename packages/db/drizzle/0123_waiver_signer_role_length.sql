@@ -1,0 +1,1 @@
+ALTER TABLE "waiver_executions" ALTER COLUMN "signer_role" SET DATA TYPE varchar(32);
