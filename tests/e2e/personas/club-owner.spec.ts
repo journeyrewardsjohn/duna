@@ -144,11 +144,16 @@ test.describe("CO-7 See a booking arrive", () => {
     page,
   }) => {
     await openHqArea(page, "Today");
-    const session = page.getByRole("link", {
-      name: /Sunset doubles training.*open session operations/,
-    });
-    await expect(session).toBeVisible();
-    await expect(session.getByText(/\d+ of \d+ joined/)).toBeVisible();
+    const row = page
+      .getByRole("region", { name: "Schedule" })
+      .locator("li.today-row")
+      .filter({ hasText: "Sunset doubles training" });
+    await expect(
+      row.getByRole("link", { name: "Sunset doubles training", exact: true }),
+    ).toBeVisible();
+    await expect(
+      row.getByRole("progressbar", { name: /\d+ of \d+ joined/ }),
+    ).toBeVisible();
   });
   test("CO-7.2 Schedule shows the day by court and by coach", async ({
     page,

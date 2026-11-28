@@ -65,10 +65,9 @@ test("the shell renders with its landmarks at desktop and phone width", async ({
   const sidebar = page.getByRole("navigation", { name: "Duna HQ" });
   await expect(sidebar).toBeVisible();
   await expect(sidebar.locator("a[data-nav-id]")).toHaveCount(13);
-  await expect(sidebar.getByRole("link", { name: "Today" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(
+    sidebar.getByRole("link", { name: "Today", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
   await expect(
     page.getByRole("button", { name: /Switch club\. Current:/ }),
   ).toBeVisible();
@@ -180,7 +179,7 @@ test("a page not rebuilt yet opens from the new shell, and Today opens from it",
   await expect(page.locator(".hqs")).toHaveCount(0);
   await page
     .getByRole("navigation", { name: "Operator modules" })
-    .getByRole("link", { name: "Today" })
+    .getByRole("link", { name: "Today", exact: true })
     .click();
   await expect(page).toHaveURL(hq("/"));
   await expect(

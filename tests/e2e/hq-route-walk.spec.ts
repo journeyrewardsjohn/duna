@@ -204,12 +204,6 @@ const knownFailures: Readonly<Record<string, string>> = {
     "H9: operator.activityDetail needs the connected database in demo mode.",
   [extraPaths[hqRoutes.memberHealth]!]:
     "H4: operator.memberHealthProfile needs the connected database in demo mode.",
-  [extraPaths[hqRoutes.stripeReturn]!]:
-    "H10: Duna Pay return calls WorkOS withAuth, which is not configured in demo mode.",
-  [extraPaths[hqRoutes.adminMessagingSafety]!]:
-    "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
-  [extraPaths[hqRoutes.adminSupport]!]:
-    "Unassigned (Super Admin access state; no package yet): throws for any actor without the Super Admin role instead of the access-denied state.",
   [extraPaths[hqRoutes.adminOrganization]!]:
     "Unassigned (Super Admin; no package yet): needs a platform role and a connected organization record.",
 };

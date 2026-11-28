@@ -19,7 +19,10 @@ test.describe("CH-2 See today", () => {
   test("CH-2.1 Today lists the day's sessions", async ({ page }) => {
     await openHqArea(page, "Today");
     await expect(
-      page.getByRole("link", { name: /open session operations/ }).first(),
+      page
+        .getByRole("region", { name: "Schedule" })
+        .locator("li.today-row")
+        .first(),
     ).toBeVisible();
   });
   test("CH-2.2 Schedule shows the day by coach", async ({ page }) => {
@@ -36,9 +39,8 @@ test.describe("CH-3 Run and check in a session", () => {
   test("CH-3.1 Open the session from Today", async ({ page }) => {
     await openHqArea(page, "Today");
     await page
-      .getByRole("link", {
-        name: /Sunset doubles training.*open session operations/,
-      })
+      .getByRole("region", { name: "Schedule" })
+      .getByRole("link", { name: "Sunset doubles training", exact: true })
       .click();
     await expect(page).toHaveURL(/\/events\/[^/]+$/);
     await expect(

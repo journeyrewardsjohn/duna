@@ -1017,7 +1017,10 @@ test("HQ, admin, and AI changes preserve explicit control", async ({
     "/events/10000000-0000-4000-8000-000000000301",
   );
   await expect(
-    schedule.getByRole("progressbar", { name: "6 of 8 joined" }),
+    schedule
+      .locator("li.today-row")
+      .filter({ hasText: "Sunset doubles training" })
+      .getByRole("progressbar", { name: "6 of 8 joined" }),
   ).toBeVisible();
   const playerView = schedule.getByRole("link", { name: /Golden Hour 4s/ });
   await expect(playerView).toHaveAttribute(
