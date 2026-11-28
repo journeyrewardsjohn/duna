@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "pnpm --workspace-root run knowledge:generate",
     "dev": "next dev --port 3000",
+    "prebuild": "pnpm --workspace-root run knowledge:generate",
     "build": "next build",
     "start": "next start --port 3000",
     "lint": "eslint app components proxy.ts instrumentation.ts instrumentation-client.ts sentry.server.config.ts sentry.edge.config.ts",
