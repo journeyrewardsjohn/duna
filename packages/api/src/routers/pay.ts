@@ -9,9 +9,10 @@
  * `payments:read`; anything that changes money settings or answers a
  * dispute needs `payments:write` (owner).
  *
- * Every procedure returns its fixture from @duna/core/demo/pay in demo mode
- * and throws `notImplementedYet` otherwise until B2 lands the service in
- * ../services/pay/. No processor call is ever made from a stub.
+ * Every procedure returns its fixture from @duna/core/demo/pay in demo mode.
+ * Implemented procedures call ../services/pay/; the rest still throw
+ * `notImplementedYet` until B2 lands them. No processor call is ever made
+ * from a stub.
  */
 import { payDemo } from "@duna/core/demo/pay";
 import { TRPCError } from "@trpc/server";
@@ -47,6 +48,11 @@ import {
   payUpsertRefundPolicyInputSchema,
 } from "../contracts/pay";
 import { usesDemoData } from "../services/data-source";
+import {
+  listPayHolds,
+  listPayObligations,
+  loadPayObligationDetail,
+} from "../services/pay/read-model";
 import { notImplementedYet } from "./not-implemented";
 import { domainSeamStatus, domainSeamStatusSchema } from "./seam-status";
 
@@ -145,7 +151,7 @@ export const payOperatorRouter = router({
   obligations: read
     .input(payObligationsInputSchema)
     .output(payObligationsPageSchema)
-    .query(({ input }) => {
+    .query(({ ctx, input }) => {
       if (usesDemoData()) {
         return {
           items: payDemo.obligations.filter(
@@ -155,14 +161,14 @@ export const payOperatorRouter = router({
           ),
         };
       }
-      return notImplementedYet(DOMAIN, "obligations");
+      return listPayObligations(ctx.organizationId, input);
     }),
 
   /** One obligation with its release schedule, delivery events and refunds. */
   obligation: read
     .input(payObligationInputSchema)
     .output(payObligationDetailSchema)
-    .query(({ input }) => {
+    .query(({ ctx, input }) => {
       if (usesDemoData()) {
         const item = payDemo.obligations.find(
           (candidate) => candidate.id === input.obligationId,
@@ -170,12 +176,12 @@ export const payOperatorRouter = router({
         if (!item) throw new TRPCError({ code: "NOT_FOUND" });
         return item;
       }
-      return notImplementedYet(DOMAIN, "obligation");
+      return loadPayObligationDetail(ctx.organizationId, input.obligationId);
     }),
 
-  holds: read.output(z.array(payHoldSchema)).query(() => {
+  holds: read.output(z.array(payHoldSchema)).query(({ ctx }) => {
     if (usesDemoData()) return payDemo.holds;
-    return notImplementedYet(DOMAIN, "holds");
+    return listPayHolds(ctx.organizationId);
   }),
 
   reserves: read.output(z.array(payReserveSchema)).query(() => {

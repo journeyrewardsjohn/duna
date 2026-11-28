@@ -147,6 +147,24 @@ Invariants an integration must preserve:
   order belongs to whoever's wallet paid.
 - A dependent can see a session their guardian booked but cannot cancel it.
 
+## Duna Pay (`operator.pay`, owner B2)
+
+Shapes are frozen in `packages/api/src/contracts/pay.ts`; the model is in
+[`docs/money/duna-pay.md`](money/duna-pay.md). Reads need `payments:read`;
+writes need `payments:write` (owner). In demo mode every procedure returns
+its fixture from `@duna/core/demo/pay`.
+
+| Procedure        | Status              | Notes                                                                              |
+| ---------------- | ------------------- | ---------------------------------------------------------------------------------- |
+| `obligations`    | live                | Newest first, cursor `<createdAt>                                                  | <id>`, filter by `status`and`deliveryRule` |
+| `obligation`     | live                | Tranches, delivery facts, refunds, hold ids; `NOT_FOUND` outside the caller's club |
+| `holds`          | live                | Every hold on the club, newest first                                               |
+| other procedures | not implemented yet | `PRECONDITION_FAILED` "not configured yet" until the next B2 pull requests         |
+
+Payouts are created only by the hourly `/api/cron/money-payouts` job and the
+existing owner-confirmed manual payout, and only from releasable tranches
+(settled, delivered, not held).
+
 ## Safety invariants
 
 - Only complete doubles teams with four distinct people enter the backtest.
