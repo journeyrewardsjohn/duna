@@ -32,7 +32,40 @@ function sources(root: string): string[] {
 const WITH_CALLBACK =
   /\.start\(\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>|\.start\(\s*function/;
 
+// A native-driver animation started with a bare `.start()` leaves its end
+// state to the driver. Allowed only for the listed decorative files.
+const NATIVE = /useNativeDriver:\s*true/;
+const BARE_START = /\.start\(\)/;
+const DECORATIVE = [
+  "native/identity/CardArt.tsx", // looping light on a card, rests at 0
+  "native/loaders/loaders.tsx", // loops (rest visible); LaunchSequence mark build
+  "native/loaders/LaunchSequence.tsx", // mark build; the flip uses the watchdog
+];
+
 describe("motion never gates content", () => {
+  it("no native-driver animation is started with a bare `.start()` outside the decorative list", () => {
+    const offenders = roots
+      .flatMap(sources)
+      .filter((file) => !file.endsWith("motion/watchdog.ts"))
+      .filter((file) => !DECORATIVE.some((ok) => file.endsWith(ok)))
+      .filter((file) => {
+        const text = readFileSync(file, "utf8");
+        return NATIVE.test(text) && BARE_START.test(text);
+      })
+      .map((file) => relative(repo, file));
+    expect(offenders).toEqual([]);
+  });
+
+  it("no Reanimated worklet callbacks (withTiming / withSpring) in the kit or apps", () => {
+    const offenders = roots
+      .flatMap(sources)
+      .filter((file) =>
+        /with(Timing|Spring|Delay)\(/.test(readFileSync(file, "utf8")),
+      )
+      .map((file) => relative(repo, file));
+    expect(offenders).toEqual([]);
+  });
+
   it("no completion callback is passed to Animated .start() outside watchdog.ts", () => {
     const offenders = roots
       .flatMap(sources)

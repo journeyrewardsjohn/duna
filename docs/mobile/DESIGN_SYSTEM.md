@@ -160,13 +160,14 @@ behind the launch cover), so an app must be usable without the callback.
   calls `settle()` (`settleValues([[value, end]])` sets the end state) and
   runs `onFinish`, once. A late callback is ignored. It returns the cancel
   function for the effect cleanup.
-- `Rise`, `Rally`, `Cross`, `SearchBar`, `LaunchSequence`, the set-by-set and
+- `Rise`, `Rally`, `Cross`, `SearchBar`, `LaunchSequence`, `CardArrival`, `CardFlip`, `WalletStack`, the set-by-set and
   pull-to-refresh loaders use it. New motion parts must too.
-- Guard: `motion/motion-never-gates.test.ts` fails if any file in the native
-  kit or the two apps passes a completion callback to `.start(` directly. It
-  cannot tell a decorative animation from a gating one, so it checks the
-  callback form only; a bare `.start()` on a value that starts hidden is a
-  review item.
+- Guard: `motion/motion-never-gates.test.ts` fails if a file in the native kit
+  or the two apps passes a completion callback to `.start(`, starts a
+  native-driver animation with a bare `.start()` (decorative files are listed
+  with a reason), or uses Reanimated `withTiming` / `withSpring`. The kit uses
+  React Native's `Animated` only. It cannot tell a decorative animation from
+  a gating one, so a new listed exception is a review item.
 
 ## Loaders and first open
 
