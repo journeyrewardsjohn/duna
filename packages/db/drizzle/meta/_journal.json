@@ -862,6 +862,13 @@
       "when": 1795865923585,
       "tag": "0122_training_library_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1795869947115,
+      "tag": "0123_people_api",
+      "breakpoints": true
     }
   ]
 }
