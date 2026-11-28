@@ -1,5 +1,7 @@
 import { processWebsiteStripeEvent } from "./website-billing";
 import type Stripe from "stripe";
+import { report } from "@duna/observability";
+import { syncPayAccount } from "./services/pay/account";
 import {
   appliedFees,
   auditLog,
@@ -1365,6 +1367,18 @@ async function synchronizeConnectAccount(input: {
       createdAt: input.occurredAt,
     }),
   ]);
+  // Duna Pay: refresh the six-status account view HQ and the publish gate read.
+  try {
+    await syncPayAccount({
+      organizationId: organization.id,
+      now: input.occurredAt,
+    });
+  } catch (error) {
+    report(error, {
+      event: "pay.account.syncFailed",
+      fields: { organizationId: organization.id },
+    });
+  }
 }
 
 function connectAccountTransfersReady(

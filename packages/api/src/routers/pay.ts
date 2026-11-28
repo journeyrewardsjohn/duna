@@ -49,6 +49,14 @@ import {
 } from "../contracts/pay";
 import { usesDemoData } from "../services/data-source";
 import {
+  loadPayAccount,
+  loadPayPayoutSettings,
+  payPublishGate,
+  startPayOnboarding,
+  updatePayBusiness,
+  updatePayPayoutSettings,
+} from "../services/pay/account";
+import {
   listPayRecoveries,
   listPayReserves,
   requestPayReserveReview,
@@ -76,45 +84,61 @@ export const payOperatorRouter = router({
     .query(() => domainSeamStatus(DOMAIN)),
 
   /** The derived Duna Pay status, requirements and bank (DP-Status). */
-  account: read.output(payAccountSchema).query(() => {
+  account: read.output(payAccountSchema).query(({ ctx }) => {
     if (usesDemoData()) return payDemo.account;
-    return notImplementedYet(DOMAIN, "account");
+    return loadPayAccount(ctx.organizationId);
   }),
 
   /** Business facts confirmed on DP-Business. */
   updateBusiness: write
     .input(payUpdateBusinessInputSchema)
     .output(payAccountSchema)
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) {
         return {
           ...payDemo.account,
           business: { ...payDemo.account.business, ...input },
         };
       }
-      return notImplementedYet(DOMAIN, "updateBusiness");
+      return updatePayBusiness({
+        organizationId: ctx.organizationId,
+        ...input,
+        now: ctx.now,
+      });
     }),
 
   /** Open verification (hosted link or embedded session), DP-Verify. */
   startOnboarding: write
     .input(payStartOnboardingInputSchema)
     .output(payOnboardingSessionSchema)
-    .mutation(() => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) return payDemo.onboardingSession;
-      return notImplementedYet(DOMAIN, "startOnboarding");
+      return startPayOnboarding({
+        actor: ctx.actor,
+        organizationId: ctx.organizationId,
+        method: input.method,
+        returnPath: input.returnPath,
+        requestId: ctx.requestId,
+        now: ctx.now,
+      });
     }),
 
-  payoutSettings: read.output(payPayoutSettingsSchema).query(() => {
+  payoutSettings: read.output(payPayoutSettingsSchema).query(({ ctx }) => {
     if (usesDemoData()) return payDemo.payoutSettings;
-    return notImplementedYet(DOMAIN, "payoutSettings");
+    return loadPayPayoutSettings(ctx.organizationId);
   }),
 
   updatePayoutSettings: write
     .input(payUpdatePayoutSettingsInputSchema)
     .output(payPayoutSettingsSchema)
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       if (usesDemoData()) return { ...payDemo.payoutSettings, ...input };
-      return notImplementedYet(DOMAIN, "updatePayoutSettings");
+      return updatePayPayoutSettings({
+        actor: ctx.actor,
+        organizationId: ctx.organizationId,
+        changes: input,
+        now: ctx.now,
+      });
     }),
 
   refundPolicies: read.output(z.array(payRefundPolicySchema)).query(() => {
@@ -289,9 +313,9 @@ export const payOperatorRouter = router({
   publishGate: read
     .input(payPublishGateInputSchema)
     .output(payPublishGateSchema)
-    .query(() => {
+    .query(({ ctx, input }) => {
       if (usesDemoData()) return payDemo.publishGate;
-      return notImplementedYet(DOMAIN, "publishGate");
+      return payPublishGate(ctx.organizationId, input);
     }),
 
   /** The Money home (MN-Home). */

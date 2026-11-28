@@ -328,3 +328,93 @@ export function priceConsumerOrder(input: {
     dunaPlusSavingsMinor,
   };
 }
+
+/** Version of the checkout fee composition recorded with each quote. */
+export const CHECKOUT_FEE_RULE_VERSION = "checkout-fees-v1";
+
+export interface CheckoutFeeQuote {
+  /** The buyer's order: subtotal, player Service Fee lines, total. */
+  readonly priced: OrderPricing;
+  readonly serviceFeeMinor: number;
+  /** Processing estimate inside Duna's application fee (paid by the organisation). */
+  readonly processingFee?: AppliedFee;
+  /** Organization Fee (paid by the organisation). */
+  readonly organizationFee?: AppliedFee;
+  /** What Duna takes from the charge: Service Fee + processing + Organization Fee, capped at the total. */
+  readonly applicationFeeMinor: number;
+  readonly feeRuleVersion: typeof CHECKOUT_FEE_RULE_VERSION;
+}
+
+/**
+ * The one fee composition every checkout path uses (B2: one quote, shown up
+ * front, stored with the payment). Card and in-person payments carry the
+ * organisation's processing estimate and Organization Fee; credit-only
+ * purchases carry no fees. `consumerFees: false` prices without the player
+ * Service Fee (in-person payments, which never add one).
+ */
+export function quoteCheckoutFees(input: {
+  readonly items: readonly PricedOrderItem[];
+  readonly currency: CurrencyCode;
+  readonly isDunaPlus: boolean;
+  readonly tender: "online-card" | "card-present" | "ach" | "credits";
+  readonly consumerFees?: boolean;
+  readonly commission: {
+    readonly rateBps: number;
+    readonly organizationId: string;
+    readonly plan: string;
+    readonly source: "plan-default" | "admin-override";
+  };
+}): CheckoutFeeQuote {
+  const subtotalMinor = input.items.reduce(
+    (sum, item) => sum + item.quantity * item.unitAmountMinor,
+    0,
+  );
+  const priced: OrderPricing =
+    input.tender === "credits" || input.consumerFees === false
+      ? {
+          subtotalMinor,
+          fees: [],
+          totalMinor: subtotalMinor,
+          currency: input.currency,
+          dunaPlusSavingsMinor: 0,
+        }
+      : priceConsumerOrder({
+          items: input.items,
+          currency: input.currency,
+          isDunaPlus: input.isDunaPlus,
+        });
+  const serviceFeeMinor = priced.fees.reduce(
+    (total, fee) => total + fee.amountMinor,
+    0,
+  );
+  const tender = input.tender === "credits" ? undefined : input.tender;
+  const charged = tender !== undefined && priced.subtotalMinor > 0;
+  const processingFee =
+    charged && tender
+      ? calculateOperatorProcessingFee({
+          amountMinor: priced.subtotalMinor,
+          currency: input.currency,
+          method: tender,
+        })
+      : undefined;
+  const organizationFee = charged
+    ? calculateOrganizationCommissionFee({
+        amountMinor: priced.subtotalMinor,
+        currency: input.currency,
+        ...input.commission,
+      })
+    : undefined;
+  return {
+    priced,
+    serviceFeeMinor,
+    processingFee,
+    organizationFee,
+    applicationFeeMinor: Math.min(
+      priced.totalMinor,
+      serviceFeeMinor +
+        (processingFee?.amountMinor ?? 0) +
+        (organizationFee?.amountMinor ?? 0),
+    ),
+    feeRuleVersion: CHECKOUT_FEE_RULE_VERSION,
+  };
+}
