@@ -1,41 +1,53 @@
-import { resolveDunaMobileTokens } from "@duna/ui/mobile";
+import { nativeColors, nativeTokens } from "@duna/ui/native/tokens";
 
-const lightMobileTokens = resolveDunaMobileTokens("light", "editorial");
+/**
+ * The Player's legacy palette names, re-pointed at Tideline 4.1.1 light roles
+ * (M-F0/M-F1) by meaning, so unmigrated screens take the new palette. The
+ * retired flare orange is the warm signal's ink here (no screen in this
+ * palette is a live state); live screens use `@duna/ui/native`'s live zone.
+ */
+const role = nativeColors("light");
+
+/** "r,g,b" for the legacy `rgba(rgb, alpha)` helper. */
+function rgbOf(hex: string): string {
+  const value = Number.parseInt(hex.slice(1, 7), 16);
+  return `${(value >> 16) & 255},${(value >> 8) & 255},${value & 255}`;
+}
 
 const lightColors = {
-  canvas: lightMobileTokens.ground,
-  ink: "#090909",
-  depth: lightMobileTokens.surface1,
-  navy: lightMobileTokens.inactiveFill,
-  navyLift: lightMobileTokens.surface2,
-  bone: "#090909",
-  muted: "#767773",
-  aqua: "#103a63",
-  aquaDeep: "#092b4d",
-  sand: "#d8b47a",
-  flare: "#e8683a",
-  resultWin: "#efe5ce",
-  resultWinBorder: "#d7bd84",
-  resultLoss: "#b5ccd3",
-  resultLossBorder: "#87aab5",
-  signal: "#c8f04a",
-  signalInk: "#17200d",
-  positive: "#2f6b3a",
-  warning: "#8a6a2f",
-  danger: "#9a4a2e",
-  onAccent: "#ffffff",
-  white: "#ffffff",
-  overlayRgb: "9,9,9",
-  accentRgb: "16,58,99",
-  warningRgb: "138,106,47",
-  positiveRgb: "47,107,58",
-  dangerRgb: "154,74,46",
-  flareRgb: "232,104,58",
-  inkRgb: "9,9,9",
-  depthRgb: "255,255,255",
-  navyRgb: "244,244,242",
-  boneRgb: "9,9,9",
-  whiteRgb: "255,255,255",
+  canvas: role.ground,
+  ink: role.text,
+  depth: role.surface,
+  navy: role["surface-sunken"],
+  navyLift: role["surface-sunken"],
+  bone: role.text,
+  muted: role["text-3"],
+  aqua: role.action,
+  aquaDeep: role["action-hover"],
+  sand: role.sun,
+  flare: role["sun-ink"],
+  resultWin: role["sun-wash"],
+  resultWinBorder: role.sun,
+  resultLoss: role["surface-sunken"],
+  resultLossBorder: role["line-strong"],
+  signal: role.energy,
+  signalInk: role["on-energy"],
+  positive: role.positive,
+  warning: role.warning,
+  danger: role.danger,
+  onAccent: role["on-action"],
+  white: nativeTokens.ramp["haze-0"],
+  overlayRgb: rgbOf(role.text),
+  accentRgb: rgbOf(role.action),
+  warningRgb: rgbOf(role.warning),
+  positiveRgb: rgbOf(role.positive),
+  dangerRgb: rgbOf(role.danger),
+  flareRgb: rgbOf(role["sun-ink"]),
+  inkRgb: rgbOf(role.text),
+  depthRgb: rgbOf(role.surface),
+  navyRgb: rgbOf(role["surface-sunken"]),
+  boneRgb: rgbOf(role.text),
+  whiteRgb: rgbOf(nativeTokens.ramp["haze-0"]),
 } as const;
 
 type Palette = {

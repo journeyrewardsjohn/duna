@@ -22,7 +22,18 @@
     "./tideline/tokens.css": "./src/tideline/tokens/tokens.css",
     "./tideline/tokens.root.css": "./src/tideline/tokens/tokens.root.css",
     "./native/layout": "./src/native/layout/index.ts",
-    "./native/layout/lab": "./src/native/layout/lab/LayoutLab.tsx"
+    "./native/layout/lab": "./src/native/layout/lab/LayoutLab.tsx",
+    "./native": "./src/native/index.ts",
+    "./native/tokens": "./src/native/tokens/index.ts",
+    "./native/theme": "./src/native/theme/index.ts",
+    "./native/type": "./src/native/type/index.ts",
+    "./native/icons": "./src/native/icons/index.ts",
+    "./native/motion": "./src/native/motion/index.ts",
+    "./native/loaders": "./src/native/loaders/index.ts",
+    "./native/states": "./src/native/states/index.ts",
+    "./native/brand": "./src/native/brand/index.ts",
+    "./native/foundations": "./src/native/foundations/FoundationsScreen.tsx",
+    "./assets/fonts/*": "./assets/fonts/*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -33,6 +44,7 @@
   },
   "dependencies": {
     "@duna/expo-device-posture": "workspace:*",
+    "@duna/observability": "workspace:*",
     "@duna/tideline-core": "workspace:*",
     "@ui-sdk/core": "0.1.0-beta.17",
     "@ui-sdk/react": "0.1.0-beta.17",
@@ -44,6 +56,7 @@
     "react-native": "0.88.1",
     "react-native-safe-area-context": "5.11.1",
     "react-native-screens": "4.30.1",
+    "react-native-svg": "15.16.0",
     "react-test-renderer": "19.2.8",
     "vitest": "^4.1.10"
   },
@@ -51,7 +64,8 @@
     "react": "^19.0.0",
     "react-native": "0.88.1",
     "react-native-screens": "4.30.1",
-    "react-native-safe-area-context": "~5.11.1"
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-svg": "15.16.0"
   },
   "peerDependenciesMeta": {
     "react-native": {
@@ -61,6 +75,9 @@
       "optional": true
     },
     "react-native-safe-area-context": {
+      "optional": true
+    },
+    "react-native-svg": {
       "optional": true
     }
   }

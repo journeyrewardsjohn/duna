@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  isMapNotConfigured,
+  MapNotConfigured,
+} from "@/components/map-not-configured";
 import type {
   DiscoveryCoordinates,
   DiscoveryEntityType,
@@ -93,6 +97,7 @@ export function DiscoveryMap({
   const [mapFilter, setMapFilter] = useState<MapFilter>("all");
   const [loaded, setLoaded] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+  const [notConfigured, setNotConfigured] = useState(false);
   const [moved, setMoved] = useState(false);
   const [areaIds, setAreaIds] = useState<readonly string[]>();
   const [sheetPosition, setSheetPosition] = useState<SheetPosition>(
@@ -133,6 +138,10 @@ export function DiscoveryMap({
         const response = await fetch("/api/mapbox/token");
         if (!response.ok) throw new Error("Mapbox is unavailable");
         const payload = (await response.json()) as { token?: string };
+        if (isMapNotConfigured(payload)) {
+          if (!cancelled) setNotConfigured(true);
+          return;
+        }
         if (!payload.token?.startsWith("pk.")) throw new Error("Invalid token");
         const imported = await import("mapbox-gl");
         if (cancelled || !containerRef.current) return;
@@ -408,11 +417,17 @@ export function DiscoveryMap({
         className="discover-v2-map__canvas"
         ref={containerRef}
       />
-      {!loaded && !unavailable ? (
+      {!loaded && !unavailable && !notConfigured ? (
         <div className="discover-v2-map__loading">
           <span />
           <strong>Opening the world of sand…</strong>
         </div>
+      ) : null}
+      {notConfigured ? (
+        <MapNotConfigured
+          className="discover-v2-map__nc"
+          feature="The discovery map"
+        />
       ) : null}
       {unavailable ? (
         <div className="discover-v2-map__fallback">
