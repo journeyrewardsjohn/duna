@@ -5,8 +5,9 @@
  * docs/design/tideline-4.1.1/README.md. This script is data-driven:
  *
  * - Per-surface contracts live in `scripts/design-contracts/<surface>.ts`.
- *   Checks marked `legacy` pin pre-Tideline literals and are deleted by the
- *   surface's own work package when it migrates.
+ *   The old pins that kept legacy screens' styling in place were removed on
+ *   28 November 2026 (docs/plan/legacy-styles.md). A few checks still marked
+ *   `legacy` guard behaviour, not styling; delete them with the screen.
  * - Repository-wide rules below protect accessibility, honesty and naming and
  *   accept both the legacy fonts and the Tideline fonts (Jost, Geist, Geist
  *   Mono).
@@ -597,7 +598,7 @@ if (violations.length > 0) {
   console.error("Duna design-system verification failed:\n");
   console.error(violations.join("\n"));
   console.error(
-    "\nContract: docs/design/tideline-4.1.1/README.md. Contracts per surface: scripts/design-contracts/. A [legacy: …] failure means the pinned pre-Tideline code changed: if your package migrated that surface, delete the legacy check in the same PR.",
+    "\nContract: docs/design/tideline-4.1.1/README.md. Contracts per surface: scripts/design-contracts/. A [legacy: …] failure means a behaviour pin on an old screen changed: if your package rebuilt that screen, delete the check in the same PR (docs/plan/legacy-styles.md).",
   );
   process.exit(1);
 }
@@ -608,5 +609,5 @@ const legacyCount = contracts.reduce(
   0,
 );
 console.log(
-  `Design system verified against the Duna Design System (Tideline 4.1.1) contract: ${contracts.length} surface contracts (${legacyCount} legacy pins awaiting migration), repository-wide accessibility and naming rules, and the Tideline guard on ${guardedFiles} migrated files.`,
+  `Design system verified against the Duna Design System (Tideline 4.1.1) contract: ${contracts.length} surface contracts (${legacyCount} behaviour pins on old screens awaiting their rebuild), repository-wide accessibility and naming rules, and the Tideline guard on ${guardedFiles} migrated files.`,
 );

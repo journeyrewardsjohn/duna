@@ -42,9 +42,3 @@ apps/*/credentials/
 # generated brand artifacts that have not been approved
 artifacts/
 .vercel/
-
-# HQ visual baselines rendered on a non-Linux host
-tests/e2e/hq-visual/.local-baselines/
-
-# generated CSS usage reports
-reports/
