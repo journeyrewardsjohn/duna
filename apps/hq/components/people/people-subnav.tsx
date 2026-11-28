@@ -18,6 +18,9 @@ export function PeopleSubNav({
       current={current}
       items={items}
       label={label}
+      // A person has up to eight tabs; all fit on a wide screen, and a
+      // narrow one scrolls the row.
+      max={8}
       renderLink={renderNextLink}
     />
   );

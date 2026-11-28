@@ -462,6 +462,7 @@ test.describe("CO-16 Look after the club's people", () => {
       .getByRole("list", { name: "People" })
       .getByRole("link", { name: "Ava Patel" })
       .click();
+    await expect(page).toHaveURL(/\/people\/[0-9a-f-]+$/);
     await expectPageReady(page, "Ava Patel");
     await expect(page.getByText(/^Junior\./).first()).toBeVisible();
     await expect(page.getByRole("main")).not.toContainText("@example.com");

@@ -129,10 +129,9 @@
     }
 
     .people-form--inline {
-      grid-template-columns: minmax(0, 8rem) minmax(0, 11rem) minmax(
-          0,
-          1fr
-        ) auto;
+      grid-template-columns:
+        minmax(0, 8rem) minmax(0, 11rem) minmax(0, 1fr)
+        auto;
       align-items: end;
       max-width: none;
     }
@@ -419,6 +418,15 @@
       animation-delay: var(--td-stagger-rally);
     }
 
+    .people-card--none {
+      align-content: center;
+      min-height: 160px;
+      padding: var(--td-space-5);
+      border: 1px dashed var(--td-line-strong);
+      border-radius: var(--td-radius-xl);
+      text-align: center;
+    }
+
     .people-attention {
       display: grid;
       gap: var(--td-space-2);
@@ -510,6 +518,11 @@
         font-family: var(--td-font-mono);
         font-variant-numeric: tabular-nums;
       }
+    }
+
+    .people-figure dd.people-dd-quiet {
+      color: var(--td-text-3);
+      font: var(--td-type-body);
     }
 
     .people-figure:nth-child(2) {

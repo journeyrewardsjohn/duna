@@ -138,13 +138,17 @@ test("adding a junior asks for the guardian, explains duplicates, and sends once
   await signIn(page);
   await page.goto(hq("/people/invite"));
   await title(page, "Add a person");
-  await page.getByRole("textbox", { name: "Name" }).fill("Ava Patel");
+  await page
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("Ava Patel");
   await page.getByRole("radio", { name: "A junior, under 18" }).check();
   // A junior with the same name is explained before anything is saved.
   await expect(
     page.getByRole("region", { name: "Possible duplicates" }),
   ).toContainText("Ava Patel has the same name (a junior).");
-  await page.getByRole("textbox", { name: "Name" }).fill("Lily Park");
+  await page
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("Lily Park");
   await page.getByRole("button", { name: "Review invitation" }).click();
   await expect(page.getByText("Enter the guardian's name.")).toBeVisible();
   await page.getByRole("textbox", { name: "Guardian name" }).fill("Sam Park");

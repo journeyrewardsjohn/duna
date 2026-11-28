@@ -284,6 +284,14 @@ export const loadPerson = cache(
  */
 export const loadHealthHistory = cache(
   async (personId: string): Promise<Loaded<HealthProfile>> => {
+    // The history lives only in Duna Database; without it (demo, local) the
+    // honest answer is "not set up", not a failed request.
+    if (!process.env.DATABASE_URL) {
+      log.info("hq.people.block_not_configured", {
+        block: "memberHealthProfile",
+      });
+      return { state: "not-configured" };
+    }
     const caller = await getServerCaller();
     return settle(
       () => caller.operator.memberHealthProfile({ personId }),

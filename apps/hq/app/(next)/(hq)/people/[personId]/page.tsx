@@ -88,37 +88,45 @@ export default async function PersonOverviewPage({
     >
       <div className="people-overview">
         <NextActionPanel action={action} personId={row.id} />
-        <div className="people-card">
-          <MembershipCard
-            club={{
-              name: club.name,
-              color: club.color ?? null,
-              logo: club.logo ?? null,
-            }}
-            fact={
-              row.credits > 0
-                ? {
-                    kind: "credits",
-                    text: `${row.credits} ${row.credits === 1 ? "credit" : "credits"}`,
-                  }
-                : null
-            }
-            heldBy={row.isJunior ? row.guardianName : undefined}
-            kind={
-              row.isJunior
-                ? "junior"
-                : activePlan && /pack/i.test(activePlan.name)
-                  ? "pack"
-                  : "member"
-            }
-            member={row.name}
-            motion="still"
-            number={null}
-            plan={activePlan?.name ?? club.programName ?? "No plan"}
-            since={monthYear(row.memberSince, context.timeZone)}
-            status={cardStatusOf(activePlan?.status ?? row.planStatus)}
-          />
-        </div>
+        {profile.plans.length === 0 && !row.plan ? (
+          <div className="people-card people-card--none">
+            <p className="people-body">
+              {`No membership card: ${first} has no plan with the club yet.`}
+            </p>
+          </div>
+        ) : (
+          <div className="people-card">
+            <MembershipCard
+              club={{
+                name: club.name,
+                color: club.color ?? null,
+                logo: club.logo ?? null,
+              }}
+              fact={
+                row.credits > 0
+                  ? {
+                      kind: "credits",
+                      text: `${row.credits} ${row.credits === 1 ? "credit" : "credits"}`,
+                    }
+                  : null
+              }
+              heldBy={row.isJunior ? row.guardianName : undefined}
+              kind={
+                row.isJunior
+                  ? "junior"
+                  : activePlan && /pack/i.test(activePlan.name)
+                    ? "pack"
+                    : "member"
+              }
+              member={row.name}
+              motion="still"
+              number={null}
+              plan={activePlan?.name ?? club.programName ?? "No plan"}
+              since={monthYear(row.memberSince, context.timeZone)}
+              status={cardStatusOf(activePlan?.status ?? row.planStatus)}
+            />
+          </div>
+        )}
       </div>
 
       {row.attention.length > 0 ? (

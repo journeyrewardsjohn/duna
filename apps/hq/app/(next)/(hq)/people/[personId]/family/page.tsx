@@ -94,7 +94,10 @@ export default async function PersonFamilyPage({
                         {guardian.name}
                       </Link>
                     ) : (
-                      (row.guardianName ?? "Not named yet")
+                      (row.guardianName ??
+                      (row.guardianState === "verified"
+                        ? "A confirmed guardian"
+                        : "No guardian yet"))
                     )}
                   </strong>
                   <span className="people-quiet">

@@ -89,7 +89,7 @@ export default async function PersonHealthPage({
   const { row, profile } = record;
   if (!record.canSeeHealth) {
     return (
-      <PersonScreen askStarters={[]} page={page} tab="overview">
+      <PersonScreen askStarters={[]} page={page} tab="health">
         <div className="hqs-state">
           <AccessDeniedState
             area="Health"
@@ -127,37 +127,73 @@ export default async function PersonHealthPage({
           >
             <div className="people-figure">
               <dt>Readiness</dt>
-              <dd className="people-num">
+              <dd
+                className={
+                  typeof snapshot.metrics?.readinessScore === "number"
+                    ? "people-num"
+                    : "people-dd-quiet"
+                }
+              >
                 {value(snapshot.metrics?.readinessScore, " / 10", 1)}
               </dd>
             </div>
             <div className="people-figure">
               <dt>Strain</dt>
-              <dd className="people-num">
+              <dd
+                className={
+                  typeof snapshot.metrics?.strainScore === "number"
+                    ? "people-num"
+                    : "people-dd-quiet"
+                }
+              >
                 {value(snapshot.metrics?.strainScore, " / 10", 1)}
               </dd>
             </div>
             <div className="people-figure">
               <dt>Resting heart rate</dt>
-              <dd className="people-num">
+              <dd
+                className={
+                  typeof snapshot.metrics?.restingHeartRate === "number"
+                    ? "people-num"
+                    : "people-dd-quiet"
+                }
+              >
                 {value(snapshot.metrics?.restingHeartRate, " bpm")}
               </dd>
             </div>
             <div className="people-figure">
               <dt>Heart rate variability</dt>
-              <dd className="people-num">
+              <dd
+                className={
+                  typeof snapshot.metrics?.heartRateVariabilityMs === "number"
+                    ? "people-num"
+                    : "people-dd-quiet"
+                }
+              >
                 {value(snapshot.metrics?.heartRateVariabilityMs, " ms")}
               </dd>
             </div>
             <div className="people-figure">
               <dt>Sleep</dt>
-              <dd className="people-num">
+              <dd
+                className={
+                  typeof snapshot.metrics?.sleepHours === "number"
+                    ? "people-num"
+                    : "people-dd-quiet"
+                }
+              >
                 {value(snapshot.metrics?.sleepHours, " h", 1)}
               </dd>
             </div>
             <div className="people-figure">
               <dt>Exercise</dt>
-              <dd className="people-num">
+              <dd
+                className={
+                  typeof snapshot.metrics?.exerciseMinutes === "number"
+                    ? "people-num"
+                    : "people-dd-quiet"
+                }
+              >
                 {value(snapshot.metrics?.exerciseMinutes, " min")}
               </dd>
             </div>

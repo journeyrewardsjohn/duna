@@ -32,7 +32,7 @@ export default async function PersonPaymentsPage({
   const first = firstName(row.name);
   if (!context.canSeePayments) {
     return (
-      <PersonScreen askStarters={[]} page={page} tab="overview">
+      <PersonScreen askStarters={[]} page={page} tab="payments">
         <div className="hqs-state">
           <AccessDeniedState
             area="Payments"
