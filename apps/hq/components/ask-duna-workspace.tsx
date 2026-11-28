@@ -357,7 +357,7 @@ export function AskDunaWorkspace({
         <>
           <div className="ask-duna-hero">
             <div className="ask-duna-emblem">
-              <DunaMark compact />
+              <DunaMark decorative size={24} />
             </div>
             <p className="ask-duna-eyebrow">
               A little less work. A little more play.
@@ -719,7 +719,7 @@ export function AskDunaThread({
           >
             {message.role === "assistant" && (
               <header>
-                <DunaMark compact />
+                <DunaMark decorative size={18} />
                 <strong>Duna</strong>
               </header>
             )}
@@ -1445,7 +1445,7 @@ export function AskDunaComposer({
           </div>
         )}
         <div className="ask-duna-input-row">
-          <DunaMark compact />
+          <DunaMark decorative size={20} />
           <textarea
             ref={input}
             rows={2}

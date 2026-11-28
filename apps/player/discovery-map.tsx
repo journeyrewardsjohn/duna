@@ -45,6 +45,14 @@ import {
   type DiscoveryMapFilter,
 } from "./discovery-filters";
 
+// React 19.3 types resolve ComponentRef of a memo component to never, so read
+// the camera handle from the Camera's ref prop instead.
+type RefObjectTarget<R> =
+  R extends React.RefObject<infer Handle> ? NonNullable<Handle> : never;
+type MapboxCameraHandle = RefObjectTarget<
+  NonNullable<React.ComponentProps<typeof Mapbox.Camera>["ref"]>
+>;
+
 type MapBounds = MapState["properties"]["bounds"];
 type SheetPosition = "list" | "split" | "map";
 
@@ -753,7 +761,7 @@ export function DiscoveryMapModal({
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const cameraRef = useRef<React.ElementRef<typeof Mapbox.Camera>>(null);
+  const cameraRef = useRef<MapboxCameraHandle>(null);
   const onSelectRef = useRef(onSelect);
   const firstIdle = useRef(true);
   const listScrollY = useRef(0);

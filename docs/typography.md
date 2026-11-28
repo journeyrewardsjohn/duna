@@ -20,3 +20,33 @@ tabular-nums`.
   (`next/font/google`, work package F3); Player and Pro bundle the static faces
   through Expo Font for reliable offline use. Record font licences in
   `docs/licenses/`.
+
+## How it is wired (F3)
+
+- **Module.** Each web app loads the three families in its own
+  `app/fonts.ts` (`apps/web/app/fonts.ts`, `apps/hq/app/fonts.ts`; identical
+  files, because `next/font` must be called inside the app that ships the
+  font). It uses `next/font/google` (Next.js 16, no new dependency): Jost
+  weight 500 only, Geist as a variable font, Geist Mono as a variable font,
+  all `display: "swap"`, subset `latin`. Jost and Geist are preloaded; Geist
+  Mono is not (numerals in data and scores are not first paint).
+- **Variables.** The module sets the Tideline font-family tokens on `<html>`
+  through `dunaFontClassName`, which each root layout adds to the `<html>`
+  element: `--td-font-brand` (Jost), `--td-font-ui` (Geist) and
+  `--td-font-mono` (Geist Mono). `--td-font-display` and `--td-font-numeric`
+  alias `--td-font-ui` in `packages/ui/src/styles.css`. The legacy `--font-*`
+  names (`--font-display`, `--font-body`, `--font-data` and the public
+  `--public-font`, `--duna-web-font-mono`) point at these variables until each
+  surface migrates. Never name Jost, Geist or Geist Mono directly in a
+  `font-family`: `next/font` serves them under generated family names, so only
+  the variables resolve in production.
+- **Title role.** Use `font-family: var(--td-font-brand); font-weight: 500;
+letter-spacing: -0.015em` for a marketing headline or the ONE title of a
+  screen, at 22px or larger. Never put it on a control, a label, a table cell
+  or a numeral, and never below 22px.
+- **Numerals rule.** Numbers, times, scores, ratings and money are
+  `var(--td-font-ui)` at weight 600 with `font-variant-numeric: tabular-nums`.
+  Only NetScore numerals and codes use `var(--td-font-mono)`. A numeral is
+  never set in Jost, even inside a Jost title.
+- **Marks.** Logo components live in `packages/ui/src/brand/` (`DunaMark`,
+  `DunaLogo`) and draw the Crest and the wordmark as SVG, never as text.

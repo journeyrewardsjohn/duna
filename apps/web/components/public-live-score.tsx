@@ -1,7 +1,7 @@
 "use client";
 
 import type { CommunityCommentSummary, MatchScoringState } from "@duna/api";
-import { Badge, DunaMark, Numeric } from "@duna/ui";
+import { Badge, DunaLogo, Numeric } from "@duna/ui";
 import { Radio, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { refreshLiveMatchAction } from "@/app/live/[matchId]/actions";
@@ -41,7 +41,7 @@ export function PublicLiveScore({
   return (
     <main className="public-live" data-zone="live">
       <header>
-        <DunaMark />
+        <DunaLogo size={24} />
         <Badge tone={match.status === "live" ? "live" : "positive"}>
           <Radio size={12} />{" "}
           {match.status === "live" ? "Live" : match.status.replace("-", " ")}

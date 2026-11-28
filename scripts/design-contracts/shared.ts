@@ -92,15 +92,15 @@ export const shared: SurfaceContract = {
     },
     {
       kind: "exists",
-      path: "packages/ui/src/brand.ts",
-      legacy:
-        "legacy: delete when DunaMark/DunaLogo move to packages/ui/src/brand/ (F3)",
+      path: "packages/ui/src/brand/club-colors.ts",
     },
     {
       kind: "exists",
-      path: "packages/ui/src/brand.test.ts",
-      legacy:
-        "legacy: delete when DunaMark/DunaLogo move to packages/ui/src/brand/ (F3)",
+      path: "packages/ui/src/brand/duna-mark.tsx",
+    },
+    {
+      kind: "exists",
+      path: "packages/ui/src/brand/duna-logo.tsx",
     },
     {
       kind: "includes",
@@ -137,12 +137,14 @@ export const shared: SurfaceContract = {
       kind: "includes",
       file: "packages/ui/src/styles.css",
       values: [
-        '--font-display: "Satoshi", "Helvetica Neue", Arial, sans-serif',
-        '--font-body: "Satoshi", "Helvetica Neue", Arial, sans-serif',
+        '--font-display: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
+        '--font-body: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
         "--font-heading: var(--font-display)",
         "--font-ui: var(--font-body)",
         "--font-sans: var(--font-body)",
-        '--font-data: "Satoshi", "Helvetica Neue", Arial, sans-serif',
+        '--font-data: var(--td-font-ui, "Helvetica Neue", Arial, sans-serif)',
+        "--td-font-display: var(--td-font-ui)",
+        "--td-font-numeric: var(--td-font-ui)",
         "--signal-text: #52630f",
         "--signal-text: #c9e265",
         "clamp(4.5rem, 8vw, 8.75rem)",
