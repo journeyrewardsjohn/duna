@@ -11,6 +11,7 @@ import {
 import {
   defaultSegment,
   entriesCsv,
+  eventPermissionsFrom,
   eventRows,
   eventView,
   feeChangePreview,
@@ -177,6 +178,27 @@ describe("the open event", () => {
       "Semifinals",
       "Final",
     ]);
+  });
+
+  it("never shows event money to desk collectors (coach, front desk)", () => {
+    const coachScopes = eventPermissionsFrom({
+      change: false,
+      checkIn: true,
+      paymentsRead: false,
+      paymentsWrite: false,
+      messagesPropose: true,
+    });
+    expect(coachScopes.money).toBe(false);
+    expect(coachScopes.refund).toBe(false);
+    const manager = eventPermissionsFrom({
+      change: true,
+      checkIn: true,
+      paymentsRead: true,
+      paymentsWrite: false,
+      messagesPropose: true,
+    });
+    expect(manager).toMatchObject({ money: true, refund: false });
+    expect(view(demoEventIds.live, coachScopes).money).toBeUndefined();
   });
 
   it("builds money only for people who may see it", () => {

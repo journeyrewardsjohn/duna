@@ -312,12 +312,30 @@ export interface EventPermissions {
   readonly change: boolean;
   /** Refunds and cancelling with refunds (payments:write). */
   readonly refund: boolean;
-  /** Sees amounts (payments:read, payments:write or payments:collect). */
+  /** Sees amounts (payments:read or payments:write; not desk collection). */
   readonly money: boolean;
   /** Check people in: staff with sessions:write, or a coach. */
   readonly checkIn: boolean;
   /** Draft messages to entrants (messages:propose). */
   readonly message: boolean;
+}
+
+/** Event permissions from the viewer's scopes (see `eventPermissions`). */
+export function eventPermissionsFrom(input: {
+  readonly change: boolean;
+  readonly checkIn: boolean;
+  readonly paymentsRead: boolean;
+  readonly paymentsWrite: boolean;
+  readonly messagesPropose: boolean;
+}): EventPermissions {
+  return {
+    change: input.change,
+    refund: input.paymentsWrite,
+    // Collecting at the desk (payments:collect) is not reading money.
+    money: input.paymentsWrite || input.paymentsRead,
+    checkIn: input.checkIn,
+    message: input.messagesPropose,
+  };
 }
 
 export type SelectionStatus =

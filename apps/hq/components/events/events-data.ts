@@ -31,6 +31,7 @@ import {
   parseDemoEvents,
 } from "./events-demo";
 import {
+  eventPermissionsFrom,
   eventRows,
   eventView,
   type EventPermissions,
@@ -101,16 +102,21 @@ function procedurePaths(): string[] {
   return Object.keys(definition?.procedures ?? {});
 }
 
-/** Role rules for Events: the same as Schedule's (and People's) for money. */
+/**
+ * Role rules for Events. An event's money (what it collected, its orders,
+ * refunds and fees) is a payments read, as in People: owners, managers and
+ * accountants. Collecting at the desk (payments:collect, a coach or the
+ * front desk) does not show an event's money. Refunds are payments:write.
+ */
 export function eventPermissions(session: ShellSession): EventPermissions {
   const schedule = schedulePermissions(session);
-  return {
+  return eventPermissionsFrom({
     change: schedule.change,
-    refund: schedule.refund,
-    money: schedule.money,
     checkIn: schedule.checkIn,
-    message: hasScope(session, "messages:propose"),
-  };
+    paymentsRead: hasScope(session, "payments:read"),
+    paymentsWrite: hasScope(session, "payments:write"),
+    messagesPropose: hasScope(session, "messages:propose"),
+  });
 }
 
 function publicBase(): string {

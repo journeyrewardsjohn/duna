@@ -106,24 +106,42 @@ test.describe("Events", () => {
   });
 
   test("a refund says who gets what before it happens", async ({ page }) => {
+    // The club owner holds payments:write in demo mode.
     await as(page, "club-owner");
     await page.goto(hq(`/events/${live}/money`));
-    const refund = page.getByRole("button", { name: "Refund" }).first();
-    test.skip(
-      !(await refund.isVisible()),
-      "The demo persona has no refund permission in this environment.",
-    );
-    await refund.click();
+    const orders = page.getByRole("region", { name: /^Orders/ });
+    const first = orders.getByRole("listitem").first();
+    await expect(first).toContainText("to the card they paid with");
+    await first.getByRole("button", { name: "Refund" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Reason").fill("Injured before the event");
     await dialog.getByRole("button", { name: "Review refund" }).click();
-    await expect(dialog.getByText(/to the card they paid with/)).toBeVisible();
+    // The strong confirmation restates the amount, who gets it and that it is final.
+    await expect(dialog.getByRole("definition").first()).toContainText(
+      "to the card they paid with",
+    );
     await expect(dialog.getByText(/can't be undone/)).toBeVisible();
+    await dialog.getByRole("button", { name: "Refund", exact: true }).click();
+    await expect(first).toContainText("Refunded");
   });
 
   test("a coach sees the event but not its money", async ({ page }) => {
     await as(page, "coach");
+    await page.goto(hq(`/events/${live}`));
+    await expect(
+      page.getByRole("heading", { name: "Harbor Doubles Classic", level: 1 }),
+    ).toBeVisible();
+    const main = page.getByRole("main");
+    // No amounts anywhere on the event, and no Money tab.
+    await expect(main).not.toContainText("$");
+    await expect(
+      main.getByRole("link", { name: "Money", exact: true }),
+    ).toHaveCount(0);
+    await page.goto(hq(`/events/${live}/entries`));
+    await expect(main.getByText("Chen / Smith")).toBeVisible();
+    await expect(main).not.toContainText("$");
     await page.goto(hq(`/events/${live}/money`));
-    await expect(page.getByText(/You need access|need access/i)).toBeVisible();
+    await expect(main.getByText(/have access to Event money/)).toBeVisible();
+    await expect(main).not.toContainText("$");
   });
 });
