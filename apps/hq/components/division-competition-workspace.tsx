@@ -700,8 +700,12 @@ export function DivisionCompetitionWorkspace({
                 <span>
                   <strong>{team.name}</strong>
                   <small>
-                    Rating {team.averageRating?.toFixed(2) ?? "—"} ·{" "}
-                    {team.fullyPaid ? "fully paid" : "payment incomplete"}
+                    Rating {team.averageRating?.toFixed(2) ?? "—"}
+                    {team.fullyPaid === undefined
+                      ? null
+                      : team.fullyPaid
+                        ? " · fully paid"
+                        : " · payment incomplete"}
                   </small>
                   {team.selectionLocked && team.selectionReason ? (
                     <small>Override note: {team.selectionReason}</small>
@@ -733,8 +737,12 @@ export function DivisionCompetitionWorkspace({
                 <span>
                   <strong>{team.name}</strong>
                   <small>
-                    Rating {team.averageRating?.toFixed(2) ?? "—"} ·{" "}
-                    {team.fullyPaid ? "eligible to move up" : "not fully paid"}
+                    Rating {team.averageRating?.toFixed(2) ?? "—"}
+                    {team.fullyPaid === undefined
+                      ? null
+                      : team.fullyPaid
+                        ? " · eligible to move up"
+                        : " · not fully paid"}
                   </small>
                   {team.selectionLocked && team.selectionReason ? (
                     <small>Override note: {team.selectionReason}</small>

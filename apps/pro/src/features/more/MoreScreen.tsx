@@ -102,7 +102,8 @@ export function MoreScreen({
                   workspace.catalog.find(
                     (product) => product.id === item.catalogItemId,
                   )?.title ?? "Product performance",
-                meta: `${item.paidPurchases} sales · ${item.uniqueCustomers} customers · ${item.grossMarginBps === undefined ? "margin pending" : `${(item.grossMarginBps / 100).toFixed(1)}% margin`}`,
+                // Margins reach only roles with club money (PRIV-2).
+                meta: `${item.paidPurchases} sales · ${item.uniqueCustomers} customers${item.grossMarginBps !== undefined ? ` · ${(item.grossMarginBps / 100).toFixed(1)}% margin` : item.netSalesMinor !== undefined ? " · margin pending" : ""}`,
               })) ?? [])
             : selectedMenu === "Memberships + credits"
               ? (workspace?.ratePlans.map((plan) => ({

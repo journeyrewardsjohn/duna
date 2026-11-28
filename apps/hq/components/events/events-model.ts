@@ -359,10 +359,11 @@ export interface TeamView {
   readonly seed?: number;
   readonly selection: SelectionStatus;
   readonly locked: boolean;
-  readonly paidPlayers: number;
+  /** Absent for roles without paid state (PRIV-2). */
+  readonly paidPlayers?: number;
   readonly expected: number;
-  readonly fullyPaid: boolean;
-  /** "Paid", "1 of 2 paid", "Not paid": no amounts. */
+  readonly fullyPaid?: boolean;
+  /** "Paid", "1 of 2 paid", "Not paid": no amounts. Empty without paid state. */
   readonly payment: string;
   readonly needsAttention: boolean;
   /** Why it needs attention, in words. */
@@ -569,6 +570,7 @@ export interface EventView {
 }
 
 function teamPayment(team: OperatorSessionDetail["teams"][number]): string {
+  if (team.fullyPaid === undefined || team.paidPlayers === undefined) return "";
   if (team.fullyPaid) return "Paid";
   if (team.paidPlayers === 0) return "Not paid";
   return `${team.paidPlayers} of ${team.expectedTeamSize} paid`;
@@ -582,7 +584,7 @@ function teamAttention(
     return `${team.expectedTeamSize - team.playersAdded} player${team.expectedTeamSize - team.playersAdded === 1 ? "" : "s"} still to add`;
   if (team.claimedPlayers < team.playersAdded)
     return "An invitation is unclaimed";
-  if (!team.fullyPaid) return "A payment is incomplete";
+  if (team.fullyPaid === false) return "A payment is incomplete";
   return "Needs a look";
 }
 
@@ -599,9 +601,11 @@ export function teamView(
     ...(team.seed ? { seed: team.seed } : {}),
     selection: team.selectionStatus,
     locked: team.selectionLocked,
-    paidPlayers: team.paidPlayers,
+    ...(team.paidPlayers !== undefined
+      ? { paidPlayers: team.paidPlayers }
+      : {}),
     expected: team.expectedTeamSize,
-    fullyPaid: team.fullyPaid,
+    ...(team.fullyPaid !== undefined ? { fullyPaid: team.fullyPaid } : {}),
     payment: teamPayment(team),
     needsAttention: team.needsAttention,
     ...(attention ? { attention } : {}),
@@ -985,7 +989,9 @@ export function eventView(input: {
             ? "Complimentary"
             : attendee.paymentStatus === "free"
               ? "Free"
-              : "Payment due",
+              : attendee.paymentStatus === "payment-due"
+                ? "Payment due"
+                : "",
     paymentDue: attendee.paymentStatus === "payment-due",
     guest: attendee.identityStatus !== "connected",
     ...(attendee.invitation?.status === "pending"
@@ -1006,7 +1012,7 @@ export function eventView(input: {
   const signals = detail.arrivalBoard.signals.filter(
     (signal) => signal.role === "player",
   );
-  const currency = detail.finance.currency;
+  const currency = session.currency;
   const money = (minor: number) => formatMoney(minor, currency);
   const registrationByOrder = new Map(
     detail.attendees.flatMap((attendee) =>
@@ -1111,7 +1117,8 @@ export function eventView(input: {
           },
         }
       : {}),
-    ...(permissions.money
+    // PRIV-2: the server sends `finance` only to payments readers.
+    ...(permissions.money && detail.finance
       ? {
           money: {
             currency,
@@ -1128,8 +1135,8 @@ export function eventView(input: {
                 orderId: order.orderId,
                 buyer: order.buyerName,
                 ...(registration ? { registrationId: registration.id } : {}),
-                total: money(order.totalMinor),
-                cashRefundMinor: order.cashRefundMinor,
+                total: money(order.totalMinor ?? 0),
+                cashRefundMinor: order.cashRefundMinor ?? 0,
                 creditsToRestore: order.creditsToRestore,
                 refundWords: refundWords(order, money),
                 refunded,
@@ -1137,8 +1144,8 @@ export function eventView(input: {
             }),
             cancelPreview: {
               registrations: detail.cancellationPreview.registrationCount,
-              cash: money(detail.cancellationPreview.cashRefundMinor),
-              cashMinor: detail.cancellationPreview.cashRefundMinor,
+              cash: money(detail.cancellationPreview.cashRefundMinor ?? 0),
+              cashMinor: detail.cancellationPreview.cashRefundMinor ?? 0,
               credits: detail.cancellationPreview.creditsToRestore,
             },
             fees: detail.entryDivisions.map((division) => ({
@@ -1163,7 +1170,7 @@ function refundWords(
   money: (minor: number) => string,
 ): string {
   const parts: string[] = [];
-  if (order.cashRefundMinor > 0)
+  if (order.cashRefundMinor !== undefined && order.cashRefundMinor > 0)
     parts.push(`${money(order.cashRefundMinor)} to the card they paid with`);
   if (order.creditsToRestore > 0)
     parts.push(
@@ -1308,13 +1315,13 @@ export function feeChangePreview(
     .filter(
       (team) =>
         team.selection !== "withdrawn" &&
-        team.paidPlayers > 0 &&
+        (team.paidPlayers ?? 0) > 0 &&
         team.expected > 0,
     )
     .map((team) => ({
       team: team.name,
       deltaMinor: Math.round(
-        ((newFeeMinor - division.entryFeeMinor) * team.paidPlayers) /
+        ((newFeeMinor - division.entryFeeMinor) * (team.paidPlayers ?? 0)) /
           team.expected,
       ),
     }));

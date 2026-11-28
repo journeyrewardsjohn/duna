@@ -15,6 +15,7 @@ import Svg, { Line, Path } from "react-native-svg";
 import {
   Icon,
   Numerals,
+  PermissionDeniedState,
   Rise,
   Text,
   ThemeOverride,
@@ -47,6 +48,28 @@ const TONE_ROLES = {
 } as const;
 
 export function ClubMoneyScreen() {
+  const runtime = useProRuntime();
+  // PRIV-2: club money needs payments:read. A coach or front desk signed in
+  // gets this state, never the preview figures.
+  if (runtime.mode === "live" && runtime.refused?.has("money")) {
+    return (
+      <View style={styles.fill}>
+        <PaneScroll gap={20} testID="club-money">
+          <PermissionDeniedState
+            what="club money"
+            who="the owner or a manager"
+          />
+          <Text tone="text-2" variant="phone-meta">
+            Your role doesn&apos;t include club money.
+          </Text>
+        </PaneScroll>
+      </View>
+    );
+  }
+  return <ClubMoney />;
+}
+
+function ClubMoney() {
   const runtime = useProRuntime();
   const shell = useShell();
   const { tokens } = useTheme();

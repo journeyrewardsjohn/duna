@@ -198,7 +198,8 @@ function DivisionEntries({
           {team.name}
         </span>
         <span className="ev-quiet">
-          {team.players.join(", ")} · {team.payment}
+          {team.players.join(", ")}
+          {team.payment ? ` · ${team.payment}` : ""}
           {team.attention ? ` · ${team.attention}` : ""}
         </span>
       </span>

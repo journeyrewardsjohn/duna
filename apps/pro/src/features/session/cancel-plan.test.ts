@@ -185,6 +185,18 @@ describe("cancel previews say who gets what back", () => {
     expect(preview.total).toBe("Amounts need permission to see payments");
   });
 
+  it("calendar session without amounts (PRIV-2): who, never $0", () => {
+    const preview = previewFromSession({
+      registrationCount: 1,
+      creditsToRestore: 0,
+      currency: "USD",
+      orders: [{ orderId: "o1", buyerName: "Maya", creditsToRestore: 0 }],
+    });
+    expect(preview.lines[0]!.outcome).toBe("Refunded the way they paid");
+    expect(preview.total).toBe("Card payments refunded the way they were paid");
+    expect(JSON.stringify(preview)).not.toContain("$");
+  });
+
   it("calendar session: card refunds and credits per buyer", () => {
     const preview = previewFromSession({
       registrationCount: 2,

@@ -167,15 +167,20 @@ export function ActivityOperationsWorkspace({
           <Numeric>{checkedIn}</Numeric>
           <span>{Math.max(0, expected - checkedIn)} still expected</span>
         </article>
-        <article>
-          <small>Booked value</small>
-          <strong>
-            {formatMoney(activity.totalAmountMinor, activity.currency)}
-          </strong>
-          <span>
-            {formatMoney(activity.fundedAmountMinor, activity.currency)} funded
-          </span>
-        </article>
+        {/* PRIV-2: the server sends the amounts only with payments:read. */}
+        {activity.totalAmountMinor !== undefined &&
+        activity.fundedAmountMinor !== undefined ? (
+          <article>
+            <small>Booked value</small>
+            <strong>
+              {formatMoney(activity.totalAmountMinor, activity.currency)}
+            </strong>
+            <span>
+              {formatMoney(activity.fundedAmountMinor, activity.currency)}{" "}
+              funded
+            </span>
+          </article>
+        ) : null}
         <article>
           <small>Universal check-in</small>
           <strong>Duna Membership</strong>

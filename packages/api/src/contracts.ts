@@ -1122,6 +1122,8 @@ export const metricSchema = z.object({
   change: z.string().optional(),
   trend: z.enum(["up", "down", "flat"]).optional(),
   tone: z.enum(["default", "positive", "warning", "danger"]).optional(),
+  /** PRIV-2: the figure is club money; removed for roles without payments:read. */
+  money: z.boolean().optional(),
 });
 export const auditEventSchema = z.object({
   id: z.string(),
@@ -4881,14 +4883,14 @@ export const operatorPersonRelationshipSchema = z.object({
   membershipStatus: z.string().optional(),
   membershipName: z.string().optional(),
   creditBalance: z.number().int().nonnegative(),
-  lifetimeSpendMinor: z.number().int().nonnegative(),
+  lifetimeSpendMinor: z.number().int().nonnegative().optional(),
   purchaseCount: z.number().int().nonnegative(),
   recentPurchases: z
     .array(
       z.object({
         orderId: z.string().uuid(),
         description: z.string(),
-        amountMinor: z.number().int().nonnegative(),
+        amountMinor: z.number().int().nonnegative().optional(),
         currency: currencySchema,
         status: z.string(),
         purchasedAt: z.iso.datetime(),
@@ -4999,8 +5001,8 @@ export const operatorMemberProfileSchema = z.object({
         id: z.string().uuid(),
         initialCredits: z.number().int().positive(),
         remainingCredits: z.number().int().nonnegative(),
-        initialValueMinor: z.number().int().nonnegative(),
-        remainingValueMinor: z.number().int().nonnegative(),
+        initialValueMinor: z.number().int().nonnegative().optional(),
+        remainingValueMinor: z.number().int().nonnegative().optional(),
         currency: currencySchema.optional(),
         status: z.string(),
         expiresAt: z.iso.datetime().optional(),
@@ -5046,8 +5048,8 @@ export const operatorMemberProfileSchema = z.object({
       z.object({
         orderId: z.string().uuid(),
         description: z.string(),
-        amountMinor: z.number().int().nonnegative(),
-        refundedMinor: z.number().int().nonnegative(),
+        amountMinor: z.number().int().nonnegative().optional(),
+        refundedMinor: z.number().int().nonnegative().optional(),
         currency: currencySchema,
         status: z.string(),
         purchasedAt: z.iso.datetime(),
@@ -5055,7 +5057,7 @@ export const operatorMemberProfileSchema = z.object({
           .array(
             z.object({
               id: z.string().uuid(),
-              amountMinor: z.number().int().positive(),
+              amountMinor: z.number().int().positive().optional(),
               disposition: z.enum(["original-payment", "organization-credit"]),
               creditsIssued: z.number().int().positive().optional(),
               status: z.string(),
@@ -5149,8 +5151,8 @@ export const operatorActivityDetailSchema = z.object({
     organizerPersonId: z.string().uuid(),
     organizerName: z.string(),
     paymentMode: z.enum(["full", "split"]).optional(),
-    totalAmountMinor: z.number().int().nonnegative(),
-    fundedAmountMinor: z.number().int().nonnegative(),
+    totalAmountMinor: z.number().int().nonnegative().optional(),
+    fundedAmountMinor: z.number().int().nonnegative().optional(),
     currency: currencySchema,
   }),
   participants: z
@@ -5162,7 +5164,7 @@ export const operatorActivityDetailSchema = z.object({
         avatarUrl: z.string().optional(),
         role: z.string(),
         status: z.string(),
-        shareAmountMinor: z.number().int().nonnegative(),
+        shareAmountMinor: z.number().int().nonnegative().optional(),
         attendanceStatus: z.enum([
           "scheduled",
           "attended",
@@ -5215,10 +5217,12 @@ export const operatorSessionDetailSchema = z.object({
           "no-show",
           "cancelled",
         ]),
-        paidMinor: z.number().int().nonnegative(),
-        refundedMinor: z.number().int().nonnegative(),
+        paidMinor: z.number().int().nonnegative().optional(),
+        refundedMinor: z.number().int().nonnegative().optional(),
         identityStatus: z.enum(["connected", "guest-invited", "guest-claimed"]),
-        paymentStatus: z.enum(["paid", "complimentary", "payment-due", "free"]),
+        paymentStatus: z
+          .enum(["paid", "complimentary", "payment-due", "free"])
+          .optional(),
         invitation: z
           .object({
             status: z.enum(["pending", "claimed", "expired", "cancelled"]),
@@ -5263,13 +5267,13 @@ export const operatorSessionDetailSchema = z.object({
         seed: z.number().int().positive().optional(),
         registeredAt: z.iso.datetime(),
         fullyPaidAt: z.iso.datetime().optional(),
-        fullyPaid: z.boolean(),
+        fullyPaid: z.boolean().optional(),
         averageRating: z.number().min(1).max(8).optional(),
         qualificationScore: z.number().optional(),
         expectedTeamSize: expectedTeamSizeSchema,
         playersAdded: z.number().int().min(1).max(6),
         claimedPlayers: z.number().int().min(1).max(6),
-        paidPlayers: z.number().int().min(0).max(6),
+        paidPlayers: z.number().int().min(0).max(6).optional(),
         paymentMode: z.enum(["self", "team"]),
         status: z.enum([
           "assembling",
@@ -5289,7 +5293,7 @@ export const operatorSessionDetailSchema = z.object({
               avatarUrl: z.string().optional(),
               status: z.enum(["captain", "selected", "invited", "claimed"]),
               deliveryStatus: z.enum(["queued", "sent", "failed"]).optional(),
-              paid: z.boolean(),
+              paid: z.boolean().optional(),
               ratingDisplay: z.number().min(1).max(8).optional(),
             }),
           )
@@ -5302,30 +5306,32 @@ export const operatorSessionDetailSchema = z.object({
     sessionStatus: z.string(),
     registrationCount: z.number().int().nonnegative(),
     orderCount: z.number().int().nonnegative(),
-    cashRefundMinor: z.number().int().nonnegative(),
+    cashRefundMinor: z.number().int().nonnegative().optional(),
     creditsToRestore: z.number().int().nonnegative(),
-    creditValueMinor: z.number().int().nonnegative(),
+    creditValueMinor: z.number().int().nonnegative().optional(),
     currency: currencySchema,
     orders: z
       .array(
         z.object({
           orderId: z.string().uuid(),
           buyerName: z.string(),
-          totalMinor: z.number().int().nonnegative(),
-          cashRefundMinor: z.number().int().nonnegative(),
+          totalMinor: z.number().int().nonnegative().optional(),
+          cashRefundMinor: z.number().int().nonnegative().optional(),
           creditsToRestore: z.number().int().nonnegative(),
-          creditValueMinor: z.number().int().nonnegative(),
+          creditValueMinor: z.number().int().nonnegative().optional(),
         }),
       )
       .readonly(),
   }),
-  finance: z.object({
-    grossMinor: z.number().int().nonnegative(),
-    refundedMinor: z.number().int().nonnegative(),
-    netMinor: z.number().int(),
-    currency: currencySchema,
-    paidOrders: z.number().int().nonnegative(),
-  }),
+  finance: z
+    .object({
+      grossMinor: z.number().int().nonnegative(),
+      refundedMinor: z.number().int().nonnegative(),
+      netMinor: z.number().int(),
+      currency: currencySchema,
+      paidOrders: z.number().int().nonnegative(),
+    })
+    .optional(),
   operations: z.object({
     cancellationKind: z
       .enum(["coach", "weather", "operator", "venue", "other"])
@@ -5338,7 +5344,7 @@ export const operatorSessionDetailSchema = z.object({
       .object({
         registrationCount: z.number().int().nonnegative(),
         orderCount: z.number().int().nonnegative(),
-        cashRefundMinor: z.number().int().nonnegative(),
+        cashRefundMinor: z.number().int().nonnegative().optional(),
         creditsRestored: z.number().int().nonnegative(),
         succeededOrderIds: z.array(z.string().uuid()).readonly(),
         failedOrderIds: z.array(z.string().uuid()).readonly(),
@@ -6293,10 +6299,10 @@ export const operatorWorkspaceSchema = z.object({
       z.object({
         catalogItemId: z.string().uuid(),
         paidPurchases: z.number().int().nonnegative(),
-        grossBookedMinor: z.number().int().nonnegative(),
-        netSalesMinor: z.number().int().nonnegative(),
-        cogsMinor: z.number().int().nonnegative(),
-        grossProfitMinor: z.number().int(),
+        grossBookedMinor: z.number().int().nonnegative().optional(),
+        netSalesMinor: z.number().int().nonnegative().optional(),
+        cogsMinor: z.number().int().nonnegative().optional(),
+        grossProfitMinor: z.number().int().optional(),
         grossMarginBps: z.number().int().optional(),
         uniqueCustomers: z.number().int().nonnegative(),
         refundedOrders: z.number().int().nonnegative(),
@@ -6311,7 +6317,7 @@ export const operatorWorkspaceSchema = z.object({
         personId: z.string().uuid(),
         displayName: z.string(),
         purchaseCount: z.number().int().nonnegative(),
-        grossBookedMinor: z.number().int().nonnegative(),
+        grossBookedMinor: z.number().int().nonnegative().optional(),
         lastPurchaseAt: z.iso.datetime(),
       }),
     )
@@ -6336,7 +6342,7 @@ export const operatorWorkspaceSchema = z.object({
       "investigating",
       "resolved",
     ]),
-    creditLiability: z.number().int().nonnegative(),
+    creditLiability: z.number().int().nonnegative().optional(),
   }),
   recommendations: z
     .array(

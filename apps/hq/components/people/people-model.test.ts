@@ -681,7 +681,7 @@ describe("redaction before anything reaches a browser", () => {
     expect(cut.health).toBeUndefined();
     expect(cut.purchases).toEqual([]);
     expect(cut.plans[0]!.priceMinor).toBe(0);
-    expect(cut.relationship.lifetimeSpendMinor).toBe(0);
+    expect(cut.relationship.lifetimeSpendMinor).toBeUndefined();
     expect(cut.relationship.recentPurchases).toEqual([]);
     expect(cut.relationship.email).toBeUndefined();
     expect(cut.timeline.map((item: { kind: string }) => item.kind)).toEqual([

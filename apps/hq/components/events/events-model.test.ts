@@ -337,3 +337,47 @@ describe("money and the schedule", () => {
     expect(csv).not.toMatch(/@|\+1/);
   });
 });
+
+describe("an answer without money (PRIV-2)", () => {
+  it("shows no money, no paid words and never $0 when the server sent none", () => {
+    const event = demoEvent(demoEventIds.live, place, now, emptyDemoEvents)!;
+    // What the API sends a scorekeeper: no finance, no amounts, no paid state.
+    const without = <T extends object>(
+      value: T,
+      keys: readonly string[],
+    ): T => {
+      const copy = { ...value } as Record<string, unknown>;
+      for (const key of keys) delete copy[key];
+      return copy as T;
+    };
+    const unpaid = (teams: typeof event.detail.teams) =>
+      teams.map((team) => ({
+        ...without(team, ["fullyPaid", "paidPlayers", "fullyPaidAt"]),
+        roster: team.roster.map((player) => without(player, ["paid"])),
+      }));
+    const detail = {
+      ...without(event.detail, ["finance"]),
+      attendees: event.detail.attendees.map((attendee) =>
+        without(attendee, ["paidMinor", "refundedMinor", "paymentStatus"]),
+      ),
+      teams: unpaid(event.detail.teams),
+    };
+    const divisions = event.divisions.map((division) => ({
+      ...division,
+      teams: unpaid(division.teams),
+    }));
+    const result = eventView({
+      detail,
+      divisions,
+      competition: event.competition,
+      courts: place.courts,
+      permissions: owner,
+      nowMs: now,
+    });
+    expect(result.money).toBeUndefined();
+    const teams = result.divisions.flatMap((division) => division.teams);
+    expect(teams.length).toBeGreaterThan(0);
+    for (const team of teams) expect(team.payment).toBe("");
+    expect(JSON.stringify(result)).not.toContain("Payment due");
+  });
+});

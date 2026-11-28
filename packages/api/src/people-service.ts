@@ -723,7 +723,9 @@ export async function loadOperatorMemberProfile(input: {
       id: `purchase:${purchase.orderId}`,
       kind: "purchase" as const,
       title: purchase.description,
-      detail: `${purchase.status.replaceAll("-", " ")} · ${purchase.currency} ${(purchase.amountMinor / 100).toFixed(2)}`,
+      // PRIV-2: the amount lives in `purchases`, which is redacted by role;
+      // the timeline text carries none.
+      detail: purchase.status.replaceAll("-", " "),
       occurredAt: purchase.purchasedAt,
     })),
     ...purchases.flatMap((purchase) =>
@@ -1029,7 +1031,7 @@ export async function loadDemoOperatorMemberProfile(
       id: `purchase:${purchase.orderId}`,
       kind: "purchase" as const,
       title: purchase.description,
-      detail: `Paid · USD ${(purchase.amountMinor / 100).toFixed(2)}`,
+      detail: "Paid",
       occurredAt: purchase.purchasedAt,
     })),
     ...notes.map((note) => ({
@@ -1592,7 +1594,7 @@ export async function loadDemoOperatorSessionDetail(
   ).length;
   const grossMinor = attendees.length * session.priceMinor;
   const refundedMinor = attendees.reduce(
-    (total, attendee) => total + attendee.refundedMinor,
+    (total, attendee) => total + (attendee.refundedMinor ?? 0),
     0,
   );
   const coachPersonId = "10000000-0000-4000-8000-000000000901";
